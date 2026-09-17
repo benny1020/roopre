@@ -8,6 +8,8 @@
 
 [설계](docs/design/PRODUCT-DESIGN.md) · [구조](docs/ARCHITECTURE.md) · [개발 흐름](docs/DEVELOPMENT.md) · [검증](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md)
 
+다음 단계의 [v0.2 설계·기업 사례 비교·직접 사용 보고](docs/design/PRODUCT-DESIGN-v0.2.md)를 검토 중입니다. 사용자 본인 설계 승인, API key·endpoint 연결, 실제 개발 실행과 자체 개발 적용을 다루며 아직 구현 승인은 받지 않았습니다.
+
 ## 시작하기
 
 준비: Apple Silicon macOS, Node.js 24, pnpm 11.0.4, 실행 중인 Docker Desktop.
