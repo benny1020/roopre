@@ -14,7 +14,7 @@
 | pnpm dev 시작                             | 새 폴더의 API·renderer·Electron 프로세스 시작 확인            |
 | 브라우저에서 새 renderer 읽기             | Roopre 제목, 동기화 상태, 기존 영수증 설계 v2와 승인 0/2 확인 |
 
-21은 상위 API 테스트와 하위 테스트를 포함한 테스트 러너의 집계다. 전체 제품 인수 시나리오 21개를 완료했다는 뜻이 아니다. 자동 검사는 [CI](https://github.com/benny1020/roopre/actions/workflows/ci.yml)에서 각 커밋에 대해 재현한다. 로컬 상세 로그는 git에서 제외된 `artifacts/check.log`, `artifacts/package.log`, `artifacts/audit.log`에 있다.
+21은 상위 API 테스트와 하위 테스트를 포함한 테스트 러너의 집계다. 전체 제품 인수 시나리오 21개를 완료했다는 뜻이 아니다. 최초 원격 CI도 [성공](https://github.com/benny1020/roopre/actions/runs/35238923899)했다. 이후 실행 상태와 자동 검사는 [CI](https://github.com/benny1020/roopre/actions/workflows/ci.yml)에서 각 커밋에 대해 재현한다. 로컬 상세 로그는 git에서 제외된 `artifacts/check.log`, `artifacts/package.log`, `artifacts/audit.log`에 있다.
 
 패키징 중 pnpm의 의존성 링크 탐색 실패를 확인해, 전체 소스/의존성 대신 빌드된 데스크톱 런타임만 임시 디렉터리에 준비하도록 수정했다. API는 별도 서버이므로 앱에 포함하지 않는다. Electron 바이너리가 설치 스크립트 생략으로 없을 때의 dev 시작 실패도 확인해 앱 시작 시 명시적인 바이너리 설치 단계를 추가했다.
 
