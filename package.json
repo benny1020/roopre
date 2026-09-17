@@ -1,17 +1,17 @@
 {
   "name": "roopre",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "node config/scripts/dev.mjs",
-    "dev:desktop": "install-electron && electron-vite dev",
+    "dev:desktop": "pnpm build:native && install-electron && electron-vite dev",
     "dev:web": "vite --config config/vite.web.config.ts",
     "server": "tsx src/server/index.ts",
     "start": "install-electron && electron-vite preview",
     "typecheck": "tsc --noEmit -p config/tsconfig.node.json && tsc --noEmit -p config/tsconfig.web.json",
-    "build": "pnpm typecheck && electron-vite build",
+    "build": "pnpm build:native && pnpm typecheck && electron-vite build",
     "test": "tsx --test tests/*.test.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -21,7 +21,11 @@
     "db:start": "docker compose -f config/compose.yaml up -d --wait",
     "db:stop": "docker compose -f config/compose.yaml stop",
     "postinstall": "install-electron",
-    "build:icons": "node config/scripts/build-icons.mjs"
+    "build:icons": "node config/scripts/build-icons.mjs",
+    "build:native": "node config/scripts/build-native.mjs",
+    "runner:image": "docker build -t roopre-runner:0.2 -f config/runner.Dockerfile .",
+    "test:runner": "tsx --test tests/runner.integration.ts",
+    "test:web": "playwright test --config config/playwright.config.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",
@@ -34,17 +38,18 @@
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
+    "@playwright/test": "1.63.0",
     "@types/node": "24.13.5",
     "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "5.2.0",
     "electron": "42.11.4",
+    "electron-vite": "5.0.0",
     "prettier": "3.9.7",
     "tsx": "4.23.13",
     "typescript": "5.9.3",
-    "vite": "7.3.6",
-    "electron-vite": "5.0.0"
+    "vite": "7.3.6"
   },
   "description": "Team-standard agent development workflow for macOS",
   "packageManager": "pnpm@11.0.4",

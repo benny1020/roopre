@@ -4,40 +4,44 @@
 
 개발팀의 **요구사항 → 설계 → 개발자 승인 → 구현 → 리뷰·테스트** 흐름을 표준화하는 macOS 앱.
 
-여러 프로젝트와 기능을 한곳에서 관리하고, 설계·검토 의견·적용 지침·진행 상태를 함께 확인합니다. **현재 M1은 설계 검토와 실행 요청 관리까지 구현했습니다.** Claude Code 실행, worktree 병렬 개발, 자동 웹 테스트는 M2에서 연결합니다.
+**v0.2는 한 명의 소유자가 사용하는 로컬 파일럿입니다.** 설계를 macOS 본인 인증으로 승인한 뒤, Claude Code가 격리된 Docker 작업 공간에서 구현하고 고정 검사와 별도 읽기 전용 리뷰를 수행합니다. 여러 프로젝트의 실행·diff·검사 근거를 앱에서 확인합니다. 실제 팀 계정과 서버 운영은 후속 M3 범위입니다.
 
-[설계](docs/design/PRODUCT-DESIGN.md) · [구조](docs/ARCHITECTURE.md) · [개발 흐름](docs/DEVELOPMENT.md) · [검증](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md)
-
-다음 단계의 [v0.2 설계·기업 사례 비교·직접 사용 보고](docs/design/PRODUCT-DESIGN-v0.2.md)를 검토 중입니다. 사용자 본인 설계 승인, API key·endpoint 연결, 실제 개발 실행과 자체 개발 적용을 다루며 아직 구현 승인은 받지 않았습니다.
-
-[팀 개발 표준·품질 목표 보완](docs/design/TEAM-STANDARD-ADDENDUM.md): 누구나 같은 절차와 품질 기준으로 개발하도록, 단계별 결과물·검증·완료 조건을 실행 가능한 표준으로 관리하는 것이 핵심 목표입니다.
+[승인된 설계](docs/design/PRODUCT-DESIGN-v0.2.md) · [팀 개발 표준](docs/design/TEAM-STANDARD-ADDENDUM.md) · [구조](docs/ARCHITECTURE.md) · [사용·개발 안내](docs/DEVELOPMENT.md) · [검증과 남은 조건](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md)
 
 ## 시작하기
 
-준비: Apple Silicon macOS, Node.js 24, pnpm 11.0.4, 실행 중인 Docker Desktop.
+준비: Apple Silicon macOS, Node.js 24, pnpm 11.0.4, Xcode Command Line Tools, 실행 중인 Docker Desktop.
 
 ```bash
 git clone https://github.com/benny1020/roopre.git
 cd roopre
 pnpm install --frozen-lockfile
 pnpm db:start
+pnpm runner:image
 pnpm dev
 ```
 
-API는 `127.0.0.1:4318`, 개발 UI는 `127.0.0.1:4317`입니다. `pnpm dev`가 API와 Electron 개발 앱을 시작합니다. 이전 Team Devflow 세션이 이 포트를 사용 중이라면 먼저 해당 세션을 종료합니다. Ctrl+C는 이 명령에서 시작한 자식 프로세스를 정리합니다. DB 중지는 `pnpm db:stop`이며 볼륨을 지우지 않습니다.
+Electron 앱은 PostgreSQL에 직접 연결하며 소유자 워크스페이스를 사용합니다. `pnpm dev`가 함께 시작하는 `127.0.0.1:4318` API와 `4317` 브라우저 화면은 별도의 M1 샘플 데이터 검토용입니다. 기존 DB 볼륨과 기록은 보존됩니다. DB 중지는 `pnpm db:stop`입니다.
 
-`config/compose.yaml`은 이전 M1의 DB 이름과 볼륨을 유지해 이 기기에 저장한 설계·승인 기록을 재사용합니다. 새 환경에서는 가상 프로젝트와 개발용 사용자로 초기화합니다.
+1. 앱의 **표준 · 연결 · 환경**에서 HTTPS endpoint, API key/Bearer token, 모델 ID를 등록하고 연결 검사합니다. Anthropic Messages 규격만 지원합니다. 연결 검사에는 소량의 과금이 발생할 수 있습니다.
+2. 프로젝트의 Git 폴더·기준 브랜치·고정 검사 명령·예산·시간 한도를 저장합니다.
+3. 기능의 `AC01` 형식 완료 기준과 7개 설계 항목을 작성하고 리뷰 요청합니다.
+4. 본인이 설계를 검토하고 macOS 비밀번호/Touch ID로 승인합니다. **실행·결과 → 개발 시작**을 누릅니다.
+5. **실행 현황**에서 진행 상태를, 기능에서 변경 diff·검사 로그·리뷰·테스트 산출물을 확인합니다. 병합과 배포는 기존 절차로 수행합니다.
 
-## 현재 기능
+## 현재 기능과 경계
 
-- 프로젝트·기능 목록과 보드, 의존 관계, 검색.
-- 표준 설계 초안, 버전별 문서·해시, 비교, 문단 의견과 답글.
-- 독립 개발자들의 7항목 검토, 승인·수정 요청·철회, 차단 의견 해결 확인.
-- 서버의 승인 조건 검사, 실행 대기열·취소, 설계·지침 변경 시 요청 차단.
-- 팀·프로젝트·단계·역할·기능 지침, 적용 스냅샷과 이력.
-- PostgreSQL 저장, 동시 수정 충돌 방지, 멱등 요청, SSE 동기화.
+- 프로젝트·기능·설계 버전·의견, 팀·프로젝트·단계·역할·기능 지침 관리.
+- 설계·정책·실행 프로필에 묶인 본인 승인. 변경/철회 시 실행 차단.
+- macOS 암호화 API key 저장. 모델 호출 중 실제 key는 호스트 broker에만 보관.
+- 독립 체크아웃·Docker 격리. 최대 2개 프로젝트 동시 실행, 프로젝트당 1개.
+- Claude Code 구현 → 고정 검사/E2E → 읽기 전용 AI 리뷰 → 제한된 수정 반복.
+- 중단·재시도·변경 복구, 시도별 검사와 산출물 해시, 최종 commit·diff 확인.
+- 라이트·다크·시스템 테마 및 설정 유지.
 
-앱의 사용자 전환은 **개발 fixture**이며 실제 인증이 아닙니다. 기본 설정은 로컬에만 연결되며 현재 빌드를 팀 네트워크에 노출하지 않습니다. 실제 팀 계정·CI 병합 정책·배포는 M3입니다.
+**지원 범위:** Node 단일 패키지 저장소의 lockfile 기반 준비입니다. 설치 스크립트·사설 레지스트리·외부 네트워크 의존 테스트·monorepo·서비스 DB 자동 준비는 아직 지원하지 않습니다. 기존 테스트/설정/의존성 파일은 보호하므로 이를 바꾸는 작업은 별도 검토가 필요합니다. 모델 응답·비용 보고와 gateway 호환성은 실제 연결로 확인해야 합니다. 임의 endpoint의 청구액을 앱이 절대 상한으로 보장하지 않습니다.
+
+자동 테스트 결과와 남은 수동 검증은 [검증 문서](docs/VERIFICATION.md)를 확인하세요. 현재 상태를 팀 실무 배포 완료로 간주하지 않습니다.
 
 ## 저장소 구성
 
@@ -45,13 +49,14 @@ API는 `127.0.0.1:4318`, 개발 UI는 `127.0.0.1:4317`입니다. `pnpm dev`가 A
 
 ```text
 src/
-  main/                  Electron 창·수명·보안 설정
-  preload/               최소한의 renderer 연결
+  main/                  Electron 창·본인 인증·비밀 저장·IPC
+  preload/               명시적인 IPC 메서드만 노출
   renderer/
     index.html
     src/                 React 화면
   shared/                명령·이벤트·공유 타입
-  server/                Fastify API·SSE
+  runner/                Docker 실행·검증·broker·복구
+  server/                M1 샘플 Fastify API·SSE
   domain/                승인·정책·의존성 규칙
   database/              PostgreSQL 저장·개발 fixture
   types/                 renderer 전역 타입
@@ -65,17 +70,20 @@ electron.vite.config.ts  main/preload/renderer 빌드
 
 ## 명령
 
-| 명령             | 용도                                             |
-| ---------------- | ------------------------------------------------ |
-| `pnpm dev`       | 로컬 API + Electron 개발 앱                      |
-| `pnpm server`    | 로컬 API만 시작                                  |
-| `pnpm dev:web`   | 같은 renderer를 브라우저에서 확인; API 별도 실행 |
-| `pnpm check`     | 포맷·문서 링크·타입·빌드·실제 DB 테스트          |
-| `pnpm test`      | 도메인·API 테스트; 실행 중인 DB 필요             |
-| `pnpm build:mac` | `release/루프리-darwin-arm64/루프리.app` 생성    |
-| `pnpm start`     | 빌드된 Electron 앱 실행; API/DB 별도 필요        |
+| 명령                | 용도                                                |
+| ------------------- | --------------------------------------------------- |
+| `pnpm dev`          | 로컬 API + Electron 개발 앱                         |
+| `pnpm server`       | 로컬 API만 시작                                     |
+| `pnpm dev:web`      | 같은 renderer를 브라우저에서 확인; API 별도 실행    |
+| `pnpm check`        | 포맷·문서 링크·타입·빌드·실제 DB 테스트             |
+| `pnpm test`         | 도메인·API 테스트; 실행 중인 DB 필요                |
+| `pnpm build:mac`    | `release/루프리-darwin-arm64/루프리.app` 생성       |
+| `pnpm start`        | 빌드된 Electron 앱 실행; DB/Docker 별도 필요        |
+| `pnpm runner:image` | Claude Code·Playwright 실행 이미지 준비             |
+| `pnpm test:runner`  | 실제 Docker + 가짜 Claude 계약 검사; DB/이미지 필요 |
+| `pnpm test:web`     | 실제 renderer/DB + 테스트용 IPC 브라우저 시나리오   |
 
-패키지는 개발용 미공증 빌드입니다. 앱은 화면 클라이언트이므로 API와 DB를 별도로 실행해야 합니다. GitHub의 **macOS package** 워크플로우에서도 수동 빌드를 할 수 있으며 공개 GitHub Release를 자동 발행하지 않습니다.
+패키지는 개발용 미공증 빌드입니다. 앱에 DB 클라이언트·실행기를 포함하지만 PostgreSQL과 Docker는 별도로 실행해야 합니다. GitHub의 **macOS package** 워크플로우에서도 수동 빌드를 할 수 있으며 공개 GitHub Release를 자동 발행하지 않습니다.
 
 ## 개발 원칙
 

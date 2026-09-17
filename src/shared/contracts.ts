@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  profileSchema,
+  type ExecutionProfile,
+  type RuntimeDetails,
+  type RuntimeStatus,
+} from "./runtime.ts";
 
 export const sections = [
   "요구사항",
@@ -21,6 +27,8 @@ export type Project = {
   description: string;
   color: string;
   instructions?: string;
+  ownerId?: string;
+  executionProfile?: ExecutionProfile;
   reviewerIds: string[];
   requiredChecks: string[];
 };
@@ -28,6 +36,8 @@ export type Decision = {
   actorId: string;
   decision: "approve" | "request_changes" | "withdraw";
   checked: string[];
+  binding?: string;
+  authentication?: "macos-owner";
   at: string;
 };
 export type Design = {
@@ -40,6 +50,7 @@ export type Design = {
   policyVersion: number;
   reviewers: string[];
   decisions: Decision[];
+  policyBinding?: string;
 };
 export type Thread = {
   id: string;
@@ -71,7 +82,8 @@ export type Run = {
   id: string;
   featureId: string;
   designId: string;
-  status: "queued" | "blocked" | "cancelled";
+  status: RuntimeStatus;
+  runtime?: RuntimeDetails;
   reason: string;
   policyVersion: number;
   effectivePolicy: string;
@@ -90,6 +102,7 @@ export type Policy = {
 };
 export type Workspace = {
   teamId: string;
+  mode?: "local-owner" | "development-fixture";
   revision: number;
   people: Person[];
   projects: Project[];
@@ -108,8 +121,8 @@ export type Gate = {
 export type Snapshot = Workspace & {
   gates: Record<string, Gate>;
   sequence: number;
-  mode: "development-fixture";
-  runnerConnected: false;
+  mode: "development-fixture" | "local-owner";
+  runnerConnected: boolean;
 };
 export type Event = {
   sequence: number;
@@ -124,6 +137,11 @@ const id = z.string().min(1).max(100);
 const body = z.string().trim().min(1).max(60000);
 const featureId = { featureId: id };
 export const commandSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("configure_execution"),
+    projectId: id,
+    profile: profileSchema,
+  }),
   z.object({
     type: z.literal("create_project"),
     name: z.string().trim().min(1).max(80),
@@ -212,7 +230,9 @@ export function gate(workspace: Workspace, feature: Feature): Gate {
       approved: 0,
       required: workspace.projects
         .find((p) => p.id === feature.projectId)!
-        .reviewerIds.filter((id) => id !== feature.authorId).length,
+        .reviewerIds.filter(
+          (id) => workspace.mode === "local-owner" || id !== feature.authorId,
+        ).length,
       blockers: 0,
     };
   const policy = workspace.policies.at(-1)!;
@@ -233,10 +253,27 @@ export function gate(workspace: Workspace, feature: Feature): Gate {
   if (
     JSON.stringify([...design.reviewers].sort()) !==
     JSON.stringify(
-      project.reviewerIds.filter((id) => id !== feature.authorId).sort(),
+      project.reviewerIds
+        .filter(
+          (id) => workspace.mode === "local-owner" || id !== feature.authorId,
+        )
+        .sort(),
     )
   )
     reasons.push("필수 검토자가 변경됐습니다. 새 설계를 게시하세요.");
+  if (workspace.mode === "local-owner" && !project.executionProfile)
+    reasons.push("저장소와 실행 프로필을 먼저 연결하세요.");
+  if (
+    workspace.mode === "local-owner" &&
+    !design.decisions.some(
+      (d) =>
+        d.actorId === project.ownerId &&
+        d.decision === "approve" &&
+        d.authentication === "macos-owner" &&
+        d.binding,
+    )
+  )
+    reasons.push("사용자 본인의 설계 승인이 필요합니다.");
   if (blockers)
     reasons.push(`차단 의견 ${blockers}건의 해결 확인이 필요합니다.`);
   if (changed) reasons.push("수정 요청한 검토자의 재승인이 필요합니다.");

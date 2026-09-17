@@ -8,3 +8,5 @@ artifacts/
 *.log
 .DS_Store
 *.tsbuildinfo
+
+resources/bin/

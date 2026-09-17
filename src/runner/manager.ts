@@ -1,0 +1,844 @@
+import { collectArtifacts, archiveArtifacts } from "./artifacts.ts";
+import { randomUUID, randomBytes, createHash } from "node:crypto";
+import {
+  mkdir,
+  readFile,
+  lstat,
+  writeFile,
+  copyFile,
+  readdir,
+  rm,
+} from "node:fs/promises";
+import { join, resolve } from "node:path";
+import type { Store } from "../database/store.ts";
+import type { ConnectionVault } from "../main/connections/vault.ts";
+import { activeStatuses, type Evidence } from "../shared/runtime.ts";
+import { gate, type Run, type Workspace } from "../shared/contracts.ts";
+import { approvalBinding } from "../domain/runtime.ts";
+import { command, git } from "./process.ts";
+import { startBroker } from "./broker.ts";
+export class RunnerManager {
+  private timer?: ReturnType<typeof setInterval>;
+  private busy = false;
+  private active = new Map<string, AbortController>();
+  private jobs = new Map<string, Promise<void>>();
+  constructor(
+    private store: Store,
+    private vault: ConnectionVault,
+    private root: string,
+    private resources: string,
+  ) {}
+  async init() {
+    await mkdir(this.root, { recursive: true, mode: 0o700 });
+    const w = await this.store.read("owner");
+    for (const run of w.runs.filter(
+      (r) =>
+        r.runtime &&
+        ((activeStatuses.includes(r.status) && r.status !== "queued") ||
+          r.runtime.terminationConfirmed === false),
+    )) {
+      await this.cleanup(run.id);
+      await this.update(run.id, (r) => {
+        r.runtime!.terminationConfirmed = true;
+      });
+      await this.update(run.id, (r) => {
+        r.status = "interrupted";
+        r.reason =
+          "이전 실행이 중단됐습니다. 근거를 보존했습니다. 재시도로 새 작업 공간에서 시작하세요.";
+      });
+    }
+    this.timer = setInterval(() => void this.tick(), 1000);
+    void this.tick();
+  }
+  private names(id: string) {
+    if (!/^run-[a-f0-9-]+$/.test(id)) throw Error("실행 ID 오류");
+    return {
+      container: `roopre-${id}`,
+      proxy: `roopre-proxy-${id}`,
+      network: `roopre-net-${id}`,
+    };
+  }
+  async cleanup(id: string) {
+    const n = this.names(id);
+    await command("docker", ["rm", "-f", n.container, n.proxy], {
+      timeout: 20000,
+    });
+    for (const name of [n.container, n.proxy]) {
+      const result = await command(
+        "docker",
+        ["inspect", "--format", "{{.State.Running}}", name],
+        { timeout: 10000 },
+      );
+      if (
+        result.code === 0 ||
+        !/No such (object|container)/i.test(result.output)
+      )
+        throw Error(
+          "이전 컨테이너 종료를 확인하지 못했습니다. Docker 상태를 복구한 뒤 앱을 다시 시작하세요.",
+        );
+    }
+    await command("docker", ["network", "rm", n.network], { timeout: 10000 });
+    await command(
+      "docker",
+      ["image", "rm", `roopre-deps-${id}:latest`, `roopre-base-${id}:locked`],
+      {
+        timeout: 30000,
+      },
+    );
+  }
+  async update(id: string, fn: (run: Run) => void) {
+    await this.store.mutate((w) => {
+      const r = w.runs.find((r) => r.id === id);
+      if (r) fn(r);
+    });
+  }
+  private async event(id: string, message: string) {
+    await this.update(id, (r) => {
+      r.runtime!.heartbeat = new Date().toISOString();
+      r.runtime!.events.push({ at: r.runtime!.heartbeat, message });
+      r.runtime!.events = r.runtime!.events.slice(-120);
+      r.reason = message;
+    });
+  }
+  private async tick() {
+    if (this.busy) return;
+    this.busy = true;
+    try {
+      const w = await this.store.read("owner");
+      for (const [id, abort] of this.active) {
+        const r = w.runs.find((r) => r.id === id)!;
+        const f = w.features.find((f) => f.id === r.featureId)!;
+        let connectionChanged = false;
+        try {
+          connectionChanged =
+            this.vault.get(r.runtime!.profile.connectionId).info.version !==
+            r.runtime!.profile.connectionVersion;
+        } catch {
+          connectionChanged = true;
+        }
+        if (
+          connectionChanged ||
+          r.status === "cancelled" ||
+          r.status === "blocked" ||
+          r.runtime?.binding !== approvalBinding(w, f) ||
+          !gate(w, f).eligible
+        )
+          abort.abort();
+      }
+      if (this.active.size >= 2) return;
+      const projectIds = new Set(
+        [...this.active.keys()].map(
+          (id) =>
+            w.features.find(
+              (f) => f.id === w.runs.find((r) => r.id === id)!.featureId,
+            )!.projectId,
+        ),
+      );
+      const run = w.runs.find(
+        (r) =>
+          r.runtime &&
+          r.status === "queued" &&
+          !projectIds.has(
+            w.features.find((f) => f.id === r.featureId)!.projectId,
+          ),
+      );
+      if (run) {
+        const controller = new AbortController();
+        this.active.set(run.id, controller);
+        const job = this.execute(run.id, controller)
+          .catch(() => {})
+          .finally(() => {
+            this.active.delete(run.id);
+            this.jobs.delete(run.id);
+          });
+        this.jobs.set(run.id, job);
+      }
+    } catch {
+      /* Reconnect on next tick; running jobs check validity before every phase. */
+    } finally {
+      this.busy = false;
+    }
+  }
+  private async valid(id: string) {
+    const w = await this.store.read("owner");
+    const r = w.runs.find((r) => r.id === id)!;
+    if (
+      r.runtime &&
+      this.vault.get(r.runtime.profile.connectionId).info.version !==
+        r.runtime.profile.connectionVersion
+    )
+      throw Error("AI 연결이 변경됐습니다. 실행 계약을 다시 승인하세요.");
+    const f = w.features.find((f) => f.id === r.featureId)!;
+    if (
+      !r.runtime ||
+      !gate(w, f).eligible ||
+      r.runtime.binding !== approvalBinding(w, f) ||
+      ["blocked", "cancelled"].includes(r.status)
+    )
+      throw Error("설계 승인이 철회되거나 실행 계약이 바뀌었습니다.");
+    return { w, r, f };
+  }
+  private async docker(
+    args: string[],
+    signal?: AbortSignal,
+    timeout = 60000,
+    input?: string,
+  ) {
+    const result = await command("docker", args, { signal, timeout, input });
+    if (result.code !== 0)
+      throw Error(
+        `격리 환경 명령 실패: docker ${args[0]}. 실행 환경과 저장소 검사를 확인하세요.`,
+      );
+    return result.output.trim();
+  }
+  private async phase(id: string, status: Run["status"], message: string) {
+    await this.valid(id);
+    await this.update(id, (r) => {
+      if (["cancelled", "blocked"].includes(r.status))
+        throw Error("실행이 중단됐습니다.");
+      r.status = status;
+    });
+    await this.event(id, message);
+  }
+  async execute(id: string, abort: AbortController) {
+    let claimed = false;
+    await this.store.mutate((w) => {
+      const r = w.runs.find((r) => r.id === id);
+      if (!r?.runtime || r.status !== "queued") return;
+      const f = w.features.find((f) => f.id === r.featureId)!;
+      const running = w.runs.filter((x) =>
+        [
+          "preparing",
+          "implementing",
+          "verifying",
+          "reviewing",
+          "repairing",
+        ].includes(x.status),
+      );
+      if (
+        running.length >= 2 ||
+        running.some(
+          (x) =>
+            w.features.find((f) => f.id === x.featureId)?.projectId ===
+            f.projectId,
+        )
+      )
+        return;
+      r.status = "preparing";
+      r.runtime.terminationConfirmed = false;
+      r.runtime.lease = randomUUID();
+      r.runtime.heartbeat = new Date().toISOString();
+      claimed = true;
+    });
+    if (!claimed) return;
+
+    let broker: Awaited<ReturnType<typeof startBroker>> | undefined;
+    let clock: ReturnType<typeof setTimeout> | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+    const n = this.names(id);
+    const area = join(this.root, id);
+    const checkout = join(area, "checkout");
+    try {
+      const { r, f, w } = await this.valid(id);
+      const profile = r.runtime!.profile;
+      if (f.dependencies.length)
+        throw Error(
+          "선행 기능의 통합을 확인하기 전에는 실행할 수 없습니다. 의존 관계를 정리하고 설계를 재승인하세요.",
+        );
+      const connection = this.vault.get(profile.connectionId);
+      if (
+        connection.info.version !== profile.connectionVersion ||
+        connection.info.testStatus !== "passed"
+      )
+        throw Error("AI 연결을 검사하고 해당 연결 버전으로 설계를 승인하세요.");
+      if (
+        (await git(profile.repositoryPath, "rev-parse", profile.baseBranch)) !==
+        profile.baseCommit
+      )
+        throw Error(
+          "기준 브랜치가 변경됐습니다. 실행 프로필과 설계를 갱신하세요.",
+        );
+      clock = setTimeout(() => abort.abort(), profile.timeoutMinutes * 60000);
+      await this.phase(
+        id,
+        "preparing",
+        "격리된 체크아웃과 테스트 환경을 준비합니다.",
+      );
+      await this.update(id, (r) => {
+        r.runtime!.lease = randomUUID();
+        r.runtime!.container = n.container;
+        r.runtime!.heartbeat = new Date().toISOString();
+      });
+      heartbeat = setInterval(
+        () =>
+          void this.update(id, (r) => {
+            r.runtime!.heartbeat = new Date().toISOString();
+          }).catch(() => abort.abort()),
+        10000,
+      );
+      await mkdir(area, { recursive: true, mode: 0o700 });
+      await this.docker(["image", "inspect", profile.image], abort.signal);
+      await git(
+        profile.repositoryPath,
+        "clone",
+        "--no-hardlinks",
+        "--no-local",
+        profile.repositoryPath,
+        checkout,
+      );
+      await git(checkout, "checkout", "-b", `codex/${id}`, profile.baseCommit);
+      await git(checkout, "remote", "remove", "origin");
+      await writeFile(
+        join(checkout, ".git/info/exclude"),
+        "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n",
+      );
+      await git(checkout, "config", "user.name", "Roopre Agent");
+      await git(checkout, "config", "user.email", "agent@roopre.local");
+      await this.update(id, (r) => {
+        r.runtime!.worktree = checkout;
+        r.runtime!.branch = `codex/${id}`;
+      });
+      const protectedPaths = (await git(checkout, "ls-files"))
+        .split("\n")
+        .filter((p) =>
+          /(^|\/)(tests?|__tests__|scripts|config|\.github)\/|\.(test|spec)\.[a-z]+$|^(package\.json|pnpm-lock\.yaml|package-lock\.json|tsconfig|eslint|vitest|playwright)/.test(
+            p,
+          ),
+        );
+      const fingerprint = async () => {
+        const h = createHash("sha256");
+        for (const p of protectedPaths) {
+          h.update(p);
+          try {
+            if ((await lstat(join(checkout, p))).isSymbolicLink()) {
+              h.update("SYMLINK");
+              continue;
+            }
+            h.update(await readFile(join(checkout, p)));
+          } catch {
+            h.update("MISSING");
+          }
+        }
+        return h.digest("hex");
+      };
+      const baseline = await fingerprint();
+      if (r.runtime!.resumeFrom) {
+        const previous = w.runs.find((x) => x.id === r.runtime!.resumeFrom);
+        if (
+          !previous?.runtime?.worktree ||
+          previous.runtime.binding !== r.runtime!.binding
+        )
+          throw Error("복구할 실행 계약을 확인하세요.");
+        await git(previous.runtime.worktree, "add", "-A");
+        const patch = await git(
+          previous.runtime.worktree,
+          "diff",
+          "--cached",
+          "--binary",
+          profile.baseCommit,
+        );
+        if (patch.length > 180000)
+          throw Error(
+            "복구 변경량이 큽니다. 보존된 작업 공간을 직접 검토하세요.",
+          );
+        if (patch) {
+          const applied = await command(
+            "git",
+            ["-c", "core.hooksPath=/dev/null", "apply", "--index", "-"],
+            {
+              cwd: checkout,
+              input: patch + "\n",
+              env: {
+                PATH: process.env.PATH,
+                GIT_CONFIG_NOSYSTEM: "1",
+                GIT_CONFIG_GLOBAL: "/dev/null",
+              },
+            },
+          );
+          if (applied.code !== 0)
+            throw Error("체크포인트를 적용하지 못했습니다.");
+        }
+        if ((await fingerprint()) !== baseline)
+          throw Error(
+            "복구 변경이 필수 검사/설정에 영향을 줍니다. 설계를 재검토하세요.",
+          );
+      }
+      // Dependency preparation is deterministic and separate from the agent. No host home/config is mounted.
+      const setup = join(area, "setup");
+      await mkdir(setup);
+      let hasManifest = false;
+      for (const file of [
+        "package.json",
+        "pnpm-lock.yaml",
+        "package-lock.json",
+      ]) {
+        try {
+          if ((await lstat(join(checkout, file))).isSymbolicLink())
+            throw Error("Dependency manifest symlink is not supported");
+          await copyFile(join(checkout, file), join(setup, file));
+          if (file === "package.json") hasManifest = true;
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+        }
+      }
+      let image = profile.image;
+      if (hasManifest) {
+        const lockedBase = `roopre-base-${id}:locked`;
+        await this.docker(["tag", profile.image, lockedBase], abort.signal);
+        await writeFile(
+          join(setup, "Dockerfile"),
+          `FROM ${lockedBase}\nUSER root\nWORKDIR /opt/project\nCOPY . .\nRUN if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile --ignore-scripts; elif [ -f package-lock.json ]; then npm ci --ignore-scripts; else echo 'A dependency lockfile is required' >&2; exit 1; fi\nRUN mkdir -p /opt/project/node_modules && chmod -R a+rX /opt/project\nUSER pwuser\nWORKDIR /workspace\n`,
+        );
+        image = `roopre-deps-${id}:latest`;
+        await this.docker(["build", "-t", image, setup], abort.signal, 600000);
+      }
+      await this.docker(
+        ["network", "create", "--internal", n.network],
+        abort.signal,
+      );
+      const token = randomBytes(32).toString("hex");
+      broker = await startBroker(
+        connection.info,
+        connection.key,
+        token,
+        abort.signal,
+      );
+      await this.docker(
+        [
+          "create",
+          "--name",
+          n.proxy,
+          "--network",
+          n.network,
+          "--network-alias",
+          "model-gateway",
+          ...(process.platform !== "darwin"
+            ? ["--add-host", "host.docker.internal:host-gateway"]
+            : []),
+          "--cap-drop=ALL",
+          "--security-opt",
+          "no-new-privileges",
+          "--read-only",
+          "--pids-limit",
+          "64",
+          "--memory",
+          "128m",
+          "--env",
+          `BROKER_PORT=${broker.port}`,
+          "--mount",
+          `type=bind,src=${join(this.resources, "runner-proxy.cjs")},dst=/proxy.cjs,readonly`,
+          profile.image,
+          "node",
+          "/proxy.cjs",
+        ],
+        abort.signal,
+      );
+      await this.docker(
+        ["network", "connect", "bridge", n.proxy],
+        abort.signal,
+      );
+      await this.docker(["start", n.proxy], abort.signal);
+      const createContainer = async (readonly = false) => {
+        await command("docker", ["rm", "-f", n.container]);
+        await this.docker(
+          [
+            "run",
+            "-d",
+            "--name",
+            n.container,
+            "--network",
+            n.network,
+            "--cap-drop=ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--pids-limit",
+            "256",
+            "--memory",
+            "4g",
+            "--cpus",
+            "2",
+            "--ipc",
+            "private",
+            "--shm-size",
+            "512m",
+            "--mount",
+            `type=bind,src=${checkout},dst=/workspace${readonly ? ",readonly" : ""}`,
+            "--mount",
+            `type=bind,src=${join(checkout, ".git")},dst=/workspace/.git,readonly`,
+            "--tmpfs",
+            "/tmp:rw,nosuid,size=512m",
+            "--env",
+            `ANTHROPIC_API_KEY=${token}`,
+            "--env",
+            "ANTHROPIC_BASE_URL=http://model-gateway:8080",
+            "--env",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
+            image,
+            "sleep",
+            "infinity",
+          ],
+          abort.signal,
+        );
+      };
+      await createContainer();
+      if (hasManifest)
+        await this.docker(
+          [
+            "exec",
+            n.container,
+            "sh",
+            "-c",
+            "cp -a /opt/project/node_modules /workspace/node_modules",
+          ],
+          abort.signal,
+          120000,
+        );
+      const invoke = async (prompt: string, review = false) => {
+        await this.valid(id);
+        const current = (await this.store.read("owner")).runs.find(
+          (x) => x.id === id,
+        )!;
+        const remaining = profile.budgetUsd - current.runtime!.costUsd;
+        if (remaining <= 0) throw Error("설정한 추정 예산에 도달했습니다.");
+        const args = [
+          "exec",
+          "-i",
+          n.container,
+          "claude",
+          "--bare",
+          "-p",
+          "--verbose",
+          "--output-format",
+          "stream-json",
+          "--model",
+          connection.info.model,
+          "--max-budget-usd",
+          String(remaining),
+          "--permission-mode",
+          "dontAsk",
+          "--strict-mcp-config",
+          "--mcp-config",
+          '{"mcpServers":{}}',
+          "--tools",
+          review ? "Read,Glob,Grep" : "Read,Glob,Grep,Edit,Write,Bash",
+          "--allowedTools",
+          review ? "Read,Glob,Grep" : "Read,Glob,Grep,Edit,Write,Bash",
+        ];
+        let result: any;
+        let lastEvent = 0;
+        const output = await command("docker", args, {
+          input: prompt,
+          signal: abort.signal,
+          timeout: profile.timeoutMinutes * 60000,
+          onLine: (line) => {
+            try {
+              const e = JSON.parse(line);
+              if (e.type === "result") result = e;
+              else if (
+                Date.now() - lastEvent > 4000 &&
+                e.type === "assistant"
+              ) {
+                const names =
+                  e.message?.content
+                    ?.filter((b: any) => b.type === "tool_use")
+                    .map((b: any) => String(b.name))
+                    .filter((n: string) => /^[A-Za-z_]{1,40}$/.test(n)) ?? [];
+                if (names.length) {
+                  lastEvent = Date.now();
+                  void this.event(
+                    id,
+                    `Claude Code 도구 작업: ${names.join(", ")}`,
+                  ).catch(() => {});
+                }
+              }
+            } catch {}
+          },
+        });
+        if (
+          typeof result?.total_cost_usd === "number" &&
+          Number.isFinite(result.total_cost_usd) &&
+          result.total_cost_usd >= 0
+        ) {
+          await this.update(id, (r) => {
+            r.runtime!.costUsd += result.total_cost_usd;
+            r.runtime!.costReported = true;
+          });
+        } else if (result && !result.is_error)
+          throw Error(
+            "CLI 비용 정보가 없어 자동 실행을 중단했습니다. 청구 상태를 확인하세요.",
+          );
+        if (output.code !== 0 || !result || result.is_error)
+          throw Error(
+            "Claude Code가 정상 완료하지 못했습니다. 연결·예산·권한을 확인하세요.",
+          );
+        return String(result.result ?? "")
+          .replaceAll(token, "[redacted]")
+          .replaceAll(connection.key, "[redacted]");
+      };
+      let feedback = "";
+      let finished = false;
+      for (let attempt = 0; attempt <= profile.repairLimit; attempt++) {
+        await this.update(id, (r) => {
+          r.runtime!.attempt = attempt + 1;
+        });
+        await this.phase(
+          id,
+          attempt ? "repairing" : "implementing",
+          attempt
+            ? "검증 실패를 승인 범위 안에서 수정합니다."
+            : "승인한 설계에 따라 Claude Code가 구현합니다.",
+        );
+        await createContainer();
+        await invoke(
+          `You are implementing an approved task. Work only in /workspace. Do not weaken tests, edit policy/configuration/dependency manifests, access credentials, push, deploy, or claim completion without evidence. If the design must change, stop and explain.\nTEAM POLICY\n${r.effectivePolicy}\nDESIGN\n${f.designs.at(-1)!.body}\nACCEPTANCE\n${f.designs.at(-1)!.requirements}\nFEEDBACK\n${feedback}`,
+        );
+        if ((await fingerprint()) !== baseline)
+          throw Error(
+            "필수 검사·설정·의존성 파일이 변경됐습니다. 설계와 검사 기준 재검토가 필요합니다.",
+          );
+        // Kill all implementation/background processes before fixed verification.
+        await createContainer();
+        await this.phase(
+          id,
+          "verifying",
+          "고정 검사와 웹 시나리오를 실행합니다.",
+        );
+        await git(checkout, "add", "-A");
+        const tree = await git(checkout, "write-tree");
+        const evidence: Evidence[] = [];
+        for (const check of profile.checks) {
+          await this.valid(id);
+          const test = await command(
+            "docker",
+            ["exec", n.container, ...check.argv],
+            { signal: abort.signal, timeout: check.timeoutSeconds * 1000 },
+          );
+          const log = test.output
+            .replaceAll(token, "[redacted]")
+            .replaceAll(connection.key, "[redacted]")
+            .slice(-40000);
+          evidence.push({
+            name: check.name,
+            status: test.code === 0 ? "passed" : "failed",
+            code: test.code,
+            at: new Date().toISOString(),
+            tree,
+            log,
+            attempt: attempt + 1,
+          });
+          await this.update(id, (r) => {
+            r.runtime!.evidence.push(evidence.at(-1)!);
+          });
+        }
+        await createContainer(true);
+        const artifactRoot = join(area, "artifacts");
+        const artifacts = await archiveArtifacts(
+          checkout,
+          artifactRoot,
+          await collectArtifacts(checkout, attempt + 1),
+        );
+        await this.update(id, (r) => {
+          r.runtime!.artifactRoot = artifactRoot;
+          r.runtime!.artifacts = [
+            ...(r.runtime!.artifacts ?? []),
+            ...artifacts,
+          ];
+        });
+        if ((await fingerprint()) !== baseline)
+          throw Error("검사 중 필수 테스트/설정이 변경됐습니다.");
+        await git(checkout, "add", "-A");
+        if ((await git(checkout, "write-tree")) !== tree)
+          throw Error(
+            "검사 도중 소스가 변경되어 증거가 오래됐습니다. 변경 내용을 검토하세요.",
+          );
+        if (evidence.some((e) => e.status === "failed")) {
+          feedback = evidence
+            .filter((e) => e.status === "failed")
+            .map((e) => `${e.name}: ${e.log}`)
+            .join("\n");
+          continue;
+        }
+        await this.phase(
+          id,
+          "reviewing",
+          "읽기 전용 검토자가 설계·diff·완료 기준을 대조합니다.",
+        );
+        const diff = await git(
+          checkout,
+          "diff",
+          "--cached",
+          profile.baseCommit,
+        );
+        if (diff.length > 150000)
+          throw Error(
+            "변경량이 검토 한도를 넘었습니다. 기능을 나눠 검토하세요.",
+          );
+        const ac = [
+          ...new Set(
+            f.designs.at(-1)!.requirements.match(/AC[- ]?\d+/gi) ?? [],
+          ),
+        ];
+        const review = await invoke(
+          `Review skeptically. Read files but do not execute code. Compare approved requirements, design and implementation. Return ONLY JSON: {"passed": boolean,"acceptance": [{"id":"AC01","passed":boolean,"evidence":"specific file/test evidence"}],"findings":["blocking issue"]}. Every required AC must have concrete evidence.\nRequired IDs: ${ac.join(",")}\nRequirements: ${f.designs.at(-1)!.requirements}\nDesign: ${f.designs.at(-1)!.body}\nDIFF\n${diff.slice(0, 150000)}\nChecks: ${evidence.map((e) => e.name + ":" + e.status).join(", ")}`,
+          true,
+        );
+        await this.update(id, (r) => {
+          r.runtime!.review = review.slice(0, 60000);
+        });
+        let verdict: any;
+        try {
+          verdict = JSON.parse(review.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+        } catch {
+          feedback = "Review did not produce valid structured evidence.";
+          continue;
+        }
+        if (
+          verdict.passed !== true ||
+          !Array.isArray(verdict.findings) ||
+          verdict.findings.length ||
+          !ac.every((id) =>
+            verdict.acceptance?.some(
+              (x: any) =>
+                x.id === id &&
+                x.passed === true &&
+                typeof x.evidence === "string" &&
+                x.evidence.length > 12,
+            ),
+          )
+        ) {
+          feedback = review;
+          continue;
+        }
+        await this.valid(id);
+        await git(checkout, "add", "-A");
+        if ((await git(checkout, "write-tree")) !== tree)
+          throw Error("리뷰 이후 소스가 변경됐습니다.");
+        await git(
+          checkout,
+          "commit",
+          "--allow-empty",
+          "-m",
+          `Roopre: ${f.title}`,
+        );
+        const head = await git(checkout, "rev-parse", "HEAD");
+        await this.store.mutate((w) => {
+          const r = w.runs.find((r) => r.id === id)!;
+          const f = w.features.find((f) => f.id === r.featureId)!;
+          if (
+            abort.signal.aborted ||
+            ["cancelled", "blocked"].includes(r.status) ||
+            !gate(w, f).eligible ||
+            r.runtime!.binding !== approvalBinding(w, f)
+          )
+            throw Error("완료 직전 승인이 변경됐습니다.");
+          r.status = "ready_for_merge";
+          r.reason =
+            "필수 검사와 별도 리뷰를 통과했습니다. 변경 내용 확인 후 기존 병합 절차를 따르세요.";
+          r.runtime!.head = head;
+        });
+        finished = true;
+        break;
+      }
+      if (!finished)
+        throw Error(
+          "자동 수정 횟수 한도에 도달했습니다. 실패 근거를 확인하세요.",
+        );
+    } catch (error) {
+      await this.update(id, (r) => {
+        if (r.status !== "cancelled" && r.status !== "blocked") {
+          r.status = abort.signal.aborted ? "interrupted" : "failed";
+          r.reason = abort.signal.aborted
+            ? "시간 한도 또는 실행 중단. 변경 내용과 근거를 보존했습니다."
+            : (error as Error).message;
+        }
+      }).catch(() => {});
+    } finally {
+      if (clock) clearTimeout(clock);
+      if (heartbeat) clearInterval(heartbeat);
+      broker?.close();
+      try {
+        await this.cleanup(id);
+        await this.update(id, (r) => {
+          r.runtime!.terminationConfirmed = true;
+        });
+      } catch {
+        await this.update(id, (r) => {
+          r.status = "blocked";
+          r.reason =
+            "컨테이너 종료 확인이 필요합니다. Docker를 복구하고 앱을 다시 시작하세요.";
+          r.runtime!.terminationConfirmed = false;
+        }).catch(() => {});
+      }
+    }
+  }
+  async retry(id: string) {
+    if (this.active.has(id)) throw Error("이전 실행 종료를 기다리세요.");
+    await this.validForRetry(id);
+    const entityId = `run-${randomUUID().slice(0, 12)}`;
+    await this.store.mutate((w) => {
+      const old = w.runs.find((r) => r.id === id)!;
+      const f = w.features.find((f) => f.id === old.featureId)!;
+      if (
+        !old.runtime ||
+        old.runtime.terminationConfirmed !== true ||
+        !["failed", "interrupted"].includes(old.status) ||
+        !gate(w, f).eligible ||
+        old.runtime.binding !== approvalBinding(w, f)
+      )
+        throw Error("현재 설계를 다시 승인하세요.");
+      if (
+        w.runs.some(
+          (r) => r.featureId === f.id && activeStatuses.includes(r.status),
+        )
+      )
+        throw Error("진행 중인 실행이 있습니다.");
+      const checkpoint = old.runtime.worktree ? id : undefined;
+      old.status = "cancelled";
+      old.reason = `${entityId} 실행으로 이어서 재시작했습니다.`;
+      w.runs.push({
+        ...structuredClone(old),
+        id: entityId,
+        status: "queued",
+        reason: "보존한 변경으로 새 실행을 준비합니다.",
+        at: new Date().toISOString(),
+        runtime: {
+          profile: structuredClone(old.runtime.profile),
+          binding: old.runtime.binding,
+          attempt: 0,
+          costUsd: 0,
+          costEstimated: true,
+          events: [],
+          evidence: [],
+          resumeFrom: checkpoint,
+        },
+      });
+    });
+    return { entityId };
+  }
+
+  private async validForRetry(id: string) {
+    const w = await this.store.read("owner");
+    const r = w.runs.find((r) => r.id === id);
+    if (
+      !r?.runtime ||
+      r.runtime.terminationConfirmed !== true ||
+      !["failed", "interrupted"].includes(r.status)
+    )
+      throw Error("실패/중단된 실행만 재시도할 수 있습니다.");
+    const f = w.features.find((f) => f.id === r.featureId)!;
+    if (!gate(w, f).eligible || r.runtime.binding !== approvalBinding(w, f))
+      throw Error("현재 설계를 다시 승인하세요.");
+    return { w, r, f };
+  }
+  async diff(id: string) {
+    const w = await this.store.read("owner");
+    const r = w.runs.find((r) => r.id === id);
+    if (!r?.runtime?.worktree) throw Error("변경 파일이 아직 없습니다.");
+    return git(r.runtime.worktree, "diff", r.runtime.profile.baseCommit, "--");
+  }
+  async stop() {
+    if (this.timer) clearInterval(this.timer);
+    for (const c of this.active.values()) c.abort();
+    await Promise.allSettled([...this.jobs.values()]);
+  }
+}

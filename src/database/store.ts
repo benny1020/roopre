@@ -18,6 +18,7 @@ export class Store {
   constructor(
     public key = "team-local",
     url = databaseUrl,
+    public mode: "development-fixture" | "local-owner" = "development-fixture",
   ) {
     this.pool = new pg.Pool({ connectionString: url, max: 8 });
   }
@@ -27,9 +28,36 @@ export class Store {
       CREATE TABLE IF NOT EXISTS events (sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, workspace_id text NOT NULL REFERENCES workspaces(id), type text NOT NULL, actor_id text NOT NULL, feature_id text, at timestamptz NOT NULL DEFAULT now(), revision integer NOT NULL);
       CREATE INDEX IF NOT EXISTS events_workspace ON events(workspace_id, sequence);
       CREATE TABLE IF NOT EXISTS commands (workspace_id text NOT NULL REFERENCES workspaces(id), request_id text NOT NULL, actor_id text NOT NULL, digest text NOT NULL, command jsonb NOT NULL, response jsonb NOT NULL, PRIMARY KEY(workspace_id,request_id));`);
+    const initial = seed();
+    if (this.mode === "local-owner") {
+      initial.mode = "local-owner";
+      initial.teamId = this.key;
+      initial.people = [
+        {
+          id: "owner",
+          name: "나 · 프로젝트 소유자",
+          role: "admin",
+          teamId: this.key,
+        },
+      ];
+      initial.projects = [
+        {
+          id: "first-project",
+          name: "첫 프로젝트",
+          description: "연결·환경에서 저장소와 실행 프로필을 설정하세요.",
+          color: "#477CC9",
+          ownerId: "owner",
+          reviewerIds: ["owner"],
+          requiredChecks: ["typecheck", "test", "review"],
+        },
+      ];
+      initial.features = [];
+      initial.runs = [];
+      initial.policies[0].authorId = "owner";
+    }
     await this.pool.query(
       "INSERT INTO workspaces(id,state) VALUES($1,$2) ON CONFLICT DO NOTHING",
-      [this.key, JSON.stringify(seed())],
+      [this.key, JSON.stringify(initial)],
     );
   }
   authorize(state: Workspace, actorId: string) {
@@ -54,11 +82,16 @@ export class Store {
       gates: Object.fromEntries(
         state.features.map((f) => [f.id, gate(state, f)]),
       ),
-      mode: "development-fixture",
-      runnerConnected: false,
+      mode: this.mode,
+      runnerConnected: this.mode === "local-owner",
     };
   }
-  async execute(actorId: string, requestId: string, command: Command) {
+  async execute(
+    actorId: string,
+    requestId: string,
+    command: Command,
+    proof?: { binding: string; authentication: "macos-owner" },
+  ) {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -87,7 +120,7 @@ export class Store {
         await client.query("COMMIT");
         return prior.response;
       }
-      const result = apply(state, actorId, command);
+      const result = apply(state, actorId, command, proof);
       await client.query("UPDATE workspaces SET state=$2 WHERE id=$1", [
         this.key,
         JSON.stringify(state),
@@ -149,6 +182,34 @@ export class Store {
       at: r.at.toISOString(),
       revision: r.revision,
     }));
+  }
+  async mutate(fn: (state: Workspace) => void) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const state = (
+        await client.query(
+          "SELECT state FROM workspaces WHERE id=$1 FOR UPDATE",
+          [this.key],
+        )
+      ).rows[0].state as Workspace;
+      fn(state);
+      state.revision++;
+      await client.query("UPDATE workspaces SET state=$2 WHERE id=$1", [
+        this.key,
+        JSON.stringify(state),
+      ]);
+      await client.query(
+        "INSERT INTO events(workspace_id,type,actor_id,revision) VALUES($1,'runtime','runner',$2)",
+        [this.key, state.revision],
+      );
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
   }
   async close() {
     await this.pool.end();

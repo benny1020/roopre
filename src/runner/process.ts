@@ -1,0 +1,109 @@
+import { spawn } from "node:child_process";
+export async function command(
+  file: string,
+  args: string[],
+  options: {
+    cwd?: string;
+    timeout?: number;
+    signal?: AbortSignal;
+    input?: string;
+    onLine?: (line: string) => void;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+) {
+  return new Promise<{ code: number; output: string }>((resolve, reject) => {
+    const child = spawn(file, args, {
+      cwd: options.cwd,
+      env: options.env ?? {
+        PATH: [
+          process.env.PATH,
+          "/usr/local/bin",
+          "/opt/homebrew/bin",
+          "/usr/bin",
+          "/bin",
+        ]
+          .filter(Boolean)
+          .join(":"),
+        HOME: process.env.HOME,
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+      detached: process.platform !== "win32",
+    });
+    let output = "",
+      pending = "";
+    let settled = false;
+    let terminated = false;
+    let forceStop: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      if (settled || terminated) return;
+      terminated = true;
+      try {
+        process.kill(-child.pid!, "SIGTERM");
+      } catch {}
+      forceStop = setTimeout(() => {
+        try {
+          process.kill(-child.pid!, "SIGKILL");
+        } catch {}
+      }, 1500).unref();
+    };
+    const timer = setTimeout(stop, options.timeout ?? 60000);
+    options.signal?.addEventListener("abort", stop, { once: true });
+    if (options.signal?.aborted) stop();
+    const add = (b: Buffer) => {
+      const t = b.toString();
+      output = (output + t).slice(-200000);
+      pending += t;
+      const lines = pending.split("\n");
+      pending = lines.pop()!.slice(-200000);
+      for (const line of lines) options.onLine?.(line);
+    };
+    child.stdout.on("data", add);
+    child.stderr.on("data", (b: Buffer) => {
+      output = (output + b.toString()).slice(-200000);
+    });
+    child.stdin.on("error", () => {});
+    child.stdin.end(options.input);
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (forceStop) clearTimeout(forceStop);
+      options.signal?.removeEventListener("abort", stop);
+    };
+    child.on("error", () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        reject(Error(`${file} 실행 파일을 찾거나 시작할 수 없습니다.`));
+      }
+    });
+    child.on("close", (code) => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        if (pending) options.onLine?.(pending);
+        resolve({ code: terminated ? -1 : (code ?? -1), output });
+      }
+    });
+  });
+}
+export async function git(cwd: string, ...args: string[]) {
+  const r = await command("git", ["-c", "core.hooksPath=/dev/null", ...args], {
+    cwd,
+    env: {
+      PATH: [
+        process.env.PATH,
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+      ]
+        .filter(Boolean)
+        .join(":"),
+      HOME: process.env.HOME,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+    },
+  });
+  if (r.code !== 0)
+    throw Error(`Git ${args[0]} 실패. 저장소·브랜치·권한을 확인하세요.`);
+  return r.output.trim();
+}

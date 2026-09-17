@@ -1,3 +1,5 @@
+import { policyBinding, approvalBinding } from "./runtime.ts";
+import { activeStatuses } from "../shared/runtime.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {
   sections,
@@ -59,6 +61,7 @@ export function apply(
   w: Workspace,
   actorId: string,
   c: Command,
+  proof?: { binding: string; authentication: "macos-owner" },
 ): { featureId?: string; entityId?: string } {
   const actor = person(w, actorId);
   requireThat(
@@ -82,6 +85,43 @@ export function apply(
     );
   let entityId: string | undefined;
   switch (c.type) {
+    case "configure_execution": {
+      requireThat(
+        w.mode === "local-owner" && actor.role === "admin",
+        "forbidden",
+        "맥 앱 소유자만 실행 환경을 설정할 수 있습니다.",
+        403,
+      );
+      const p = w.projects.find((p) => p.id === c.projectId);
+      requireThat(p, "not_found", "프로젝트가 없습니다.", 404);
+      requireThat(
+        !w.runs.some(
+          (r) =>
+            activeStatuses.includes(r.status) &&
+            w.features.find((f) => f.id === r.featureId)?.projectId === p.id,
+        ),
+        "active_run",
+        "실행을 먼저 취소하세요.",
+      );
+      const names = c.profile.checks.map((x) => x.name);
+      requireThat(
+        new Set(names).size === names.length &&
+          [...w.policies.at(-1)!.requiredChecks, ...p.requiredChecks]
+            .filter((n) => n !== "review")
+            .every((n) => names.includes(n)),
+        "missing_checks",
+        "필수 검사 명령을 모두 연결하세요.",
+      );
+      requireThat(
+        !c.profile.webRequired || names.includes("e2e"),
+        "missing_e2e",
+        "웹 변경은 e2e 검사가 필요합니다.",
+      );
+      p.executionProfile = c.profile;
+      for (const f of w.features.filter((f) => f.projectId === p.id))
+        if (latestDesign(f)) latestDesign(f)!.decisions = [];
+      break;
+    }
     case "create_project": {
       requireThat(
         actor.role === "admin",
@@ -89,14 +129,15 @@ export function apply(
         "관리자만 프로젝트를 만들 수 있습니다.",
         403,
       );
-      reviewers(w, c.reviewerIds);
+      reviewers(w, w.mode === "local-owner" ? [actorId] : c.reviewerIds);
       entityId = uid("project");
       w.projects.push({
         id: entityId,
         name: c.name.trim(),
         description: c.description,
         color: "#477CC9",
-        reviewerIds: c.reviewerIds,
+        reviewerIds: w.mode === "local-owner" ? [actorId] : c.reviewerIds,
+        ownerId: w.mode === "local-owner" ? actorId : undefined,
         requiredChecks: [...w.policies.at(-1)!.requiredChecks],
       });
       break;
@@ -152,7 +193,7 @@ export function apply(
       );
       const p = w.projects.find((p) => p.id === f!.projectId)!;
       const independentReviewers = p.reviewerIds.filter(
-        (id) => id !== f!.authorId,
+        (id) => w.mode === "local-owner" || id !== f!.authorId,
       );
       requireThat(
         independentReviewers.length > 0,
@@ -169,6 +210,18 @@ export function apply(
         "incomplete_design",
         "안내 문구를 실제 설계로 채운 뒤 리뷰를 요청하세요.",
       );
+      if (w.mode === "local-owner") {
+        requireThat(
+          p.executionProfile,
+          "profile_required",
+          "저장소와 실행 프로필을 먼저 연결하세요.",
+        );
+        requireThat(
+          /AC[- ]?\d+/i.test(f!.draft.requirements),
+          "acceptance_required",
+          "요구사항에 AC01 등 식별 가능한 완료 기준을 포함하세요.",
+        );
+      }
       entityId = uid("design");
       f!.designs.push({
         id: entityId,
@@ -182,6 +235,8 @@ export function apply(
         policyVersion: w.policies.at(-1)!.version,
         reviewers: independentReviewers,
         decisions: [],
+        policyBinding:
+          w.mode === "local-owner" ? policyBinding(w, f!) : undefined,
       });
       break;
     }
@@ -231,7 +286,7 @@ export function apply(
       }
       if (c.type === "resolve_thread") {
         requireThat(
-          actor.id !== f!.authorId &&
+          (w.mode === "local-owner" || actor.id !== f!.authorId) &&
             latestDesign(f!)?.reviewers.includes(actor.id),
           "reviewer_required",
           "작성자 이외의 필수 검토자만 해결을 확인할 수 있습니다.",
@@ -250,12 +305,27 @@ export function apply(
         "설계가 변경됐습니다. 최신 버전을 다시 검토하세요.",
       );
       requireThat(
-        actor.id !== f!.authorId && d.reviewers.includes(actor.id),
+        (w.mode === "local-owner" || actor.id !== f!.authorId) &&
+          d.reviewers.includes(actor.id),
         "reviewer_required",
         "이 설계의 필수 검토자만 승인·수정 요청할 수 있습니다.",
         403,
       );
       if (c.decision === "approve") {
+        if (w.mode === "local-owner") {
+          requireThat(
+            proof?.authentication === "macos-owner" &&
+              proof.binding === approvalBinding(w, f!),
+            "owner_auth_required",
+            "이 설계에 대해 macOS 본인 확인을 완료하세요.",
+            403,
+          );
+          requireThat(
+            d.policyBinding === policyBinding(w, f!),
+            "profile_changed",
+            "실행 계약이 변경됐습니다. 새 설계를 게시하세요.",
+          );
+        }
         requireThat(
           d.policyVersion === w.policies.at(-1)!.version,
           "policy_changed",
@@ -277,6 +347,9 @@ export function apply(
         actorId: actor.id,
         decision: c.decision,
         checked: [...new Set(c.checked)],
+        binding: c.decision === "approve" ? proof?.binding : undefined,
+        authentication:
+          c.decision === "approve" ? proof?.authentication : undefined,
         at: stamp,
       });
       break;
@@ -289,12 +362,26 @@ export function apply(
         "stale_design",
         "실행 대상 설계가 최신 버전이 아닙니다.",
       );
+      if (w.mode === "local-owner")
+        requireThat(
+          d.decisions.some(
+            (x) =>
+              x.actorId ===
+                w.projects.find((p) => p.id === f!.projectId)!.ownerId &&
+              x.decision === "approve" &&
+              x.binding === approvalBinding(w, f!),
+          ),
+          "stale_approval",
+          "승인 계약이 일치하지 않습니다.",
+        );
       const g = gate(w, f!);
       requireThat(g.eligible, "design_gate", g.reasons.join(" "));
       requireThat(
         !w.runs.some(
           (r) =>
-            r.featureId === f!.id && ["queued", "blocked"].includes(r.status),
+            r.featureId === f!.id &&
+            ([...activeStatuses, "blocked", "interrupted"].includes(r.status) ||
+              r.runtime?.terminationConfirmed === false),
         ),
         "duplicate_run",
         "이미 실행 대기 중인 기능입니다.",
@@ -305,9 +392,27 @@ export function apply(
         featureId: f!.id,
         designId: d.id,
         status: "queued",
-        reason: f!.dependencies.length
-          ? "선행 기능 통합 대기 · M2 실행기 미연결"
-          : "M2 실행기 미연결 · 실행 요청이 저장됐습니다.",
+        runtime:
+          w.mode === "local-owner"
+            ? {
+                profile: structuredClone(
+                  w.projects.find((p) => p.id === f!.projectId)!
+                    .executionProfile!,
+                ),
+                binding: approvalBinding(w, f!),
+                attempt: 0,
+                costUsd: 0,
+                costEstimated: true,
+                events: [],
+                evidence: [],
+              }
+            : undefined,
+        reason:
+          w.mode === "local-owner"
+            ? "실행 환경 확인 대기"
+            : f!.dependencies.length
+              ? "선행 기능 통합 대기 · M2 실행기 미연결"
+              : "M2 실행기 미연결 · 실행 요청이 저장됐습니다.",
         policyVersion: w.policies.at(-1)!.version,
         effectivePolicy: effectivePolicy(w, f!),
         actorId,
@@ -320,6 +425,7 @@ export function apply(
       requireThat(run, "not_found", "실행을 찾을 수 없습니다.", 404);
       f = w.features.find((f) => f.id === run.featureId)!;
       canEdit();
+      if (run.runtime) run.runtime.cancelRequested = true;
       run.status = "cancelled";
       run.reason = "개발자가 대기를 취소했습니다.";
       break;
@@ -398,6 +504,12 @@ export function apply(
       const project = w.projects.find((p) => p.id === c.projectId);
       requireThat(project, "not_found", "프로젝트를 찾을 수 없습니다.", 404);
       reviewers(w, c.reviewerIds);
+      if (w.mode === "local-owner")
+        requireThat(
+          c.reviewerIds.length === 1 && c.reviewerIds[0] === project.ownerId,
+          "owner_required",
+          "로컬 파일럿의 필수 승인자는 본인입니다.",
+        );
       requireThat(
         [...project.requiredChecks, ...w.policies.at(-1)!.requiredChecks].every(
           (check) => c.requiredChecks.includes(check),
@@ -410,12 +522,16 @@ export function apply(
       project.reviewerIds = c.reviewerIds;
       // Project check changes must invalidate the previously approved execution contract too.
       const p = w.policies.at(-1)!;
-      w.policies.push({
-        ...p,
-        version: p.version + 1,
-        at: stamp,
-        authorId: actorId,
-      });
+      if (w.mode === "local-owner") {
+        for (const f of w.features.filter((f) => f.projectId === project.id))
+          if (latestDesign(f)) latestDesign(f)!.decisions = [];
+      } else
+        w.policies.push({
+          ...p,
+          version: p.version + 1,
+          at: stamp,
+          authorId: actorId,
+        });
       break;
     }
   }

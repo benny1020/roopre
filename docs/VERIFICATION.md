@@ -1,3 +1,39 @@
+# v0.2 구현 검증 — 2026-09-18
+
+사용자의 [v0.2 구현 승인](design/V02-APPROVAL.md)에 따라 로컬 owner 파일럿을 구현했다. 아래 M1/설계 준비 기록은 과거 결과이며 현재 상태는 이 절을 우선한다.
+
+## 수행한 검사
+
+| 검사                                                                           | 결과와 범위                                                                                                                                                                     |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 포맷·현재 문서 링크·승인 문서 3개 SHA-256                                      | 통과                                                                                                                                                                            |
+| Node/renderer 타입·Swift helper·Electron build                                 | 통과                                                                                                                                                                            |
+| 도메인·실제 PostgreSQL·연결 저장·broker 스트림/오류 비밀 제거·산출물·중단 회귀 | 32개 통과; M1 21개 포함                                                                                                                                                         |
+| 실제 Docker 통합 시나리오                                                      | 통과. 중복 claim, 고정 이미지 ID와 lockfile 준비, 독립 clone, Git metadata 쓰기 차단, broker 접근 제한, 고정 검사, 읽기 전용 리뷰, commit, 컨테이너 정리, 중단·변경 복구·재검증 |
+| Chromium 사용자 흐름                                                           | 3개 통과. 테마/재시작 유지/시스템 추종, 프로젝트·기능 DB 저장과 승인 전 실행 차단, 입력 중 polling·실행 현황                                                                    |
+| macOS 인증 helper                                                              | 컴파일과 `--check`의 available 확인. 실제 사용자 인증 성공은 미검증                                                                                                             |
+| Apple Silicon 개발 앱                                                          | v0.2 패키지 생성. 서명·공증 없음                                                                                                                                                |
+
+Docker 통합 검사에서 **Claude Code는 테스트용 프로그램으로 대체했다. 실제 모델 요청과 유료 사용은 하지 않았다.** 브라우저 시나리오는 실제 renderer와 임시 PostgreSQL/domain을 사용하지만 IPC는 테스트용 transport다. Electron IPC·macOS 인증·Keychain 검사를 대신하지 않는다. 테스트가 임시 workspace에서 넣는 승인 proof는 계약 검사용이며 사용자의 실제 기능에 승인을 기록하지 않는다.
+
+검사 중 macOS의 `/var` 경로가 `/private/var`로 정규화되는 차이와 UI의 탭 역할 선택 오류를 발견해 테스트를 수정했다. 구현에서는 폴링이 실행 프로필 입력을 덮어쓰는 문제, 원본 Git metadata 노출, 테스트 산출물 덮어쓰기, 종료 확인 전 재실행 문제를 보완했다. headless 캡처로 1280×800 다크와 1024×700 라이트 설정 화면을 확인했다.
+
+재현 명령은 `pnpm check`, `pnpm test:runner`, `pnpm test:web`, `pnpm build:mac`다. Docker 검사는 `pnpm runner:image`, 브라우저 검사는 `pnpm exec playwright install chromium`, DB 검사는 `pnpm db:start`가 선행 조건이다. 기본 CI에는 `pnpm check`와 브라우저 검사를 연결했다. Docker 검사는 별도 명령이며 기본 CI에서 실행하지 않는다.
+
+로컬 증거는 git에서 제외한 `artifacts/check-v02.log`, `artifacts/runner-integration.log`, `artifacts/web-tests.log`, `artifacts/web-report`, `artifacts/package-v02.log`, `artifacts/runtime-dark.png`, `artifacts/runtime-light-minimum.png`다. 패키지는 `release/루프리-darwin-arm64/루프리.app`이다.
+
+## 실무 투입 전에 남은 조건
+
+1. Mac 잠금 때문에 이번 턴의 네이티브 화면 직접 조작은 수행하지 못했다. 사용자가 앱에서 본인 승인 성공/취소, 재시작 후 암호화 key 복원, native 폴더 선택을 확인해야 한다.
+2. 실제 API key/endpoint가 등록되지 않아 Messages 스트리밍·Claude 도구 호출·provider 비용 보고는 미검증이다. 연결 검사는 단일 소량 응답 검사이며 이것만으로 모든 gateway 호환성을 인정하지 않는다. 최초에는 폐기 가능한 작은 저장소와 명시적인 예산으로 실행한다.
+3. 루프리 자체 전체 개발은 아직 이 앱으로 완료하지 않았다. 현재 루프리 테스트는 PostgreSQL/native 환경이 필요한데 runner는 Node 단일 패키지와 lockfile만 준비한다. 서비스 컨테이너·macOS 작업 지원 후 실제 자체 개발을 검증한다. 이번 Docker fixture 결과를 자체 개발 성공으로 표시하지 않는다.
+4. 역할별 별도 모델 연결, feature 의존성 자동 통합, 서비스 DB/사설 registry/monorepo 준비, 독립 runner daemon, 장기 무진행 watchdog, 보관 기간 자동 정리는 후속이다. 기존 테스트/설정/manifest 수정은 현재 보호 정책상 자동 진행하지 않는다.
+5. 팀 계정·SSO·원격 runner·CI 승인 강제·백업 운영·서명·공증은 M3다. 로컬 OS/DB/Docker 관리자는 신뢰 경계에 포함한다. 현재 빌드를 여러 개발자의 팀 운영 완료본으로 설명하지 않는다.
+
+실행 예산은 CLI 보고값에 기반한 추정 한도다. gateway의 실제 청구액이나 agent가 만든 추가 요청에 대한 절대 비용 상한은 보장하지 않는다. 시간·수정 횟수·요청 수 제한과 별도로 provider의 지출 한도를 설정한다.
+
+---
+
 # 저장소 이전 검증
 
 2026-09-18. 이전 대상은 M1 구현이다. 이번 변경은 저장소·빌드·개발 환경 구성으로, 실제 에이전트 실행 기능을 추가하지 않는다.

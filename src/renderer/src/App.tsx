@@ -1,3 +1,7 @@
+import RuntimeSettings from "./RuntimeSettings";
+import RunPanel, { runNames } from "./RunPanel";
+import RunOverview from "./RunOverview";
+import { activeStatuses } from "../../shared/runtime";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -45,15 +49,19 @@ import appIcon from "../../../resources/icon.png";
 import { APP_NAME } from "../../shared/brand";
 
 const API = "http://127.0.0.1:4318";
+const localKey = (key: string) =>
+  (window.roopre && key !== "theme" ? "owner:" : "") + key;
 const readLocal = <T,>(key: string, fallback: T): T => {
   try {
-    return JSON.parse(localStorage.getItem(key) || "null") ?? fallback;
+    return (
+      JSON.parse(localStorage.getItem(localKey(key)) || "null") ?? fallback
+    );
   } catch {
     return fallback;
   }
 };
 const saveLocal = (key: string, value: unknown) =>
-  localStorage.setItem(key, JSON.stringify(value));
+  localStorage.setItem(localKey(key), JSON.stringify(value));
 const labels = {
   draft: "설계 초안",
   in_review: "설계 리뷰",
@@ -71,7 +79,9 @@ const ago = (date: string) => {
 type Send = (command: Command) => Promise<any>;
 
 export default function App() {
-  const [actor, setActor] = useState(readLocal("actor", "mina"));
+  const [actor, setActor] = useState(
+    window.roopre ? "owner" : readLocal("actor", "mina"),
+  );
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [connected, setConnected] = useState(false);
   const [lastSync, setLastSync] = useState("");
@@ -87,13 +97,20 @@ export default function App() {
   const [search, setSearch] = useState(false);
   const [notifications, setNotifications] = useState(false);
   const [modal, setModal] = useState<"feature" | "project" | null>(null);
-  const [theme, setTheme] = useState(readLocal("theme", "light"));
+  const [theme, setTheme] = useState(readLocal("theme", "system"));
   const [events, setEvents] = useState<
     { type: string; at: string; featureId?: string }[]
   >([]);
   const currentActor = useRef(actor);
   currentActor.current = actor;
   const refresh = async (as = actor) => {
+    if (window.roopre) {
+      const data = await window.roopre.snapshot();
+      setSnapshot(data);
+      setConnected(true);
+      setLastSync(new Date().toISOString());
+      return data;
+    }
     const response = await fetch(`${API}/state`, {
       headers: { "x-devflow-actor": as },
     });
@@ -109,6 +126,22 @@ export default function App() {
     return data as Snapshot;
   };
   useEffect(() => {
+    if (window.roopre) {
+      let live = true;
+      const poll = () => {
+        if (live)
+          void refresh(actor).catch((e) => {
+            setConnected(false);
+            setError(e.message);
+          });
+      };
+      poll();
+      const timer = setInterval(poll, 1000);
+      return () => {
+        live = false;
+        clearInterval(timer);
+      };
+    }
     saveLocal("actor", actor);
     let active = true;
     let stream: EventSource | undefined;
@@ -158,8 +191,15 @@ export default function App() {
     saveLocal("selected", selected);
   }, [scope, selected]);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      document.documentElement.dataset.theme =
+        theme === "system" ? (media.matches ? "dark" : "light") : theme;
+    };
+    apply();
+    media.addEventListener("change", apply);
     saveLocal("theme", theme);
+    return () => media.removeEventListener("change", apply);
   }, [theme]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -188,6 +228,11 @@ export default function App() {
   const send: Send = async (command) => {
     if (!connected)
       throw new Error("연결이 끊겼습니다. 동기화 후 다시 시도하세요.");
+    if (window.roopre) {
+      const result = await window.roopre.command(command);
+      await refresh();
+      return result;
+    }
     const as = actor;
     const response = await fetch(`${API}/commands`, {
       method: "POST",
@@ -269,13 +314,16 @@ export default function App() {
             <span className="dot" />
             {connected ? "동기화됨" : "연결 확인 중"}
           </span>
-          <button
-            className="icon-button"
-            aria-label={theme === "light" ? "다크 모드" : "라이트 모드"}
-            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+          <select
+            className="theme-select"
+            aria-label="화면 테마"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
           >
-            {theme === "light" ? <Moon size={15} /> : <Sun size={15} />}
-          </button>
+            <option value="system">시스템 설정</option>
+            <option value="light">라이트</option>
+            <option value="dark">다크</option>
+          </select>
         </div>
       </header>
       <div className="shell">
@@ -313,8 +361,11 @@ export default function App() {
             <Nav
               active={scope === "queued" && !selected}
               icon={<Clock3 size={17} />}
-              label="실행 대기"
-              count={snapshot?.runs.filter((r) => r.status === "queued").length}
+              label={window.roopre ? "실행 현황" : "실행 대기"}
+              count={
+                snapshot?.runs.filter((r) => activeStatuses.includes(r.status))
+                  .length
+              }
               onClick={() => navigate("queued")}
             />
           </nav>
@@ -368,37 +419,58 @@ export default function App() {
           </nav>
           <div className="sidebar-bottom">
             <Nav
+              active={scope === "runtime" && !selected}
+              icon={<Terminal size={17} />}
+              label="표준 · 연결 · 환경"
+              onClick={() => navigate("runtime")}
+            />
+            <Nav
               active={scope === "policies" && !selected}
               icon={<Settings2 size={17} />}
               label="지침 · 팀 설정"
               onClick={() => navigate("policies")}
             />
-            <div className="profile">
-              <div className="avatar">
-                {actor === "jun" ? "준" : actor === "mina" ? "민" : "소"}
+            {window.roopre ? (
+              <div className="profile">
+                <div className="avatar">나</div>
+                <span>
+                  프로젝트 소유자
+                  <br />
+                  <small>macOS 본인 승인</small>
+                </span>
               </div>
-              <label>
-                <span>개발용 사용자 전환</span>
-                <select
-                  aria-label="개발용 사용자"
-                  value={actor}
-                  onChange={(e) => {
-                    setActor(e.target.value);
-                    setEvents([]);
-                  }}
-                >
-                  <option value="jun">준 · 작성자 / 관리자</option>
-                  <option value="mina">민아 · 검토자</option>
-                  <option value="sora">소라 · 검토자</option>
-                </select>
-              </label>
-            </div>
+            ) : (
+              <div className="profile">
+                <div className="avatar">
+                  {actor === "jun" ? "준" : actor === "mina" ? "민" : "소"}
+                </div>
+                <label>
+                  <span>개발용 사용자 전환</span>
+                  <select
+                    aria-label="개발용 사용자"
+                    value={actor}
+                    onChange={(e) => {
+                      setActor(e.target.value);
+                      setEvents([]);
+                    }}
+                  >
+                    <option value="jun">준 · 작성자 / 관리자</option>
+                    <option value="mina">민아 · 검토자</option>
+                    <option value="sora">소라 · 검토자</option>
+                  </select>
+                </label>
+              </div>
+            )}
           </div>
         </aside>
         <main className="workspace">
           <div className="dev-strip">
-            <span className="dev-label">M1 개발 빌드</span>샘플 프로젝트 · 실제
-            저장/리뷰 · 에이전트 실행은 M2에서 연결
+            <span className="dev-label">
+              {window.roopre ? "v0.2 로컬 파일럿" : "M1 샘플 검토"}
+            </span>
+            {window.roopre
+              ? "본인 승인 · 격리 실행 · 고정 품질 기준"
+              : "샘플 데이터 · 실제 실행은 macOS 앱에서"}
             <span>필수 설계 승인 적용</span>
             <ShieldCheck size={14} />
           </div>
@@ -439,6 +511,16 @@ export default function App() {
               act={act}
               onBack={() => setSelected(null)}
             />
+          ) : scope === "queued" && window.roopre ? (
+            <RunOverview
+              snapshot={snapshot}
+              onSelect={(id) => {
+                saveLocal(`tab:${id}`, "execution");
+                setSelected(id);
+              }}
+            />
+          ) : scope === "runtime" ? (
+            <RuntimeSettings snapshot={snapshot} onSaved={refresh} />
           ) : scope === "policies" ? (
             <PolicyView
               snapshot={snapshot}
@@ -554,9 +636,12 @@ export default function App() {
                   </div>
                   {visible.map((f) => {
                     const g = snapshot.gates[f.id];
-                    const run = snapshot.runs.find(
-                      (r) => r.featureId === f.id && r.status !== "cancelled",
-                    );
+                    const run = snapshot.runs
+                      .slice()
+                      .reverse()
+                      .find(
+                        (r) => r.featureId === f.id && r.status !== "cancelled",
+                      );
                     return (
                       <button
                         className="feature-row"
@@ -586,11 +671,7 @@ export default function App() {
                           </div>
                         </div>
                         <span className={`status ${run ? "queued" : g.status}`}>
-                          {run
-                            ? run.status === "blocked"
-                              ? "실행 차단"
-                              : "실행 대기"
-                            : labels[g.status]}
+                          {run ? runNames[run.status] : labels[g.status]}
                         </span>
                         <span className="approval-count">
                           <ShieldCheck size={14} />
@@ -891,7 +972,7 @@ function FeatureView({
     });
     const next = { ...draft, revision: draft.revision + 1 };
     setDraft(next);
-    localStorage.removeItem(draftKey);
+    localStorage.removeItem(localKey(draftKey));
     return next;
   };
   const publish = async () => {
@@ -903,9 +984,19 @@ function FeatureView({
     });
     setEdit(false);
   };
-  const reviewer = actor !== f.authorId && !!d?.reviewers.includes(actor);
+  const reviewer =
+    (snapshot.mode === "local-owner" || actor !== f.authorId) &&
+    !!d?.reviewers.includes(actor);
   const myDecision = d?.decisions.find((x) => x.actorId === actor)?.decision;
   const run = snapshot.runs.filter((r) => r.featureId === f.id).at(-1);
+  const executionStage =
+    run?.runtime && !["cancelled", "blocked"].includes(run.status)
+      ? ["verifying", "reviewing"].includes(run.status)
+        ? 3
+        : run.status === "ready_for_merge"
+          ? 4
+          : 2
+      : 1;
   const threadItems = f.threads.filter(
     (t) => threadFilter === "all" || t.status !== "resolved",
   );
@@ -948,16 +1039,36 @@ function FeatureView({
           요구사항
         </span>
         <ChevronRight size={13} />
-        <span className="current">
+        <span className={executionStage === 1 ? "current" : "complete"}>
           <CircleDot size={14} />
           설계 · {labels[g.status]}
         </span>
         <ChevronRight size={13} />
-        <span>구현</span>
+        <span
+          className={
+            executionStage === 2
+              ? "current"
+              : executionStage > 2
+                ? "complete"
+                : ""
+          }
+        >
+          구현{executionStage === 2 && run ? ` · ${runNames[run.status]}` : ""}
+        </span>
         <ChevronRight size={13} />
-        <span>리뷰·테스트</span>
+        <span
+          className={
+            executionStage === 3
+              ? "current"
+              : executionStage > 3
+                ? "complete"
+                : ""
+          }
+        >
+          리뷰·테스트
+        </span>
         <ChevronRight size={13} />
-        <span>결과 검토</span>
+        <span className={executionStage === 4 ? "current" : ""}>결과 검토</span>
       </div>
       <div className="detail-tabs" role="tablist" aria-label="기능 정보">
         {[
@@ -1024,7 +1135,7 @@ function FeatureView({
                   <button
                     className="soft"
                     onClick={() => {
-                      if (!edit && !localStorage.getItem(draftKey))
+                      if (!edit && !localStorage.getItem(localKey(draftKey)))
                         setDraft({
                           body: f.draft.body,
                           requirements: f.draft.requirements,
@@ -1492,6 +1603,8 @@ function FeatureView({
             </>
           )}
         </div>
+      ) : snapshot.mode === "local-owner" ? (
+        <RunPanel snapshot={snapshot} feature={f} send={send} />
       ) : (
         <div className="content-page">
           <div className="execution-heading">
@@ -1682,7 +1795,8 @@ function ThreadCard({
     }
   };
   const canResolve =
-    actor !== f.authorId && latestDesign(f)?.reviewers.includes(actor);
+    (snapshot.mode === "local-owner" || actor !== f.authorId) &&
+    latestDesign(f)?.reviewers.includes(actor);
   return (
     <div className={`thread ${t.status === "resolved" ? "resolved" : ""}`}>
       <div className="thread-meta">
@@ -2068,7 +2182,10 @@ function CreateDialog({
                     type: "create_project",
                     name: title,
                     description,
-                    reviewerIds: ["mina", "sora"],
+                    reviewerIds:
+                      snapshot.mode === "local-owner"
+                        ? ["owner"]
+                        : ["mina", "sora"],
                   },
             );
             onCreated(result.entityId);

@@ -55,6 +55,7 @@ select {
   color: inherit;
 }
 button {
+  appearance: none;
   cursor: pointer;
 }
 button:disabled {
@@ -175,7 +176,8 @@ kbd {
   -webkit-app-region: drag;
   user-select: none;
 }
-.titlebar button {
+.titlebar button,
+.titlebar select {
   -webkit-app-region: no-drag;
 }
 .window-space {
@@ -1646,4 +1648,84 @@ kbd {
 .phase-board button span {
   font-size: 11px;
   color: var(--muted);
+}
+
+.theme-select {
+  width: auto;
+  max-width: 130px;
+  font-size: 12px;
+  padding: 4px 7px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.runtime-settings {
+  overflow-y: auto;
+}
+.runtime-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 22px;
+  margin: 20px 0;
+}
+.runtime-card h2 {
+  margin-top: 0;
+}
+.runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+.runtime-grid input,
+.runtime-grid select,
+.runtime-settings textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.standard-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 18px;
+}
+.standard-steps p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.standard-steps small,
+.connection-row small {
+  display: block;
+  color: var(--muted);
+}
+.connection-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+}
+.connection-row > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.runtime-card details {
+  margin: 14px 0;
+}
+.runtime-card summary {
+  cursor: pointer;
+}
+@media (max-width: 1100px) {
+  .standard-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.runtime-card button:not(.primary):not(.soft) {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 10px;
 }
