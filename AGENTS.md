@@ -4,6 +4,7 @@
 - 구조: `docs/ARCHITECTURE.md`. 절차: `docs/DEVELOPMENT.md`.
 - 현재 범위는 M1. Claude Code, worktree 병렬 개발, 자동 테스트 runner, 실제 팀 인증을 연결했다고 주장하지 않는다.
 - 다음 확장은 `docs/design/PRODUCT-DESIGN-v0.2.md`의 사용자 검토 대기 상태다. 사용자가 말한 개발자 리뷰는 사용자 본인의 설계 승인이며, AI나 개발 fixture의 승인을 대신 기록하지 않는다. v0.1의 M1 승인을 M2 구현 승인으로 재사용하지 않는다.
+- 제품의 핵심 목적과 M2-A의 표준 계약 보완은 `docs/design/TEAM-STANDARD-ADDENDUM.md`를 함께 읽는다. 개발 흐름과 품질 기준의 팀 표준화가 목적이며 실행·병렬 처리·시각화는 그 수단이다. 이 보완도 구현 승인 대기 상태다.
 - 승인된 기능의 필수 검사·개발자 리뷰를 생략하거나 테스트 기대값을 완화해 통과시키지 않는다.
 - 명령: `pnpm install --frozen-lockfile`, `pnpm db:start`, `pnpm check`, `pnpm build:mac`.
 - renderer는 Node/Electron main/server/database 모듈을 import하지 않는다. 공유 계약은 src/shared에 둔다.

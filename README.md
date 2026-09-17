@@ -10,6 +10,8 @@
 
 다음 단계의 [v0.2 설계·기업 사례 비교·직접 사용 보고](docs/design/PRODUCT-DESIGN-v0.2.md)를 검토 중입니다. 사용자 본인 설계 승인, API key·endpoint 연결, 실제 개발 실행과 자체 개발 적용을 다루며 아직 구현 승인은 받지 않았습니다.
 
+[팀 개발 표준·품질 목표 보완](docs/design/TEAM-STANDARD-ADDENDUM.md): 누구나 같은 절차와 품질 기준으로 개발하도록, 단계별 결과물·검증·완료 조건을 실행 가능한 표준으로 관리하는 것이 핵심 목표입니다.
+
 ## 시작하기
 
 준비: Apple Silicon macOS, Node.js 24, pnpm 11.0.4, 실행 중인 Docker Desktop.
