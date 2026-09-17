@@ -1,0 +1,19 @@
+name: team-devflow-m1
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: devflow
+      POSTGRES_PASSWORD: devflow-local-only
+      POSTGRES_DB: devflow
+    ports:
+      - "127.0.0.1:55441:5432"
+    volumes:
+      - devflow-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devflow -d devflow"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+volumes:
+  devflow-data:

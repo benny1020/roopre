@@ -1,0 +1,5 @@
+# Single root application; add separately runnable packages only when implemented.
+packages: []
+allowBuilds:
+  electron: true
+  esbuild: true

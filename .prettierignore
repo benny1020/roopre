@@ -1,0 +1,10 @@
+node_modules/
+out/
+release/
+artifacts/
+pnpm-lock.yaml
+# Preserve approved design hashes and imported historical reports.
+docs/design/PRODUCT-DESIGN.md
+docs/design/DESIGN-REVIEW.md
+docs/design/M1-ORIGINAL-VERIFICATION.md
+docs/research/
