@@ -239,17 +239,12 @@ kbd {
   margin-bottom: 22px;
 }
 .team-mark {
-  width: 31px;
-  height: 31px;
-  border-radius: 8px;
-  color: #fff;
-  background: #42639b;
-  display: grid;
-  place-items: center;
-  font-size: 17px;
-  font-weight: 600;
-  box-shadow: inset 0 0 0 1px #ffffff26;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
+
 .team strong {
   font-size: 12px;
 }

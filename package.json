@@ -20,7 +20,8 @@
     "build:mac": "pnpm build && node config/scripts/package-mac.mjs",
     "db:start": "docker compose -f config/compose.yaml up -d --wait",
     "db:stop": "docker compose -f config/compose.yaml stop",
-    "postinstall": "install-electron"
+    "postinstall": "install-electron",
+    "build:icons": "node config/scripts/build-icons.mjs"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",
@@ -54,5 +55,6 @@
     "type": "git",
     "url": "git+https://github.com/benny1020/roopre.git"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "productName": "루프리"
 }

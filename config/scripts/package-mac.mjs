@@ -8,6 +8,7 @@ const staging = await mkdtemp(join(tmpdir(), "roopre-package-"));
 try {
   // The desktop is fully bundled; the separately hosted API and its dependencies
   // must not be shipped. Stage only runtime output, never the working tree.
+  await cp("resources", join(staging, "resources"), { recursive: true });
   await cp("out", join(staging, "out"), { recursive: true });
   await writeFile(
     join(staging, "package.json"),
@@ -25,7 +26,9 @@ try {
   );
   const result = await packager({
     dir: staging,
-    name: "Roopre",
+    name: metadata.productName,
+    icon: resolve("resources/icon.icns"),
+    extendInfo: { CFBundleIconFile: "roopre.icns" },
     platform: "darwin",
     arch: "arm64",
     electronVersion: metadata.devDependencies.electron,

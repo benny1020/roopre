@@ -23,3 +23,12 @@
 [최초 M1 검증](design/M1-ORIGINAL-VERIFICATION.md)은 이전 폴더 기준의 역사 기록이다. 그 문서의 로컬 로그/앱 경로는 보존본 기준이며 현재 저장소의 실행 근거로 사용하지 않는다.
 
 현재도 실제 CLI·worktree 병렬 실행·팀 인증·자동 웹 테스트는 연결하지 않았다. 네이티브 창 조작과 최소 창 크기 검증의 기존 제한도 유지된다. 서명·공증·공개 Release는 수행하지 않았다.
+
+## 루프리 브랜딩 적용
+
+- 표시 이름 `루프리`, 영문/저장 식별자 `roopre`. 기존 userData 경로를 명시해 설정과 초안을 유지한다.
+- 내장 imagegen으로 제작한 아이콘의 PNG 1024px/alpha와 ICNS 내보내기를 확인했다.
+- 브라우저에서 이름과 38px 아이콘의 정상 로딩·화면 표시를 확인했다.
+- `pnpm check` 통과, 테스트 21개 통과. macOS 패키지 생성 및 프로세스 시작 확인.
+- 패키지 Info.plist의 CFBundleDisplayName은 `루프리`, CFBundleIconFile은 `roopre.icns`다. 포함된 ICNS와 원본 ICNS의 SHA-1이 일치함을 확인했다.
+- 패키지 경로는 `release/루프리-darwin-arm64/루프리.app`이다. macOS Dock 자체의 시각 조작 검증은 별도로 수행하지 않았다.

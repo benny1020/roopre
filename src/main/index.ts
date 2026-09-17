@@ -1,6 +1,12 @@
 import { app, BrowserWindow, session, shell } from "electron";
 import { join, dirname } from "node:path";
+import { APP_NAME, APP_ID } from "../shared/brand";
 import { fileURLToPath } from "node:url";
+
+// Keep existing local drafts/settings when the display name changes.
+app.setPath("userData", join(app.getPath("appData"), APP_ID));
+app.setName(APP_NAME);
+const iconPath = join(app.getAppPath(), "resources/icon.png");
 
 const here = dirname(fileURLToPath(import.meta.url));
 function createWindow() {
@@ -9,7 +15,8 @@ function createWindow() {
     height: 940,
     minWidth: 1024,
     minHeight: 700,
-    title: "Roopre",
+    title: APP_NAME,
+    icon: iconPath,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 18, y: 20 },
     backgroundColor: "#F6F7F9",
@@ -32,6 +39,7 @@ function createWindow() {
   } else void window.loadFile(join(here, "../renderer/index.html"));
 }
 app.whenReady().then(() => {
+  app.dock?.setIcon(iconPath);
   if (!process.env.ELECTRON_RENDERER_URL || app.isPackaged) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) =>
       callback({

@@ -41,6 +41,8 @@ import {
   type Thread,
 } from "../../shared/contracts.ts";
 import "./style.css";
+import appIcon from "../../../resources/icon.png";
+import { APP_NAME } from "../../shared/brand";
 
 const API = "http://127.0.0.1:4318";
 const readLocal = <T,>(key: string, fallback: T): T => {
@@ -251,7 +253,7 @@ export default function App() {
     <div className="app">
       <header className="titlebar">
         <span className="window-space" />
-        <span className="app-wordmark">Roopre</span>
+        <span className="app-wordmark">{APP_NAME}</span>
         <span className="titlebar-divider" />
         <span className="caption">팀의 기준으로, 함께 개발하기</span>
         <div className="titlebar-right">
@@ -279,9 +281,9 @@ export default function App() {
       <div className="shell">
         <aside className="sidebar">
           <div className="team">
-            <div className="team-mark">D</div>
+            <img className="team-mark" src={appIcon} alt="루프리" />
             <div>
-              <strong>Development team</strong>
+              <strong>루프리 워크스페이스</strong>
               <small>로컬 개발 워크스페이스</small>
             </div>
           </div>

@@ -1,4 +1,6 @@
-# Roopre
+<img src="resources/icon.png" width="96" height="96" alt="루프리 아이콘" />
+
+# 루프리 · roopre
 
 개발팀의 **요구사항 → 설계 → 개발자 승인 → 구현 → 리뷰·테스트** 흐름을 표준화하는 macOS 앱.
 
@@ -66,7 +68,7 @@ electron.vite.config.ts  main/preload/renderer 빌드
 | `pnpm dev:web`   | 같은 renderer를 브라우저에서 확인; API 별도 실행 |
 | `pnpm check`     | 포맷·문서 링크·타입·빌드·실제 DB 테스트          |
 | `pnpm test`      | 도메인·API 테스트; 실행 중인 DB 필요             |
-| `pnpm build:mac` | `release/Roopre-darwin-arm64/Roopre.app` 생성    |
+| `pnpm build:mac` | `release/루프리-darwin-arm64/루프리.app` 생성    |
 | `pnpm start`     | 빌드된 Electron 앱 실행; API/DB 별도 필요        |
 
 패키지는 개발용 미공증 빌드입니다. 앱은 화면 클라이언트이므로 API와 DB를 별도로 실행해야 합니다. GitHub의 **macOS package** 워크플로우에서도 수동 빌드를 할 수 있으며 공개 GitHub Release를 자동 발행하지 않습니다.

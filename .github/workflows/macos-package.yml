@@ -16,9 +16,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:mac
-      - run: ditto -c -k --sequesterRsrc --keepParent release/Roopre-darwin-arm64/Roopre.app release/Roopre-macos-arm64.zip
+      - run: ditto -c -k --sequesterRsrc --keepParent release/루프리-darwin-arm64/루프리.app release/roopre-macos-arm64.zip
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: Roopre-macos-arm64-unsigned
-          path: release/Roopre-macos-arm64.zip
+          name: roopre-macos-arm64-unsigned
+          path: release/roopre-macos-arm64.zip
           retention-days: 7
