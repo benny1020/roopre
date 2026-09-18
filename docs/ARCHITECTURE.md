@@ -70,3 +70,7 @@ agent 네트워크는 internal Docker network다. sidecar는 호스트 broker만
 `shared/harness.ts`에 정의·배치·지침 합성 계약을 둔다. 에이전트 revision은 누적 보존하고 프로젝트의 workflow가 참조한 최신 정의를 실행 요청 시 복사한다. 적용 모델 연결 버전도 검증한다. 지침·정의·배치 변경은 관련 승인과 실행을 무효화한다. 실행 관리자는 단계 순서와 필수 결과를 검사하며 각각 별도 컨테이너/세션·broker로 실행한다. 읽기 전용 planning은 소스를 수정하지 않고 초안 revision이 일치할 때만 새 초안을 저장한다. `--bare`, 빈 setting sources, 고정 MCP 설정으로 암묵적 저장소 지침·hooks 로딩을 제어한다.
 
 `renderer/src/Onboarding.tsx`는 DB 없는 app shell과 단계별 설정 UI, `HarnessPanel.tsx`는 정의/배치 편집, `RunPanel.tsx`는 개별 에이전트의 실제 입력·tree·결과를 보여준다. Markdown 미리보기는 HTML을 실행하지 않는 텍스트/제목/코드 중심의 제한된 렌더링이다. 첫 구현의 단계 내부 실행은 순차이며 기존 전체 2개/프로젝트당 1개 점유 규칙을 유지한다.
+
+## 하네스 패키지 v1
+
+`shared/harness-package.ts`가 portable 스키마·고정 폴더 레이아웃을 정의한다. `main/harness`는 제한된 폴더/Git 읽기와 검증된 임시 후보를 관리한다. Renderer는 후보 token으로 변경 비교·적용을 요청하며 원본 검증 없이 직접 package 적용 IPC를 보낼 수 없다. `domain/harness-package.ts`는 버전·참조·현재 revision·실행 상태를 확인한 뒤 프로젝트 설정과 에이전트 버전을 한 트랜잭션으로 적용한다. 실행기는 승인 binding의 표준/범위 스냅샷과 staged 경로 검사를 사용한다. 실제 키/로컬 경로는 vault/실행 설정에 남는다. [명세와 제한](specs/HARNESS-V1.md)을 따른다.

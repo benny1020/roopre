@@ -1,3 +1,4 @@
+import { profileOf } from "../shared/harness-package.ts";
 import { z } from "zod";
 import { sections } from "../shared/contracts.ts";
 import type { ResolvedAgent, AgentExecution } from "../shared/harness.ts";
@@ -243,6 +244,34 @@ export class RunnerManager {
     try {
       const { r, f, w } = await this.valid(id);
       const profile = r.runtime!.profile;
+      const standard = w.projects.find((p) => p.id === f.projectId)?.harness;
+      const scope =
+        standard &&
+        profileOf(standard).scopes.find((s) => s.id === f.harnessScope);
+      const checkScope = async () => {
+        if (!scope) return;
+        const paths = (
+          await git(
+            checkout,
+            "diff",
+            "--cached",
+            "--no-renames",
+            "--name-only",
+            "-z",
+            profile.baseCommit,
+          )
+        )
+          .split("\0")
+          .filter(Boolean);
+        if (
+          paths.some(
+            (path) => !scope.paths.some((prefix) => path.startsWith(prefix)),
+          )
+        )
+          throw Error(
+            "승인된 기능 디렉토리 밖의 변경입니다. 범위와 설계를 다시 검토하세요.",
+          );
+      };
       if (f.dependencies.length)
         throw Error(
           "선행 기능의 통합을 확인하기 전에는 실행할 수 없습니다. 의존 관계를 정리하고 설계를 재승인하세요.",
@@ -833,6 +862,7 @@ export class RunnerManager {
           "고정 검사와 웹 시나리오를 실행합니다.",
         );
         await git(checkout, "add", "-A");
+        await checkScope();
         const tree = await git(checkout, "write-tree");
         const evidence: Evidence[] = [];
         for (const check of profile.checks) {
@@ -977,6 +1007,7 @@ export class RunnerManager {
         await git(checkout, "add", "-A");
         if ((await git(checkout, "write-tree")) !== tree)
           throw Error("리뷰 이후 소스가 변경됐습니다.");
+        await checkScope();
         await git(
           checkout,
           "commit",

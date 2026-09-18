@@ -1,6 +1,6 @@
 {
   "name": "roopre",
-  "version": "0.3.0-beta.1",
+  "version": "0.4.0-beta.1",
   "files": [
     "out",
     "resources/icon.png",
@@ -22,6 +22,7 @@
     "format:check": "prettier --check .",
     "check:docs": "node config/scripts/check-docs.mjs",
     "check": "pnpm format:check && pnpm check:docs && pnpm build && pnpm test",
+    "check:mac": "pnpm build && node config/scripts/package-mac.mjs --check",
     "build:mac": "pnpm build && node config/scripts/package-mac.mjs",
     "release:mac": "node config/scripts/package-mac.mjs --release",
     "verify:mac": "node config/scripts/verify-mac.mjs",
@@ -37,7 +38,10 @@
     "pr:prepare": "tsx config/scripts/pr-workflow.ts prepare",
     "pr:publish": "tsx config/scripts/pr-workflow.ts publish",
     "pr:check": "tsx config/scripts/pr-workflow.ts check",
-    "pr:merge": "pnpm build:native && tsx config/scripts/pr-workflow.ts merge"
+    "pr:merge": "pnpm build:native && tsx config/scripts/pr-workflow.ts merge",
+    "harness:validate": "tsx config/scripts/harness.ts validate",
+    "harness:lock": "tsx config/scripts/harness.ts lock",
+    "harness:schema": "tsx config/scripts/harness.ts schema"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",

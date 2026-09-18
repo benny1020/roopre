@@ -86,6 +86,37 @@ test(
           .isEnabled(),
         false,
       );
+      // Only the native directory picker is a fixture; built main/preload and disk I/O are real.
+      await application.evaluate(({ dialog }, root) => {
+        dialog.showOpenDialog = (async () => ({
+          canceled: false,
+          filePaths: [root],
+        })) as any;
+      }, root);
+      const standard = await page.evaluate(() =>
+        (globalThis as any).roopre.harnessCandidate({ kind: "default" }),
+      );
+      assert.equal(standard.package.agents.length, 7);
+      const exported = await page.evaluate(
+        (token) => (globalThis as any).roopre.harnessExport(token),
+        standard.token,
+      );
+      assert.equal(
+        JSON.parse(await readFile(join(exported, "harness.lock.json"), "utf8"))
+          .digest,
+        standard.digest,
+      );
+      await application.evaluate(({ dialog }, folder) => {
+        dialog.showOpenDialog = (async () => ({
+          canceled: false,
+          filePaths: [folder],
+        })) as any;
+      }, exported);
+      const imported = await page.evaluate(() =>
+        (globalThis as any).roopre.harnessCandidate({ kind: "folder" }),
+      );
+      assert.deepEqual(imported.package, standard.package);
+      assert.equal(imported.digest, standard.digest);
     } finally {
       await application?.close();
       await rm(root, { recursive: true, force: true });

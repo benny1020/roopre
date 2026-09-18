@@ -3,6 +3,10 @@ import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 const files = [
   "README.md",
+  "docs/design/V04-APPROVAL.md",
+  "docs/design/HARNESS-PACKAGE-PROPOSAL.md",
+  "docs/design/GLOBAL-ASSISTANT-PROPOSAL.md",
+  "docs/specs/HARNESS-V1.md",
   "CONTRIBUTING.md",
   "AGENTS.md",
   "docs/design/V02-APPROVAL.md",

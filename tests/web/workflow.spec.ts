@@ -1,3 +1,9 @@
+import {
+  HarnessLibrary,
+  harnessApplyRequestId,
+} from "../../src/main/harness/library.ts";
+import { defaultPackage } from "../../src/shared/default-package.ts";
+import { exportProject } from "../../src/domain/harness-package.ts";
 import { ownerFixture } from "../fixtures/workspace.ts";
 import { emptyWorkspace } from "../../src/database/initial.ts";
 import { test as base, expect } from "@playwright/test";
@@ -90,11 +96,51 @@ test.describe("fresh installation", () => {
   });
 });
 test.beforeEach(async ({ page, store }) => {
+  const library = new HarnessLibrary();
   await page.route("**/__test/*", async (route) => {
     const op = new URL(route.request().url()).pathname.split("/").at(-1);
     try {
+      let special: unknown;
+      const input = route.request().postData()
+        ? route.request().postDataJSON()
+        : undefined;
+      if (op === "harnessCandidate") {
+        if (input.kind === "default")
+          special = library.add(defaultPackage(), { kind: "editor" });
+        else if (input.kind === "json")
+          special = library.add(JSON.parse(input.text), { kind: "editor" });
+        else if (input.kind === "project") {
+          const w = await store.read("owner");
+          const p = w.projects.find((p) => p.id === input.projectId)!;
+          special = library.add(
+            exportProject(w, p, {
+              id: p.harness?.package.id ?? "fixture.standard",
+              version: p.harness?.package.version ?? "1.0.0",
+              name: "Fixture export",
+            }),
+            { kind: "editor" },
+          );
+        }
+      }
+      if (op === "harnessApply") {
+        const candidate = library.get(input.token);
+        special = await store.execute(
+          "owner",
+          harnessApplyRequestId(input.token, input),
+          {
+            type: "apply_harness_package",
+            projectId: input.projectId,
+            profileId: input.profileId,
+            expectedRevision: input.expectedRevision,
+            package: candidate.package,
+            source: candidate.source,
+            bindings: {},
+          },
+        );
+      }
       const value =
-        op === "snapshot"
+        special ??
+        (op === "snapshot"
           ? await store.read("owner")
           : op === "command"
             ? await store.execute(
@@ -102,7 +148,7 @@ test.beforeEach(async ({ page, store }) => {
                 randomUUID(),
                 commandSchema.parse(route.request().postDataJSON()),
               )
-            : [];
+            : []);
       await route.fulfill({ json: { value } });
     } catch (e) {
       await route.fulfill({
@@ -129,6 +175,8 @@ test.beforeEach(async ({ page, store }) => {
       snapshot: () => request("snapshot"),
       command: (c: unknown) => request("command", c),
       connections: () => request("connections"),
+      harnessCandidate: (input: unknown) => request("harnessCandidate", input),
+      harnessApply: (input: unknown) => request("harnessApply", input),
     };
   });
   await page.goto("/");
@@ -329,4 +377,132 @@ test("custom agent Markdown, project workflow and instruction provenance survive
     fullPage: true,
     animations: "disabled",
   });
+});
+
+test("harness standard edits, previews, applies atomically and persists feature directory settings", async ({
+  page,
+  store,
+}) => {
+  const secondProject = (
+    await store.execute("owner", randomUUID(), {
+      type: "create_project",
+      name: "Second standard project",
+      description: "",
+      reviewerIds: ["owner"],
+    })
+  ).entityId!;
+  await store.execute("owner", randomUUID(), {
+    type: "create_feature",
+    projectId: "first-project",
+    title: "결제 범위 테스트",
+    requirements: "AC01 verify payment",
+    template: "feature",
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "하네스 표준", exact: true }).click();
+  await page.getByRole("button", { name: "기본 표준으로 시작" }).click();
+  await expect(
+    page.getByRole("heading", { name: /루프리 기본 개발 표준/ }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "표준 스펙 편집", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "편집 내용 검증", exact: true }),
+  ).toBeEnabled();
+  const editor = page.getByLabel("표준 정의 JSON", { exact: true });
+  const spec = JSON.parse(await editor.inputValue());
+  spec.id = "company.commerce";
+  spec.name = "결제팀 개발 표준";
+  spec.profiles[0].scopes = [
+    {
+      id: "checkout",
+      name: "결제 영역",
+      paths: ["src/checkout/"],
+      instructions: "결제 검증 마커",
+    },
+  ];
+  await editor.fill(JSON.stringify(spec));
+  await expect(
+    page.getByRole("button", { name: "프로젝트에 적용", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "편집 내용 검증", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "프로젝트에 적용", exact: true })
+    .click();
+  await expect(page.getByText(/표준을 적용했습니다/)).toBeVisible();
+  let state = await store.read("owner");
+  const project = state.projects[0];
+  expect(project.harness?.package.id).toBe("company.commerce");
+  expect(project.workflow?.assignments).toHaveLength(7);
+  const beforeIds = Object.values(project.harness!.agents);
+  await page
+    .getByLabel("표준 대상 프로젝트", { exact: true })
+    .selectOption(secondProject);
+  await page
+    .getByRole("button", { name: "프로젝트에 적용", exact: true })
+    .click();
+  await expect(page.getByText(/표준을 적용했습니다/)).toBeVisible();
+  expect(
+    (await store.read("owner")).projects.find((p) => p.id === secondProject)!
+      .harness?.digest,
+  ).toBe(project.harness!.digest);
+  await page
+    .getByLabel("표준 대상 프로젝트", { exact: true })
+    .selectOption(project.id);
+  await page
+    .getByRole("button", { name: "비교 새로고침", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "기본 표준으로 시작", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "표준 스펙 편집", exact: true })
+    .click();
+  await editor.fill(JSON.stringify(spec));
+  await page
+    .getByRole("button", { name: "편집 내용 검증", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "프로젝트에 적용", exact: true })
+    .click();
+  await expect(page.getByText(/표준을 적용했습니다/)).toBeVisible();
+  state = await store.read("owner");
+  expect(Object.values(state.projects[0].harness!.agents)).toEqual(beforeIds);
+  await page
+    .getByRole("button", { name: "디렉토리·Markdown", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "agents/convention-reviewer.md", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("하네스 Markdown", { exact: true }),
+  ).toContainText(/전역·프로젝트/);
+  await page
+    .getByLabel("결제 범위 테스트 기능 범위", { exact: true })
+    .selectOption("checkout");
+  await expect(
+    page.getByLabel("결제 범위 테스트 기능 범위", { exact: true }),
+  ).toHaveValue("checkout");
+  expect(
+    (await store.read("owner")).features.find(
+      (f) => f.title === "결제 범위 테스트",
+    )!.harnessScope,
+  ).toBe("checkout");
+  await page.getByLabel("화면 테마").selectOption("dark");
+  await page.screenshot({
+    path: "artifacts/harness-package-dark.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "하네스 표준", exact: true }).click();
+  await expect(
+    page.getByText("적용된 표준 · 결제팀 개발 표준", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("결제 범위 테스트 기능 범위", { exact: true }),
+  ).toHaveValue("checkout");
 });

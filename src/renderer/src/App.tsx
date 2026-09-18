@@ -1,3 +1,4 @@
+import PackageSettings from "./PackageSettings";
 import HarnessPanel from "./HarnessPanel";
 import RuntimeSettings from "./RuntimeSettings";
 import RunPanel, { runNames } from "./RunPanel";
@@ -427,6 +428,12 @@ export default function App() {
           </nav>
           <div className="sidebar-bottom">
             <Nav
+              active={scope === "harness" && !selected}
+              icon={<Settings2 size={17} />}
+              label="하네스 표준"
+              onClick={() => navigate("harness")}
+            />
+            <Nav
               active={scope === "agents" && !selected}
               icon={<Settings2 size={17} />}
               label="에이전트 · 개발 흐름"
@@ -536,6 +543,12 @@ export default function App() {
                 saveLocal(`tab:${id}`, "execution");
                 setSelected(id);
               }}
+            />
+          ) : scope === "harness" ? (
+            <PackageSettings
+              snapshot={snapshot}
+              send={send}
+              refresh={refresh}
             />
           ) : scope === "agents" ? (
             <HarnessPanel snapshot={snapshot} send={send} onSaved={refresh} />

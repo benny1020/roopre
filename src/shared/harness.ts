@@ -1,12 +1,8 @@
+import { packageInstructions } from "./harness-package.ts";
 import { z } from "zod";
 import type { Workspace, Project } from "./contracts.ts";
-export const stages = [
-  "requirements",
-  "design",
-  "implementation",
-  "verification",
-  "review",
-] as const;
+import { stages } from "./harness-stages.ts";
+export { stages } from "./harness-stages.ts";
 export const stageNames: Record<(typeof stages)[number], string> = {
   requirements: "요구사항",
   design: "설계",
@@ -115,6 +111,7 @@ export function workflowIssues(
 export function resolveHarness(
   w: Workspace,
   p: Project,
+  scopeId?: string,
 ): ResolvedHarness | undefined {
   if (!p.workflow) return undefined;
   const issues = workflowIssues(w, p);
@@ -138,7 +135,7 @@ export function resolveHarness(
             agent: structuredClone(agent),
             connectionId,
             connectionVersion,
-            instructions: `# 전역 v${policy.version}\n${policy.global}\n\n# 프로젝트 ${p.name}\n${p.instructions ?? ""}\n\n# 단계 ${stageNames[stage]}\n${stage === "design" || stage === "requirements" ? policy.design : stage === "implementation" ? policy.implementation : policy.reviewer}\n${p.workflow!.instructions[stage]}\n\n# 에이전트 ${agent.name} v${agent.revision}\n${agent.markdown}`,
+            instructions: `${packageInstructions(p.harness, scopeId)}\n\n# 전역 v${policy.version}\n${policy.global}\n\n# 프로젝트 ${p.name}\n${p.instructions ?? ""}\n\n# 단계 ${stageNames[stage]}\n${stage === "design" || stage === "requirements" ? policy.design : stage === "implementation" ? policy.implementation : policy.reviewer}\n${p.workflow!.instructions[stage]}\n\n# 에이전트 ${agent.name} v${agent.revision}\n${agent.markdown}`,
           };
         }),
     ),
