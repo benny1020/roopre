@@ -244,8 +244,10 @@ export class Bootstrap {
             .encrypt(randomBytes(32).toString("hex"))
             .toString("base64"),
         };
-        await this.persist(); // Persist identity before creating any external resource.
       }
+      // Every attempt must durably save identity before any external resource.
+      // A failed write must not make retry skip persistence based on memory alone.
+      await this.persist();
       const n = this.names();
       const exists = await this.run(
         "docker",

@@ -575,6 +575,57 @@ test(
         failedCustom.runtime!.agents!.map((a) => a.status),
         ["passed", "failed", "passed"],
       );
+
+      // Optional malformed planning results must not manufacture a successful draft.
+      await store.execute("owner", randomUUID(), {
+        type: "save_agent",
+        expectedRevision: 1,
+        agent: { ...defs[0], revision: 2, markdown: "INVALID_JSON_FIXTURE" },
+      });
+      const beforeOptional = await store.read("owner");
+      const flow = beforeOptional.projects.find(
+        (p) => p.id === "first-project",
+      )!.workflow!;
+      await store.execute("owner", randomUUID(), {
+        type: "save_workflow",
+        projectId: "first-project",
+        expectedRevision: flow.revision,
+        workflow: {
+          ...flow,
+          revision: flow.revision + 1,
+          assignments: flow.assignments.map((a) =>
+            a.stage === "requirements" ? { ...a, required: false } : a,
+          ),
+        },
+      });
+      const invalidPlan = await store.execute("owner", randomUUID(), {
+        type: "create_feature",
+        projectId: "first-project",
+        title: "Preserve invalid planning input",
+        template: "feature",
+        requirements: "AC01 retain original draft",
+      });
+      const originalDraft = (await store.read("owner")).features.find(
+        (f) => f.id === invalidPlan.entityId,
+      )!.draft;
+      runId = (
+        await store.execute("owner", randomUUID(), {
+          type: "queue_planning",
+          featureId: invalidPlan.entityId!,
+          expectedRevision: 0,
+        })
+      ).entityId!;
+      await runner.execute(runId, new AbortController());
+      const afterOptional = await store.read("owner");
+      assert.equal(
+        afterOptional.runs.find((r) => r.id === runId)!.status,
+        "failed",
+      );
+      assert.deepEqual(
+        afterOptional.features.find((f) => f.id === invalidPlan.entityId)!
+          .draft,
+        originalDraft,
+      );
     } finally {
       await runner?.stop();
       if (runId) await runner?.cleanup(runId);

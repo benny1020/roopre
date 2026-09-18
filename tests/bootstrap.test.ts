@@ -105,3 +105,63 @@ test("corrupt bootstrap state is preserved and failed progress writes do not adv
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("failed identity persistence cannot create resources and retry saves identity before Docker access", async () => {
+  const root = await mkdtemp(join(tmpdir(), "roopre-bootstrap-identity-"));
+  const file = join(root, "onboarding.json");
+  let inventories = 0;
+  const run = (async (bin: string, args: string[]) => {
+    if (bin === "docker" && args[0] === "container") {
+      inventories++;
+      const persisted = JSON.parse(await readFile(file, "utf8"));
+      assert(persisted.database.id);
+      assert(args.includes(`name=^/roopre-db-${persisted.database.id}$`));
+      // Stop the mock after proving persistence precedes external resources.
+      return { code: 1, output: "fixture stop", outputTruncated: false };
+    }
+    return { code: 0, output: "ready", outputTruncated: false };
+  }) as typeof command;
+  const boot = new Bootstrap(
+    root,
+    cipher,
+    "unused",
+    async () => {},
+    () => false,
+    run,
+  );
+  const settle = async () => {
+    for (let i = 0; i < 100 && boot.status().busy; i++)
+      await new Promise((r) => setTimeout(r, 10));
+    assert.equal(boot.status().busy, false);
+  };
+  try {
+    await boot.init();
+    await mkdir(file);
+    boot.prepare();
+    await settle();
+    assert.equal(inventories, 0);
+    assert(boot.status().error);
+    await rm(file, { recursive: true });
+    boot.prepare();
+    await settle();
+    assert.equal(inventories, 1);
+    const saved = JSON.parse(await readFile(file, "utf8"));
+    const reopened = new Bootstrap(
+      root,
+      cipher,
+      "unused",
+      async () => {},
+      () => false,
+      run,
+    );
+    await reopened.init();
+    assert.equal(reopened.status().managed, true);
+    assert.equal(
+      JSON.parse(await readFile(file, "utf8")).database.id,
+      saved.database.id,
+    );
+  } finally {
+    await boot.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
