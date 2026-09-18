@@ -25,7 +25,11 @@
     "build:native": "node config/scripts/build-native.mjs",
     "runner:image": "docker build -t roopre-runner:0.2 -f config/runner.Dockerfile .",
     "test:runner": "tsx --test tests/runner.integration.ts",
-    "test:web": "playwright test --config config/playwright.config.ts"
+    "test:web": "playwright test --config config/playwright.config.ts",
+    "pr:prepare": "tsx config/scripts/pr-workflow.ts prepare",
+    "pr:publish": "tsx config/scripts/pr-workflow.ts publish",
+    "pr:check": "tsx config/scripts/pr-workflow.ts check",
+    "pr:merge": "pnpm build:native && tsx config/scripts/pr-workflow.ts merge"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",

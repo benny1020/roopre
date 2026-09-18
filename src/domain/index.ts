@@ -1,5 +1,5 @@
 import { policyBinding, approvalBinding } from "./runtime.ts";
-import { activeStatuses } from "../shared/runtime.ts";
+import { activeStatuses, executionProfileIssues } from "../shared/runtime.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {
   sections,
@@ -103,20 +103,11 @@ export function apply(
         "active_run",
         "실행을 먼저 취소하세요.",
       );
-      const names = c.profile.checks.map((x) => x.name);
-      requireThat(
-        new Set(names).size === names.length &&
-          [...w.policies.at(-1)!.requiredChecks, ...p.requiredChecks]
-            .filter((n) => n !== "review")
-            .every((n) => names.includes(n)),
-        "missing_checks",
-        "필수 검사 명령을 모두 연결하세요.",
-      );
-      requireThat(
-        !c.profile.webRequired || names.includes("e2e"),
-        "missing_e2e",
-        "웹 변경은 e2e 검사가 필요합니다.",
-      );
+      const issues = executionProfileIssues(c.profile, [
+        ...w.policies.at(-1)!.requiredChecks,
+        ...p.requiredChecks,
+      ]);
+      requireThat(!issues.length, "missing_checks", issues.join(" "));
       p.executionProfile = c.profile;
       for (const f of w.features.filter((f) => f.projectId === p.id))
         if (latestDesign(f)) latestDesign(f)!.decisions = [];
@@ -211,6 +202,11 @@ export function apply(
         "안내 문구를 실제 설계로 채운 뒤 리뷰를 요청하세요.",
       );
       if (w.mode === "local-owner") {
+        const issues = executionProfileIssues(p.executionProfile, [
+          ...w.policies.at(-1)!.requiredChecks,
+          ...p.requiredChecks,
+        ]);
+        requireThat(!issues.length, "missing_checks", issues.join(" "));
         requireThat(
           p.executionProfile,
           "profile_required",
@@ -313,6 +309,12 @@ export function apply(
       );
       if (c.decision === "approve") {
         if (w.mode === "local-owner") {
+          const project = w.projects.find((p) => p.id === f!.projectId)!;
+          const issues = executionProfileIssues(project.executionProfile, [
+            ...w.policies.at(-1)!.requiredChecks,
+            ...project.requiredChecks,
+          ]);
+          requireThat(!issues.length, "missing_checks", issues.join(" "));
           requireThat(
             proof?.authentication === "macos-owner" &&
               proof.binding === approvalBinding(w, f!),

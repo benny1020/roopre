@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   profileSchema,
+  executionProfileIssues,
   type ExecutionProfile,
   type RuntimeDetails,
   type RuntimeStatus,
@@ -261,8 +262,13 @@ export function gate(workspace: Workspace, feature: Feature): Gate {
     )
   )
     reasons.push("필수 검토자가 변경됐습니다. 새 설계를 게시하세요.");
-  if (workspace.mode === "local-owner" && !project.executionProfile)
-    reasons.push("저장소와 실행 프로필을 먼저 연결하세요.");
+  if (workspace.mode === "local-owner")
+    reasons.push(
+      ...executionProfileIssues(project.executionProfile, [
+        ...policy.requiredChecks,
+        ...project.requiredChecks,
+      ]),
+    );
   if (
     workspace.mode === "local-owner" &&
     !design.decisions.some(

@@ -167,6 +167,89 @@ test("native owner cannot remove its required approval or publish without AC evi
     /AC01/,
   );
 });
+
+test("new team/project checks block old execution profiles at publish, approval and execution", () => {
+  for (const scope of ["team", "project"]) {
+    const { w, f, review } = fixture();
+    const p = w.policies.at(-1)!;
+    if (scope === "team")
+      apply(w, "jun", {
+        type: "publish_policy",
+        expectedVersion: p.version,
+        global: p.global,
+        design: p.design,
+        implementation: p.implementation,
+        reviewer: p.reviewer,
+        requiredChecks: [...p.requiredChecks, "security"],
+      });
+    else
+      apply(w, "jun", {
+        type: "update_project_policy",
+        projectId: f.projectId,
+        reviewerIds: ["jun"],
+        requiredChecks: [
+          ...w.projects.find((p) => p.id === f.projectId)!.requiredChecks,
+          "security",
+        ],
+      });
+    assert.equal(gate(w, f).eligible, false);
+    assert.match(gate(w, f).reasons.join(" "), /security/);
+    assert.throws(
+      () =>
+        apply(w, "jun", {
+          type: "publish_design",
+          featureId: f.id,
+          expectedRevision: f.draft.revision,
+        }),
+      /security/,
+    );
+    assert.throws(
+      () =>
+        apply(w, "jun", review, {
+          authentication: "macos-owner",
+          binding: approvalBinding(w, f),
+        }),
+      /security/,
+    );
+    assert.throws(() =>
+      apply(w, "jun", {
+        type: "queue_run",
+        featureId: f.id,
+        designId: review.designId,
+      }),
+    );
+    apply(w, "jun", {
+      type: "configure_execution",
+      projectId: f.projectId,
+      profile: {
+        ...profile,
+        checks: [
+          ...profile.checks,
+          { name: "security", argv: ["pnpm", "security"], timeoutSeconds: 60 },
+        ],
+      },
+    });
+    apply(w, "jun", {
+      type: "publish_design",
+      featureId: f.id,
+      expectedRevision: f.draft.revision,
+    });
+    apply(
+      w,
+      "jun",
+      { ...review, designId: f.designs.at(-1)!.id },
+      { authentication: "macos-owner", binding: approvalBinding(w, f) },
+    );
+    apply(w, "jun", {
+      type: "queue_run",
+      featureId: f.id,
+      designId: f.designs.at(-1)!.id,
+    });
+    assert(
+      w.runs.at(-1)!.runtime!.profile.checks.some((c) => c.name === "security"),
+    );
+  }
+});
 test("endpoint rejects plaintext, userinfo and secret-bearing query; protocol path normalization", () => {
   for (const url of [
     "http://example.com",

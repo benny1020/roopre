@@ -18,6 +18,16 @@ const fs = require("node:fs");
     gitReadonly = true;
   }
   if (!gitReadonly) throw Error("Git metadata is writable");
+  let dependenciesReadonly = false;
+  try {
+    fs.writeFileSync(
+      "/workspace/node_modules/forged-test.js",
+      "process.exit(0)",
+    );
+  } catch {
+    dependenciesReadonly = true;
+  }
+  if (!dependenciesReadonly) throw Error("Dependency tools are writable");
   const review =
     process.argv[process.argv.indexOf("--tools") + 1] === "Read,Glob,Grep";
   let result = "Fixture implementation";

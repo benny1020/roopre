@@ -118,3 +118,24 @@ export const standardSteps = [
     gate: "기존 병합 정책 적용",
   },
 ] as const;
+
+export function executionProfileIssues(
+  profile: ExecutionProfile | undefined,
+  requiredChecks: string[],
+) {
+  if (!profile) return ["저장소와 실행 프로필을 먼저 연결하세요."];
+  const names = profile.checks.map((check) => check.name);
+  const issues: string[] = [];
+  if (new Set(names).size !== names.length)
+    issues.push("검사 이름이 중복됐습니다.");
+  const required = [
+    ...new Set([
+      ...requiredChecks.filter((name) => name !== "review"),
+      ...(profile.webRequired ? ["e2e"] : []),
+    ]),
+  ];
+  const missing = required.filter((name) => !names.includes(name));
+  if (missing.length)
+    issues.push(`필수 검사 명령을 연결하세요: ${missing.join(", ")}`);
+  return issues;
+}

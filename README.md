@@ -6,7 +6,7 @@
 
 **v0.2는 한 명의 소유자가 사용하는 로컬 파일럿입니다.** 설계를 macOS 본인 인증으로 승인한 뒤, Claude Code가 격리된 Docker 작업 공간에서 구현하고 고정 검사와 별도 읽기 전용 리뷰를 수행합니다. 여러 프로젝트의 실행·diff·검사 근거를 앱에서 확인합니다. 실제 팀 계정과 서버 운영은 후속 M3 범위입니다.
 
-[승인된 설계](docs/design/PRODUCT-DESIGN-v0.2.md) · [팀 개발 표준](docs/design/TEAM-STANDARD-ADDENDUM.md) · [구조](docs/ARCHITECTURE.md) · [사용·개발 안내](docs/DEVELOPMENT.md) · [검증과 남은 조건](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md)
+[승인된 설계](docs/design/PRODUCT-DESIGN-v0.2.md) · [팀 개발 표준](docs/design/TEAM-STANDARD-ADDENDUM.md) · [구조](docs/ARCHITECTURE.md) · [사용·개발 안내](docs/DEVELOPMENT.md) · [검증과 남은 조건](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md) · [전담 PR 리뷰·머지 승인](docs/PR-REVIEW-PROCESS.md)
 
 ## 시작하기
 

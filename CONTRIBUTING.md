@@ -10,3 +10,5 @@
 - generated output, node_modules, 환경 파일, 사용자 데이터는 커밋하지 않습니다.
 
 [PR 템플릿](.github/pull_request_template.md)을 사용해 검증 근거와 제한을 기록합니다.
+
+PR은 [전담 리뷰 → 본인 승인 → 머지 절차](docs/PR-REVIEW-PROCESS.md)를 따릅니다.

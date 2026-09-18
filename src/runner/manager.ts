@@ -56,6 +56,7 @@ export class RunnerManager {
       container: `roopre-${id}`,
       proxy: `roopre-proxy-${id}`,
       network: `roopre-net-${id}`,
+      dependencies: `roopre-deps-${id}`,
     };
   }
   async cleanup(id: string) {
@@ -78,6 +79,9 @@ export class RunnerManager {
         );
     }
     await command("docker", ["network", "rm", n.network], { timeout: 10000 });
+    await command("docker", ["volume", "rm", n.dependencies], {
+      timeout: 10000,
+    });
     await command(
       "docker",
       ["image", "rm", `roopre-deps-${id}:latest`, `roopre-base-${id}:locked`],
@@ -298,6 +302,8 @@ export class RunnerManager {
         r.runtime!.worktree = checkout;
         r.runtime!.branch = `codex/${id}`;
       });
+      const rootConfig =
+        /^(package\.json$|pnpm-lock\.yaml$|package-lock\.json$|\.npmrc$|\.pnpmfile\.[cm]?js$|\.yarnrc|\.eslintrc|\.babelrc|tsconfig|eslint|vitest|playwright|(?:babel|jest|vite|webpack|rollup|next|svelte|postcss|tailwind)\.config\.)/;
       const protectedPaths = (await git(checkout, "ls-files"))
         .split("\n")
         .filter((p) =>
@@ -307,7 +313,14 @@ export class RunnerManager {
         );
       const fingerprint = async () => {
         const h = createHash("sha256");
-        for (const p of protectedPaths) {
+        // New root configuration can redirect pnpm/npm or suppress tests too.
+        const paths = [
+          ...new Set([
+            ...protectedPaths,
+            ...(await readdir(checkout)).filter((p) => rootConfig.test(p)),
+          ]),
+        ].sort();
+        for (const p of paths) {
           h.update(p);
           try {
             if ((await lstat(join(checkout, p))).isSymbolicLink()) {
@@ -392,6 +405,33 @@ export class RunnerManager {
         image = `roopre-deps-${id}:latest`;
         await this.docker(["build", "-t", image, setup], abort.signal, 600000);
       }
+      // Only this trusted, networkless setup writes the dependency volume.
+      // Every agent/check/review container receives it read-only.
+      await this.docker(["volume", "create", n.dependencies], abort.signal);
+      if (hasManifest)
+        await this.docker(
+          [
+            "run",
+            "--rm",
+            "--name",
+            n.container,
+            "--network",
+            "none",
+            "--user",
+            "root",
+            "--cap-drop=ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--mount",
+            `type=volume,src=${n.dependencies},dst=/locked-deps`,
+            image,
+            "sh",
+            "-c",
+            "cp -a /opt/project/node_modules/. /locked-deps/",
+          ],
+          abort.signal,
+          120000,
+        );
       await this.docker(
         ["network", "create", "--internal", n.network],
         abort.signal,
@@ -465,6 +505,8 @@ export class RunnerManager {
             `type=bind,src=${checkout},dst=/workspace${readonly ? ",readonly" : ""}`,
             "--mount",
             `type=bind,src=${join(checkout, ".git")},dst=/workspace/.git,readonly`,
+            "--mount",
+            `type=volume,src=${n.dependencies},dst=/workspace/node_modules,readonly,volume-nocopy`,
             "--tmpfs",
             "/tmp:rw,nosuid,size=512m",
             "--env",
@@ -480,19 +522,6 @@ export class RunnerManager {
           abort.signal,
         );
       };
-      await createContainer();
-      if (hasManifest)
-        await this.docker(
-          [
-            "exec",
-            n.container,
-            "sh",
-            "-c",
-            "cp -a /opt/project/node_modules /workspace/node_modules",
-          ],
-          abort.signal,
-          120000,
-        );
       const invoke = async (prompt: string, review = false) => {
         await this.valid(id);
         const current = (await this.store.read("owner")).runs.find(

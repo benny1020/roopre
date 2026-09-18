@@ -42,7 +42,7 @@ PostgreSQL workspace JSONB 행 잠금으로 명령과 실행 claim을 직렬화�
 
 agent 네트워크는 internal Docker network다. sidecar는 호스트 broker만 전달하며 broker는 실행별 토큰·모델·Messages 경로를 제한한다. 실제 key는 호스트에서 HTTPS 요청에만 붙인다. broker는 Docker 접속을 위해 임시 포트에서 listen하므로 실행 토큰 보호가 필요하다. 호스트 OS와 Docker 관리자는 신뢰 경계 안에 있다.
 
-의존성 준비는 승인한 이미지 ID와 잠금 파일을 사용하며 설치 스크립트를 비활성화한다. 기존 테스트/설정/manifest hash를 보호하고 고정 argv 검사를 실행한다. 검사 전후 Git tree와 리뷰 후 tree가 일치해야 완료한다. AC별 AI 검토 근거도 요구하지만 그 정확성을 수학적으로 보장하지는 않는다.
+의존성 준비는 승인한 이미지 ID와 잠금 파일을 사용하며 설치 스크립트를 비활성화한다. 준비한 node_modules는 별도 볼륨에 담아 구현·검증·리뷰 모두 읽기 전용으로 마운트한다. node_modules 안에 캐시를 쓰는 도구는 별도 캐시 경로 설정이 필요하다. 기존 테스트/설정/manifest hash를 보호하고 고정 argv 검사를 실행한다. 검사 전후 Git tree와 리뷰 후 tree가 일치해야 완료한다. AC별 AI 검토 근거도 요구하지만 그 정확성을 수학적으로 보장하지는 않는다.
 
 각 시도의 검사 로그와 제한된 이미지/trace/report 산출물을 보존하고 파일 hash 확인 후 Finder에서 찾는다. HTML을 앱 권한으로 실행하지 않는다. 실패/중단 복구는 같은 승인 binding의 변경만 새로운 체크아웃에 적용한다. 대량 diff는 자동 검토/복구를 중단한다.
 
