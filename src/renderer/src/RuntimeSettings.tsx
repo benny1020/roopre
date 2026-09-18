@@ -111,7 +111,7 @@ export default function RuntimeSettings({
           <h2>맥 앱에서 연결하세요</h2>
           <p>
             API key 저장·저장소 선택·본인 승인은 macOS 앱에서 사용할 수
-            있습니다. 이 브라우저는 샘플 데이터 검토용입니다.
+            있습니다. 이 브라우저는 로컬 개발 미리보기입니다.
           </p>
         </section>
       ) : (
@@ -249,6 +249,11 @@ export default function RuntimeSettings({
           </section>
           <section className="runtime-card">
             <h2>프로젝트 실행 프로필</h2>
+            {!project && (
+              <p className="muted">
+                프로젝트를 먼저 만든 뒤 저장소와 실행 프로필을 연결하세요.
+              </p>
+            )}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -377,7 +382,7 @@ export default function RuntimeSettings({
               </p>
               <button
                 className="primary"
-                disabled={busy || !path || !connectionId}
+                disabled={busy || !project || !path || !connectionId}
               >
                 실행 프로필 저장
               </button>

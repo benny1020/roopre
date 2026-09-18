@@ -1,6 +1,7 @@
 import { Store } from "../database/store.ts";
 import { createApp } from "./app.ts";
-const store = new Store();
+// Keep the old demo workspace untouched; normal preview starts without samples.
+const store = new Store("local-preview-v1");
 await store.init();
 const app = await createApp(store);
 await app.listen({ host: "127.0.0.1", port: 4318 });

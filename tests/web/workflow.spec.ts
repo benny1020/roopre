@@ -1,3 +1,5 @@
+import { ownerFixture } from "../fixtures/workspace.ts";
+import { emptyWorkspace } from "../../src/database/initial.ts";
 import { test as base, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { Store } from "../../src/database/store.ts";
@@ -5,12 +7,14 @@ import { commandSchema } from "../../src/shared/contracts.ts";
 
 // Real renderer + PostgreSQL/domain, with an explicit test-only IPC transport.
 // This does NOT validate Electron IPC, macOS authentication, Keychain or model calls.
-const test = base.extend<{ store: Store }>({
-  store: async ({}, use) => {
+const test = base.extend<{ store: Store; seeded: boolean }>({
+  seeded: [true, { option: true }],
+  store: async ({ seeded }, use) => {
     const store = new Store(
       `test-web-${randomUUID()}`,
       undefined,
       "local-owner",
+      seeded ? ownerFixture : emptyWorkspace,
     );
     await store.init();
     try {
@@ -24,6 +28,66 @@ const test = base.extend<{ store: Store }>({
       await store.close();
     }
   },
+});
+
+test.describe("fresh installation", () => {
+  test.use({ seeded: false });
+  test("empty workspace supports settings and first project creation", async ({
+    page,
+    store,
+  }) => {
+    expect((await store.read("owner")).projects).toHaveLength(0);
+    await expect(
+      page.getByRole("heading", { name: "내 프로젝트로 시작하세요" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: "artifacts/empty-workspace.png",
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "지침 · 팀 설정", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "지침 · 팀 설정", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "새 지침 버전 게시" }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "프로젝트 기준 저장" }),
+    ).toBeDisabled();
+    await page
+      .getByRole("button", { name: "표준 · 연결 · 환경", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "실행 프로필 저장" }),
+    ).toBeDisabled();
+    await page.getByRole("button", { name: /^내 할 일/ }).click();
+    await page
+      .getByRole("button", { name: "프로젝트 만들기", exact: true })
+      .click();
+    await page
+      .getByLabel("프로젝트 이름", { exact: true })
+      .fill("My first project");
+    await page
+      .getByLabel("설명", { exact: true })
+      .fill("Created from an empty installation");
+    await page
+      .getByRole("dialog", { name: "새 프로젝트" })
+      .getByRole("button", { name: "프로젝트 만들기", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "My first project", exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "My first project", exact: true }),
+    ).toBeVisible();
+    const state = await store.read("owner");
+    expect(state.projects).toHaveLength(1);
+    expect(state.people.map((person) => person.id)).toEqual(["owner"]);
+    expect(state.features).toHaveLength(0);
+  });
 });
 test.beforeEach(async ({ page, store }) => {
   await page.route("**/__test/*", async (route) => {

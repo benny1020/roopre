@@ -1,3 +1,4 @@
+import { seed } from "./fixtures/workspace.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -6,7 +7,12 @@ import { createApp } from "../src/server/app.ts";
 import { sections, type Command } from "../src/shared/contracts.ts";
 
 test("PostgreSQL API: authorization, atomic competing edits, idempotency, approvals and reconnect events", async (t) => {
-  const store = new Store(`test-${randomUUID()}`);
+  const store = new Store(
+    `test-${randomUUID()}`,
+    undefined,
+    "development-fixture",
+    seed,
+  );
   await store.init();
   const app = await createApp(store);
   t.after(async () => {
@@ -209,7 +215,12 @@ test("PostgreSQL API: authorization, atomic competing edits, idempotency, approv
     "T10 storage recovery: recreating a store preserves existing state and revision",
     async () => {
       const before = await store.read("jun");
-      const second = new Store(store.key);
+      const second = new Store(
+        store.key,
+        undefined,
+        "development-fixture",
+        seed,
+      );
       await second.init();
       const after = await second.read("mina");
       await second.close();

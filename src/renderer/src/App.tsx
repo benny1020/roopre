@@ -79,9 +79,7 @@ const ago = (date: string) => {
 type Send = (command: Command) => Promise<any>;
 
 export default function App() {
-  const [actor, setActor] = useState(
-    window.roopre ? "owner" : readLocal("actor", "mina"),
-  );
+  const actor = "owner";
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [connected, setConnected] = useState(false);
   const [lastSync, setLastSync] = useState("");
@@ -450,24 +448,12 @@ export default function App() {
               </div>
             ) : (
               <div className="profile">
-                <div className="avatar">
-                  {actor === "jun" ? "준" : actor === "mina" ? "민" : "소"}
-                </div>
-                <label>
-                  <span>개발용 사용자 전환</span>
-                  <select
-                    aria-label="개발용 사용자"
-                    value={actor}
-                    onChange={(e) => {
-                      setActor(e.target.value);
-                      setEvents([]);
-                    }}
-                  >
-                    <option value="jun">준 · 작성자 / 관리자</option>
-                    <option value="mina">민아 · 검토자</option>
-                    <option value="sora">소라 · 검토자</option>
-                  </select>
-                </label>
+                <div className="avatar">나</div>
+                <span>
+                  로컬 미리보기
+                  <br />
+                  <small>실제 실행·승인은 맥 앱에서</small>
+                </span>
               </div>
             )}
           </div>
@@ -475,11 +461,11 @@ export default function App() {
         <main className="workspace">
           <div className="dev-strip">
             <span className="dev-label">
-              {window.roopre ? "v0.2 로컬 파일럿" : "M1 샘플 검토"}
+              {window.roopre ? "로컬 워크스페이스" : "개발 미리보기"}
             </span>
             {window.roopre
               ? "본인 승인 · 격리 실행 · 고정 품질 기준"
-              : "샘플 데이터 · 실제 실행은 macOS 앱에서"}
+              : "로컬 미리보기 · 실제 실행은 macOS 앱에서"}
             <span>필수 설계 승인 적용</span>
             <ShieldCheck size={14} />
           </div>
@@ -544,6 +530,27 @@ export default function App() {
               act={act}
               connected={connected}
             />
+          ) : !snapshot.projects.length ? (
+            <div className="content-page">
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">시작하기</div>
+                  <h1>내 프로젝트로 시작하세요</h1>
+                  <p>
+                    프로젝트를 만들고 저장소와 AI 연결을 설정한 뒤, 요구사항과
+                    설계부터 진행하세요.
+                  </p>
+                  <button
+                    className="primary spaced"
+                    disabled={!connected}
+                    onClick={() => setModal("project")}
+                  >
+                    <Plus size={16} />
+                    프로젝트 만들기
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
             <>
               <div className="page-heading">
@@ -850,7 +857,7 @@ export default function App() {
         <CreateDialog
           kind={modal}
           snapshot={snapshot}
-          defaultProject={project?.id || snapshot.projects[0].id}
+          defaultProject={project?.id || snapshot.projects[0]?.id || ""}
           send={send}
           onClose={() => setModal(null)}
           onCreated={(id) => {
@@ -1949,20 +1956,22 @@ function PolicyView({
   const [draft, setDraft] = useState(p);
   const [busy, setBusy] = useState(false);
   const admin = snapshot.people.find((p) => p.id === actor)?.role === "admin";
-  const [projectId, setProjectId] = useState(snapshot.projects[0].id);
-  const project = snapshot.projects.find((p) => p.id === projectId)!;
-  const [instructions, setInstructions] = useState(project.instructions || "");
-  const [checks, setChecks] = useState(project.requiredChecks.join(", "));
-  const [reviewers, setReviewers] = useState(project.reviewerIds);
+  const [projectId, setProjectId] = useState(snapshot.projects[0]?.id ?? "");
+  const project = snapshot.projects.find((p) => p.id === projectId);
+  const [instructions, setInstructions] = useState(project?.instructions || "");
+  const [checks, setChecks] = useState(
+    project?.requiredChecks.join(", ") ?? "",
+  );
+  const [reviewers, setReviewers] = useState(project?.reviewerIds ?? []);
   useEffect(() => {
-    setInstructions(project.instructions || "");
-    setChecks(project.requiredChecks.join(", "));
-    setReviewers(project.reviewerIds);
+    setInstructions(project?.instructions || "");
+    setChecks(project?.requiredChecks.join(", ") ?? "");
+    setReviewers(project?.reviewerIds ?? []);
   }, [
     projectId,
-    project.requiredChecks.join(","),
-    project.reviewerIds.join(","),
-    project.instructions,
+    project?.requiredChecks.join(","),
+    project?.reviewerIds.join(","),
+    project?.instructions,
   ]);
   useEffect(() => setDraft(p), [p.version]);
   const submit = async (fn: () => Promise<any>, message: string) => {
@@ -2054,8 +2063,15 @@ function PolicyView({
         </section>
         <section>
           <h2>프로젝트별 기준</h2>
+          {!project && (
+            <p className="muted">
+              프로젝트를 만든 뒤 프로젝트별 지침을 설정하세요. 전역 지침은 지금
+              작성할 수 있습니다.
+            </p>
+          )}
           <select
             aria-label="설정할 프로젝트"
+            disabled={!project}
             value={projectId}
             onChange={(e) => setProjectId(e.target.value)}
           >
@@ -2069,14 +2085,14 @@ function PolicyView({
             필수 검사
             <input
               value={checks}
-              readOnly={!admin}
+              readOnly={!admin || !project}
               onChange={(e) => setChecks(e.target.value)}
             />
           </label>
           <label className="field">
             프로젝트 지침
             <textarea
-              readOnly={!admin}
+              readOnly={!admin || !project}
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="프로젝트 구조, 명령, 환경, 도메인 규칙"
@@ -2089,7 +2105,7 @@ function PolicyView({
               <label className="checkbox" key={person.id}>
                 <input
                   type="checkbox"
-                  disabled={!admin}
+                  disabled={!admin || !project}
                   checked={reviewers.includes(person.id)}
                   onChange={(e) =>
                     setReviewers(
@@ -2105,7 +2121,7 @@ function PolicyView({
           {admin && (
             <button
               className="secondary spaced"
-              disabled={!connected || busy || !reviewers.length}
+              disabled={!connected || busy || !project || !reviewers.length}
               onClick={() =>
                 submit(
                   () =>
@@ -2197,10 +2213,7 @@ function CreateDialog({
                     type: "create_project",
                     name: title,
                     description,
-                    reviewerIds:
-                      snapshot.mode === "local-owner"
-                        ? ["owner"]
-                        : ["mina", "sora"],
+                    reviewerIds: ["owner"],
                   },
             );
             onCreated(result.entityId);

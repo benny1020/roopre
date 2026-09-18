@@ -30,6 +30,15 @@ for (const file of files) {
   );
 }
 const packaged = JSON.parse(extractFile(archive, "package.json").toString());
+const main = extractFile(archive, "out/main/index.js").toString();
+for (const sample of [
+  "feature-checkout",
+  "결제 실패 안내 개선",
+  "민아 · 검토자",
+  "Customer Portal",
+  "first-project",
+])
+  assert(!main.includes(sample), `테스트 데이터가 앱에 포함됨: ${sample}`);
 assert.equal(packaged.version, metadata.version);
 assert.equal(packaged.scripts, undefined);
 assert.equal(packaged.devDependencies, undefined);

@@ -1,5 +1,6 @@
+import { emptyWorkspace } from "../../src/database/initial.ts";
 import { createHash } from "node:crypto";
-import type { Workspace, Feature } from "../shared/contracts.ts";
+import type { Workspace, Feature } from "../../src/shared/contracts.ts";
 
 export function seed(): Workspace {
   const at = new Date().toISOString();
@@ -151,4 +152,18 @@ export function seed(): Workspace {
       },
     ],
   };
+}
+
+export function ownerFixture(key: string): Workspace {
+  const w = emptyWorkspace(key, "local-owner");
+  w.projects.push({
+    id: "first-project",
+    name: "첫 프로젝트",
+    description: "명시적 테스트 프로젝트",
+    color: "#477CC9",
+    ownerId: "owner",
+    reviewerIds: ["owner"],
+    requiredChecks: ["typecheck", "test", "review"],
+  });
+  return w;
 }

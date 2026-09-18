@@ -1,3 +1,4 @@
+import { ownerFixture } from "./fixtures/workspace.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, readFile, rm, cp } from "node:fs/promises";
@@ -20,6 +21,7 @@ test(
       `test-runner-${randomUUID()}`,
       undefined,
       "local-owner",
+      ownerFixture,
     );
     let runner: RunnerManager | undefined;
     let runId = "";

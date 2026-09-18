@@ -6,6 +6,8 @@ const files = [
   "CONTRIBUTING.md",
   "AGENTS.md",
   "docs/design/V02-APPROVAL.md",
+  "docs/design/HARNESS-V03.md",
+  "docs/design/EXTERNAL-BETA-DESIGN.md",
 ];
 for (const entry of await readdir("docs", { withFileTypes: true }))
   if (entry.isFile() && entry.name.endsWith(".md"))

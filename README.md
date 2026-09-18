@@ -23,7 +23,7 @@ pnpm runner:image
 pnpm dev
 ```
 
-Electron 앱은 PostgreSQL에 직접 연결하며 소유자 워크스페이스를 사용합니다. `pnpm dev`가 함께 시작하는 `127.0.0.1:4318` API와 `4317` 브라우저 화면은 별도의 M1 샘플 데이터 검토용입니다. 기존 DB 볼륨과 기록은 보존됩니다. DB 중지는 `pnpm db:stop`입니다.
+Electron 앱은 PostgreSQL에 직접 연결하며 소유자 워크스페이스를 사용합니다. `pnpm dev`가 함께 시작하는 `127.0.0.1:4318` API와 `4317` 브라우저 화면은 별도의 빈 개발 미리보기 워크스페이스입니다. 새 앱에는 샘플 프로젝트·가상 팀원·실행 결과가 포함되지 않습니다. 기존 DB 볼륨과 기록은 보존됩니다. DB 중지는 `pnpm db:stop`입니다.
 
 1. 앱의 **표준 · 연결 · 환경**에서 HTTPS endpoint, API key/Bearer token, 모델 ID를 등록하고 연결 검사합니다. Anthropic Messages 규격만 지원합니다. 연결 검사에는 소량의 과금이 발생할 수 있습니다.
 2. 프로젝트의 Git 폴더·기준 브랜치·고정 검사 명령·예산·시간 한도를 저장합니다.
@@ -58,9 +58,9 @@ src/
     src/                 React 화면
   shared/                명령·이벤트·공유 타입
   runner/                Docker 실행·검증·broker·복구
-  server/                M1 샘플 Fastify API·SSE
+  server/                개발 미리보기 Fastify API·SSE
   domain/                승인·정책·의존성 규칙
-  database/              PostgreSQL 저장·개발 fixture
+  database/              PostgreSQL 저장·빈 초기 워크스페이스
   types/                 renderer 전역 타입
 config/                  TS·브라우저 개발·DB 설정
   scripts/               실행·패키징·문서 검사

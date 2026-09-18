@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { seed } from "../src/database/seed.ts";
+import { seed, ownerFixture } from "./fixtures/workspace.ts";
 import { apply } from "../src/domain/index.ts";
 import { approvalBinding } from "../src/domain/runtime.ts";
 import { sections, gate, type Workspace } from "../src/shared/contracts.ts";
@@ -349,7 +349,12 @@ test("broker rejects bad tokens, arbitrary paths and model overrides before any 
   }
 });
 test("owner PostgreSQL storage does not expose an HTTP approval bypass", async () => {
-  const s = new Store(`test-owner-${randomUUID()}`, undefined, "local-owner");
+  const s = new Store(
+    `test-owner-${randomUUID()}`,
+    undefined,
+    "local-owner",
+    ownerFixture,
+  );
   await s.init();
   const app = await createApp(s);
   try {
@@ -556,4 +561,41 @@ test("scheduler skips an occupied project's queue so another project can use the
   await (runner as unknown as { tick: () => Promise<void> }).tick();
   assert.deepEqual(selected, [otherRun.id]);
   await runner.stop();
+});
+
+test("a new product workspace has no sample projects or reviewers and reopening preserves user data", async () => {
+  const store = new Store(
+    `test-empty-${randomUUID()}`,
+    undefined,
+    "local-owner",
+  );
+  try {
+    await store.init();
+    const fresh = await store.read("owner");
+    assert.deepEqual(fresh.projects, []);
+    assert.deepEqual(fresh.features, []);
+    assert.deepEqual(fresh.runs, []);
+    assert.deepEqual(
+      fresh.people.map((p) => p.id),
+      ["owner"],
+    );
+    const project = await store.execute("owner", randomUUID(), {
+      type: "create_project",
+      name: "실제 사용자 프로젝트",
+      description: "사용자가 직접 생성",
+      reviewerIds: ["owner"],
+    });
+    const before = await store.read("owner");
+    await store.init();
+    const after = await store.read("owner");
+    assert.deepEqual(after, before);
+    assert.equal(after.projects[0].id, project.entityId);
+  } finally {
+    for (const table of ["commands", "events"])
+      await store.pool.query(`DELETE FROM ${table} WHERE workspace_id=$1`, [
+        store.key,
+      ]);
+    await store.pool.query("DELETE FROM workspaces WHERE id=$1", [store.key]);
+    await store.close();
+  }
 });

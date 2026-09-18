@@ -1,7 +1,7 @@
 import pg from "pg";
 import { createHash } from "node:crypto";
 import { apply, DomainError } from "../domain/index.ts";
-import { seed } from "./seed.ts";
+import { emptyWorkspace } from "./initial.ts";
 import {
   gate,
   type Workspace,
@@ -19,6 +19,7 @@ export class Store {
     public key = "team-local",
     url = databaseUrl,
     public mode: "development-fixture" | "local-owner" = "development-fixture",
+    private initialize: typeof emptyWorkspace = emptyWorkspace,
   ) {
     this.pool = new pg.Pool({
       connectionString: url,
@@ -42,33 +43,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS events (sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, workspace_id text NOT NULL REFERENCES workspaces(id), type text NOT NULL, actor_id text NOT NULL, feature_id text, at timestamptz NOT NULL DEFAULT now(), revision integer NOT NULL);
       CREATE INDEX IF NOT EXISTS events_workspace ON events(workspace_id, sequence);
       CREATE TABLE IF NOT EXISTS commands (workspace_id text NOT NULL REFERENCES workspaces(id), request_id text NOT NULL, actor_id text NOT NULL, digest text NOT NULL, command jsonb NOT NULL, response jsonb NOT NULL, PRIMARY KEY(workspace_id,request_id));`);
-    const initial = seed();
-    if (this.mode === "local-owner") {
-      initial.mode = "local-owner";
-      initial.teamId = this.key;
-      initial.people = [
-        {
-          id: "owner",
-          name: "나 · 프로젝트 소유자",
-          role: "admin",
-          teamId: this.key,
-        },
-      ];
-      initial.projects = [
-        {
-          id: "first-project",
-          name: "첫 프로젝트",
-          description: "연결·환경에서 저장소와 실행 프로필을 설정하세요.",
-          color: "#477CC9",
-          ownerId: "owner",
-          reviewerIds: ["owner"],
-          requiredChecks: ["typecheck", "test", "review"],
-        },
-      ];
-      initial.features = [];
-      initial.runs = [];
-      initial.policies[0].authorId = "owner";
-    }
+    const initial = this.initialize(this.key, this.mode);
     await this.pool.query(
       "INSERT INTO workspaces(id,state) VALUES($1,$2) ON CONFLICT DO NOTHING",
       [this.key, JSON.stringify(initial)],
