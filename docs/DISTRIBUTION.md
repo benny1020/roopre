@@ -44,7 +44,7 @@ ROOPRE_NOTARY_PROFILE='Keychain에 저장한 profile 이름' \
 pnpm release:mac
 ```
 
-이 명령은 로컬 서명·Apple 공증과 ZIP 생성을 수행한다. GitHub Release 공개나 자동 업데이트 게시를 수행하지 않는다. 자격 증명 미준비 시 즉시 실패한다. [Electron 서명·공증 설명](https://www.electronjs.org/docs/latest/tutorial/code-signing).
+이 명령은 자격 증명과 clean commit을 먼저 확인하고 check·Docker·웹·Electron 시작 검사를 모두 통과한 뒤 로컬 서명·Apple 공증과 ZIP 생성을 수행한다. PostgreSQL과 실행 이미지가 준비되어 있어야 한다. GitHub Release 공개나 자동 업데이트 게시를 수행하지 않는다. 자격 증명 미준비 시 즉시 실패한다. [Electron 서명·공증 설명](https://www.electronjs.org/docs/latest/tutorial/code-signing).
 
 ## 배포 전에 반드시 확인할 조건
 

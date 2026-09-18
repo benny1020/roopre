@@ -128,5 +128,6 @@ export async function git(cwd: string, ...args: string[]) {
     throw Error(
       "Git 출력이 검토 한도를 넘었습니다. 일부 파일만 검사하지 않도록 실행을 중지합니다. 작업 범위를 줄이세요.",
     );
-  return r.output.trim();
+  // Preserve leading/trailing whitespace in NUL-delimited filenames.
+  return args.includes("-z") ? r.output : r.output.trim();
 }

@@ -29,6 +29,19 @@ const staging = join(temp, "app");
 const run = (file, args, options = {}) =>
   execFileSync(file, args, { stdio: "inherit", ...options });
 try {
+  if (release) {
+    if (
+      execFileSync(
+        "git",
+        ["status", "--porcelain", "--untracked-files=normal"],
+        { encoding: "utf8" },
+      ).trim()
+    )
+      throw Error("배포 빌드는 변경이 없는 커밋에서만 실행하세요.");
+    // A signing key never substitutes for the same mandatory quality checks.
+    for (const script of ["check", "test:runner", "test:web", "test:desktop"])
+      run("pnpm", [script]);
+  }
   // Isolated install: pnpm deploy can update the source workspace's install
   // state. Never run a production install against the developer's workspace.
   await mkdir(staging);

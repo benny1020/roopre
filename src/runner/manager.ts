@@ -18,6 +18,9 @@ import { approvalBinding } from "../domain/runtime.ts";
 import { command, git } from "./process.ts";
 import { startBroker } from "./broker.ts";
 import { readWorkspaceFile } from "./files.ts";
+const occupiesSlot = (r: Run) =>
+  r.runtime?.terminationConfirmed === false ||
+  (activeStatuses.includes(r.status) && r.status !== "queued");
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
   private busy = false;
@@ -130,13 +133,13 @@ export class RunnerManager {
         )
           abort.abort();
       }
-      if (this.active.size >= 2) return;
+      const occupied = w.runs.filter(
+        (r) => this.active.has(r.id) || occupiesSlot(r),
+      );
+      if (occupied.length >= 2) return;
       const projectIds = new Set(
-        [...this.active.keys()].map(
-          (id) =>
-            w.features.find(
-              (f) => f.id === w.runs.find((r) => r.id === id)!.featureId,
-            )!.projectId,
+        occupied.map(
+          (r) => w.features.find((f) => f.id === r.featureId)?.projectId,
         ),
       );
       const run = w.runs.find(
@@ -211,18 +214,7 @@ export class RunnerManager {
       const r = w.runs.find((r) => r.id === id);
       if (!r?.runtime || r.status !== "queued") return;
       const f = w.features.find((f) => f.id === r.featureId)!;
-      const running = w.runs.filter(
-        (x) =>
-          x.id !== id &&
-          (x.runtime?.terminationConfirmed === false ||
-            [
-              "preparing",
-              "implementing",
-              "verifying",
-              "reviewing",
-              "repairing",
-            ].includes(x.status)),
-      );
+      const running = w.runs.filter((x) => x.id !== id && occupiesSlot(x));
       if (
         running.length >= 2 ||
         running.some(
@@ -308,8 +300,13 @@ export class RunnerManager {
       });
       const rootConfig =
         /^(package\.json$|pnpm-lock\.yaml$|package-lock\.json$|\.gitignore$|\.npmrc$|\.pnpmfile\.[cm]?js$|\.yarnrc|\.eslintrc|\.babelrc|tsconfig|eslint|vitest|playwright|(?:babel|jest|vite|webpack|rollup|next|svelte|postcss|tailwind)\.config\.)/;
-      const protectedPaths = (await git(checkout, "ls-files"))
-        .split("\n")
+      const tracked = await git(checkout, "ls-files", "-z");
+      if (tracked.includes("\uFFFD"))
+        throw Error(
+          "UTF-8 파일 이름만 지원합니다. 저장소 파일 이름을 확인하세요.",
+        );
+      const protectedPaths = tracked
+        .split("\0")
         .filter((p) =>
           /(^|\/)(tests?|__tests__|scripts|config|\.github)\/|\.(test|spec)\.[a-z]+$|^(package\.json|pnpm-lock\.yaml|package-lock\.json|tsconfig|eslint|vitest|playwright)/.test(
             p,

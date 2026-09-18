@@ -516,3 +516,44 @@ test("an unconfirmed prior container occupies the project slot even after failur
   assert.equal(queued.status, "queued");
   assert.equal(queued.runtime?.lease, undefined);
 });
+
+test("scheduler skips an occupied project's queue so another project can use the free slot", async () => {
+  const { w, f, review } = fixture();
+  apply(w, "jun", review, {
+    authentication: "macos-owner",
+    binding: approvalBinding(w, f),
+  });
+  apply(w, "jun", {
+    type: "queue_run",
+    featureId: f.id,
+    designId: review.designId,
+  });
+  const queued = w.runs[0];
+  const blocked = structuredClone(queued);
+  blocked.id = "run-aaaaaaaa-bbbb";
+  blocked.status = "blocked";
+  blocked.runtime!.terminationConfirmed = false;
+  w.runs.push(blocked);
+  const otherFeature = structuredClone(f);
+  otherFeature.id = "other-project-feature";
+  otherFeature.projectId = "other-project";
+  w.features.push(otherFeature);
+  const otherRun = structuredClone(queued);
+  otherRun.id = "run-cccccccc-dddd";
+  otherRun.featureId = otherFeature.id;
+  w.runs.push(otherRun);
+  const store = { read: async () => w } as unknown as Store;
+  const runner = new RunnerManager(
+    store,
+    {} as ConnectionVault,
+    "/unused",
+    "/unused",
+  );
+  const selected: string[] = [];
+  runner.execute = async (id) => {
+    selected.push(id);
+  };
+  await (runner as unknown as { tick: () => Promise<void> }).tick();
+  assert.deepEqual(selected, [otherRun.id]);
+  await runner.stop();
+});

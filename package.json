@@ -23,7 +23,7 @@
     "check:docs": "node config/scripts/check-docs.mjs",
     "check": "pnpm format:check && pnpm check:docs && pnpm build && pnpm test",
     "build:mac": "pnpm build && node config/scripts/package-mac.mjs",
-    "release:mac": "pnpm build && node config/scripts/package-mac.mjs --release",
+    "release:mac": "node config/scripts/package-mac.mjs --release",
     "verify:mac": "node config/scripts/verify-mac.mjs",
     "db:start": "docker compose -f config/compose.yaml up -d --wait",
     "db:stop": "docker compose -f config/compose.yaml stop",

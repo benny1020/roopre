@@ -115,7 +115,7 @@ Docker 통합 검사에서 **Claude Code는 테스트용 프로그램으로 대�
 
 직접 수행한 검사:
 
-- `pnpm check`: 포맷·문서·타입·Swift/Electron 빌드, 실제 DB 포함 45개 검사 통과. 새 IPC 경로·DB 오류·손상 vault·FIFO/크기/심볼릭 링크·종료 미확인 claim·잘린 Git 결과·한국어 청크 경계 회귀를 포함한다.
+- `pnpm check`: 포맷·문서·타입·Swift/Electron 빌드, 실제 DB 포함 46개 검사 통과. 새 IPC 경로·DB 오류·손상 vault·FIFO/크기/심볼릭 링크·종료 미확인 claim·잘린 Git 결과·한국어 청크 경계 회귀를 포함한다.
 - `pnpm test:runner`: 실제 Docker 통합 시나리오 통과. 검사 timeout 시 컨테이너 안의 지연 쓰기와 다음 검사가 실행되지 않고 종료 확인되는 것을 검증했다. fixture CLI이며 실제 모델 호출이 아니다.
 - `pnpm test:web`: 4개 Chromium 시나리오 통과. DB 오류를 모의한 IPC 응답 뒤 화면 보존·재연결 메시지 해제를 추가했다. 라이트/다크 스크린샷을 확인했다.
 - `pnpm test:desktop`: 실제 Electron 프로세스와 빌드된 main으로 연결 실패→재연결→종료 검사 1개 통과. appData/HOME을 임시 폴더로 격리하고 도달 불가능한 fixture DB를 사용했다. 대화상자 선택만 fixture이며 실제 사용자 승인·Keychain 검사가 아니다.
@@ -125,3 +125,5 @@ Docker 통합 검사에서 **Claude Code는 테스트용 프로그램으로 대�
 로그는 `artifacts/release-check.log`, `release-runner.log`, `release-web.log`, `release-desktop.log`, `release-package.log` 및 `release-audit-dependencies.json`이다. 로컬 검증 산출물은 커밋하지 않는다. CI에는 Docker 시나리오와 macOS 패키징/시작 검사를 추가했으며 실제 원격 결과를 PR에서 확인해야 한다.
 
 기존 실제 모델/API·네이티브 본인 인증 성공/취소·Keychain의 서명 변경 후 복원·별도 Mac 설치·DB 백업 복원·팀 운영 미검증 범위는 그대로다. 공개 배포나 머지를 수행하지 않았다.
+
+`c36756e`의 Linux CI 2건과 macOS 패키지 1건은 원격에서도 통과했다. 전담 재리뷰는 스케줄러의 다른 프로젝트 대기와 한글 테스트 경로 누락을 P2로 재현했다. 프로젝트 점유 계산을 scheduler/claim에서 공통 적용하고 Git 파일 목록을 NUL 구분으로 읽도록 수정했다. 종료 미확인 A 프로젝트 뒤의 B 프로젝트가 선택되는 검사와 한글·줄바꿈·공백 경로 보존 검사를 추가했다. 새 커밋의 리뷰·CI 결과가 다시 필요하다.

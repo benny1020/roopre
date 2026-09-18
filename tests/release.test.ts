@@ -130,8 +130,18 @@ test("truncated Git output cannot silently omit files from review or protected c
     await git(root, "config", "user.name", "Fixture");
     await git(root, "config", "user.email", "fixture@example.invalid");
     await writeFile(join(root, "large.txt"), "x".repeat(210000));
+    await mkdir(join(root, "tests"));
+    const names = [
+      "tests/한글.test.ts",
+      "tests/line\nbreak.test.ts",
+      " trailing.txt ",
+    ];
+    for (const name of names)
+      await writeFile(join(root, name), "protected fixture");
     await git(root, "add", ".");
     await git(root, "commit", "-m", "fixture");
+    const tracked = (await git(root, "ls-files", "-z")).split("\0");
+    for (const name of names) assert(tracked.includes(name));
     await assert.rejects(git(root, "show", "HEAD:large.txt"), /검토 한도/);
     const output = await command(process.execPath, [
       "-e",
