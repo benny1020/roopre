@@ -61,6 +61,29 @@ const fs = require("node:fs");
       ],
       findings: [],
     });
+    if (prompt.includes("Refine requirements and design")) {
+      result = JSON.stringify({
+        requirements: "AC01 create hello.txt with expected fixture content",
+        body: [
+          "요구사항",
+          "구조",
+          "API·데이터",
+          "예외 상황",
+          "변경 영향",
+          "검증 계획",
+          "적용·복구",
+        ]
+          .map((s) => `## ${s}\nFixture planned details for ${s}`)
+          .join("\n\n"),
+      });
+    }
+    if (prompt.includes("REQUIRED_FAIL_FIXTURE"))
+      result = JSON.stringify({
+        passed: false,
+        acceptance: [],
+        findings: ["Required convention violation"],
+      });
+    if (prompt.includes("INVALID_JSON_FIXTURE")) result = "not-json";
   } else {
     fs.writeFileSync("/workspace/hello.txt", "hello from fixture");
     fs.mkdirSync("/workspace/.roopre-artifacts", { recursive: true });

@@ -7,6 +7,8 @@ const files = [
   "AGENTS.md",
   "docs/design/V02-APPROVAL.md",
   "docs/design/HARNESS-V03.md",
+  "docs/design/V03-APPROVAL.md",
+  "docs/design/ORCA-ONBOARDING-PROPOSAL.md",
   "docs/design/EXTERNAL-BETA-DESIGN.md",
 ];
 for (const entry of await readdir("docs", { withFileTypes: true }))

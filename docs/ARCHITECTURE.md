@@ -46,7 +46,7 @@ agent 네트워크는 internal Docker network다. sidecar는 호스트 broker만
 
 각 시도의 검사 로그와 제한된 이미지/trace/report 산출물을 보존하고 파일 hash 확인 후 Finder에서 찾는다. HTML을 앱 권한으로 실행하지 않는다. 실패/중단 복구는 같은 승인 binding의 변경만 새로운 체크아웃에 적용한다. 대량 diff는 자동 검토/복구를 중단한다.
 
-병합·배포·의존 기능 자동 통합, 역할별 모델 연결, 보관 기간 자동 정리, 장기 무진행 watchdog, 팀 인증·원격 runner는 후속 작업이다. 현재 의존 기능이 등록된 실행은 통합 확인을 요구하며 자동 진행하지 않는다.
+병합·배포·의존 기능 자동 통합, 보관 기간 자동 정리, 장기 무진행 watchdog, 팀 인증·원격 runner는 후속 작업이다. 현재 의존 기능이 등록된 실행은 통합 확인을 요구하며 자동 진행하지 않는다.
 
 ## 기존 폴더에서의 이전
 
@@ -62,3 +62,11 @@ agent 네트워크는 internal Docker network다. sidecar는 호스트 broker만
 | npm + 단일 renderer Vite | pnpm + electron-vite main/preload/renderer |
 
 기존 `/Users/roopre/Documents/WORK/ai-development-process`는 조사와 최초 구현의 보존본이다. 앞으로 개발의 기준은 이 Git 저장소다. 승인된 PRODUCT-DESIGN v0.1은 원문 바이트를 유지했으며 구조 변경은 이번 사용자의 “이 레포에 개발하고 Orca처럼 레포 구성” 요청에 따른다.
+
+## v0.3 온보딩과 harness
+
+`main/bootstrap`은 DB 없이 진행 상태를 저장하고 환경 준비/복원/이전을 관리한다. `database/transfer.ts`는 현재 workspace·이벤트·명령을 원본 보존 상태로 복사하고 해시로 검증한다. renderer는 준비 여부를 직접 기록하지 않는다. 기존 DB를 유지하거나 명시적 버튼으로 전용 DB에 이전한다.
+
+`shared/harness.ts`에 정의·배치·지침 합성 계약을 둔다. 에이전트 revision은 누적 보존하고 프로젝트의 workflow가 참조한 최신 정의를 실행 요청 시 복사한다. 적용 모델 연결 버전도 검증한다. 지침·정의·배치 변경은 관련 승인과 실행을 무효화한다. 실행 관리자는 단계 순서와 필수 결과를 검사하며 각각 별도 컨테이너/세션·broker로 실행한다. 읽기 전용 planning은 소스를 수정하지 않고 초안 revision이 일치할 때만 새 초안을 저장한다. `--bare`, 빈 setting sources, 고정 MCP 설정으로 암묵적 저장소 지침·hooks 로딩을 제어한다.
+
+`renderer/src/Onboarding.tsx`는 DB 없는 app shell과 단계별 설정 UI, `HarnessPanel.tsx`는 정의/배치 편집, `RunPanel.tsx`는 개별 에이전트의 실제 입력·tree·결과를 보여준다. Markdown 미리보기는 HTML을 실행하지 않는 텍스트/제목/코드 중심의 제한된 렌더링이다. 첫 구현의 단계 내부 실행은 순차이며 기존 전체 2개/프로젝트당 1개 점유 규칙을 유지한다.

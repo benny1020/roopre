@@ -260,3 +260,73 @@ test("execution profile edits survive periodic refresh and overview explains cap
     page.getByRole("heading", { name: "아직 실행한 작업이 없습니다" }),
   ).toBeVisible();
 });
+
+test("custom agent Markdown, project workflow and instruction provenance survive reload", async ({
+  page,
+  store,
+}) => {
+  await page
+    .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "에이전트 만들기", exact: true })
+    .click();
+  await page.getByLabel("에이전트 이름", { exact: true }).fill("컨벤션 검증자");
+  await page
+    .getByLabel("Markdown 지침", { exact: true })
+    .fill("# 검토 기준\n\n프로젝트 명명 규칙과 오류 처리 규칙을 확인한다.");
+  await page.getByRole("button", { name: "미리보기", exact: true }).click();
+  await expect(page.locator(".markdown-preview")).toContainText(
+    "프로젝트 명명 규칙",
+  );
+  await page
+    .getByRole("button", { name: "에이전트 저장", exact: true })
+    .click();
+  await expect(
+    page.getByText("에이전트 버전을 저장했습니다.", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "기본 흐름 적용", exact: true })
+    .click();
+  await expect(
+    page.getByText("기본 흐름을 적용했습니다.", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "검증 에이전트 추가", exact: true })
+    .click();
+  await page
+    .getByLabel("검증 단계 지침", { exact: true })
+    .fill("모든 이름은 프로젝트 기준과 대조한다.");
+  await page
+    .getByRole("button", { name: "개발 흐름 저장", exact: true })
+    .click();
+  await expect(
+    page.getByText("개발 흐름을 저장했습니다.", { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("검증 단계 지침", { exact: true })).toHaveValue(
+    "모든 이름은 프로젝트 기준과 대조한다.",
+  );
+  await page
+    .getByRole("button", { name: "적용 지침 확인", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "현재 편집 중인 흐름의 지침 미리보기" }),
+  ).toBeVisible();
+  await expect(page.locator(".markdown-preview")).toContainText("전역 v1");
+  const w = await store.read("owner");
+  expect(
+    w.projects[0].workflow!.assignments.filter(
+      (a) => a.stage === "verification",
+    ),
+  ).toHaveLength(2);
+  expect(w.agents).toHaveLength(6);
+  expect(w.runs).toHaveLength(0);
+  await page.getByLabel("화면 테마").selectOption("dark");
+  await page.locator(".harness-panel").evaluate((el) => (el.scrollTop = 0));
+  await page.screenshot({
+    path: "artifacts/harness-dark.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+});

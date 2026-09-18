@@ -1,3 +1,10 @@
+import {
+  agentSchema,
+  workflowSchema,
+  workflowIssues,
+  type AgentDefinition,
+  type Workflow,
+} from "./harness.ts";
 import { z } from "zod";
 import {
   profileSchema,
@@ -23,6 +30,7 @@ export type Person = {
   teamId: string;
 };
 export type Project = {
+  workflow?: Workflow;
   id: string;
   name: string;
   description: string;
@@ -102,6 +110,7 @@ export type Policy = {
   authorId: string;
 };
 export type Workspace = {
+  agents?: AgentDefinition[];
   teamId: string;
   mode?: "local-owner" | "development-fixture";
   revision: number;
@@ -138,6 +147,22 @@ const id = z.string().min(1).max(100);
 const body = z.string().trim().min(1).max(60000);
 const featureId = { featureId: id };
 export const commandSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("save_agent"),
+    expectedRevision: z.number().int().nonnegative(),
+    agent: agentSchema,
+  }),
+  z.object({
+    type: z.literal("save_workflow"),
+    projectId: id,
+    expectedRevision: z.number().int().nonnegative(),
+    workflow: workflowSchema,
+  }),
+  z.object({
+    type: z.literal("queue_planning"),
+    featureId: id,
+    expectedRevision: z.number().int().nonnegative(),
+  }),
   z.object({
     type: z.literal("configure_execution"),
     projectId: id,
@@ -248,7 +273,7 @@ export function gate(workspace: Workspace, feature: Feature): Gate {
   const changed = design.decisions.some(
     (d) => d.decision === "request_changes",
   );
-  const reasons: string[] = [];
+  const reasons: string[] = workflowIssues(workspace, project);
   if (design.policyVersion !== policy.version)
     reasons.push("팀 지침이 변경됐습니다. 새 설계를 게시해 재리뷰하세요.");
   if (

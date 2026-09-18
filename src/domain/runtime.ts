@@ -1,3 +1,4 @@
+import { latestAgents } from "../shared/harness.ts";
 import { createHash } from "node:crypto";
 import type { Workspace, Feature } from "../shared/contracts.ts";
 export function policyBinding(w: Workspace, f: Feature) {
@@ -15,6 +16,14 @@ export function policyBinding(w: Workspace, f: Feature) {
           profile: p.executionProfile,
         },
         dependencies: f.dependencies,
+        harness: p.workflow
+          ? {
+              workflow: p.workflow,
+              agents: p.workflow.assignments.map(
+                (a) => latestAgents(w).find((d) => d.id === a.agentId) ?? null,
+              ),
+            }
+          : undefined,
       }),
     )
     .digest("hex");

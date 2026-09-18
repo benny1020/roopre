@@ -1,3 +1,4 @@
+import type { BootstrapStatus, OnboardingProgress } from "./onboarding";
 import type { Command, Snapshot } from "./contracts";
 import type {
   ConnectionInput,
@@ -6,6 +7,13 @@ import type {
 } from "./runtime";
 export interface DesktopAPI {
   name: string;
+  readMarkdown: () => Promise<string | null>;
+  exportAgent: (id: string) => Promise<void>;
+  bootstrap: () => Promise<BootstrapStatus>;
+  migrateEnvironment: () => Promise<BootstrapStatus>;
+  prepareEnvironment: () => Promise<BootstrapStatus>;
+  cancelEnvironment: () => Promise<BootstrapStatus>;
+  onboarding: (progress: OnboardingProgress) => Promise<BootstrapStatus>;
   snapshot: () => Promise<Snapshot>;
   command: (command: Command) => Promise<{ entityId?: string }>;
   connections: () => Promise<ConnectionInfo[]>;

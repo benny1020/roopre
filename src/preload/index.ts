@@ -8,6 +8,13 @@ async function request(operation: string, payload?: unknown) {
 }
 const api: DesktopAPI = {
   name: APP_NAME,
+  readMarkdown: () => request("readMarkdown"),
+  exportAgent: (id) => request("exportAgent", id),
+  bootstrap: () => request("bootstrap"),
+  migrateEnvironment: () => request("migrateEnvironment"),
+  prepareEnvironment: () => request("prepareEnvironment"),
+  cancelEnvironment: () => request("cancelEnvironment"),
+  onboarding: (progress) => request("onboarding", progress),
   snapshot: () => request("snapshot"),
   command: (c) => request("command", c),
   connections: () => request("connections"),

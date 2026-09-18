@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App";
+import DesktopRoot from "./Onboarding";
 import ErrorBoundary from "./ErrorBoundary";
 
 try {
@@ -14,6 +14,6 @@ try {
 } catch {}
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
-    <App />
+    <DesktopRoot />
   </ErrorBoundary>,
 );

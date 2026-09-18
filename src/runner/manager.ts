@@ -1,3 +1,6 @@
+import { z } from "zod";
+import { sections } from "../shared/contracts.ts";
+import type { ResolvedAgent, AgentExecution } from "../shared/harness.ts";
 import { collectArtifacts, archiveArtifacts } from "./artifacts.ts";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import {
@@ -14,7 +17,7 @@ import type { Store } from "../database/store.ts";
 import type { ConnectionVault } from "../main/connections/vault.ts";
 import { activeStatuses, type Evidence } from "../shared/runtime.ts";
 import { gate, type Run, type Workspace } from "../shared/contracts.ts";
-import { approvalBinding } from "../domain/runtime.ts";
+import { approvalBinding, policyBinding } from "../domain/runtime.ts";
 import { command, git } from "./process.ts";
 import { startBroker } from "./broker.ts";
 import { readWorkspaceFile } from "./files.ts";
@@ -115,23 +118,11 @@ export class RunnerManager {
       const w = await this.store.read("owner");
       for (const [id, abort] of this.active) {
         const r = w.runs.find((r) => r.id === id)!;
-        const f = w.features.find((f) => f.id === r.featureId)!;
-        let connectionChanged = false;
         try {
-          connectionChanged =
-            this.vault.get(r.runtime!.profile.connectionId).info.version !==
-            r.runtime!.profile.connectionVersion;
+          await this.valid(id);
         } catch {
-          connectionChanged = true;
-        }
-        if (
-          connectionChanged ||
-          r.status === "cancelled" ||
-          r.status === "blocked" ||
-          r.runtime?.binding !== approvalBinding(w, f) ||
-          !gate(w, f).eligible
-        )
           abort.abort();
+        }
       }
       const occupied = w.runs.filter(
         (r) => this.active.has(r.id) || occupiesSlot(r),
@@ -170,20 +161,31 @@ export class RunnerManager {
   private async valid(id: string) {
     const w = await this.store.read("owner");
     const r = w.runs.find((r) => r.id === id)!;
-    if (
-      r.runtime &&
-      this.vault.get(r.runtime.profile.connectionId).info.version !==
-        r.runtime.profile.connectionVersion
-    )
-      throw Error("AI 연결이 변경됐습니다. 실행 계약을 다시 승인하세요.");
+    if (!r?.runtime) throw Error("실행 계약이 없습니다.");
+    const connections = [
+      {
+        connectionId: r.runtime.profile.connectionId,
+        connectionVersion: r.runtime.profile.connectionVersion,
+      },
+      ...(r.runtime.harness?.agents ?? []),
+    ];
+    for (const c of connections) {
+      const info = this.vault.get(c.connectionId).info;
+      if (info.version !== c.connectionVersion || info.testStatus !== "passed")
+        throw Error(
+          "AI 연결이 변경되거나 검증되지 않았습니다. 실행 계약을 갱신하세요.",
+        );
+    }
     const f = w.features.find((f) => f.id === r.featureId)!;
+    const planning = r.runtime.kind === "planning";
     if (
-      !r.runtime ||
-      !gate(w, f).eligible ||
-      r.runtime.binding !== approvalBinding(w, f) ||
-      ["blocked", "cancelled"].includes(r.status)
+      ["blocked", "cancelled"].includes(r.status) ||
+      (planning
+        ? r.runtime.binding !== policyBinding(w, f) ||
+          r.runtime.draftRevision !== f.draft.revision
+        : !gate(w, f).eligible || r.runtime.binding !== approvalBinding(w, f))
     )
-      throw Error("설계 승인이 철회되거나 실행 계약이 바뀌었습니다.");
+      throw Error("설계·지침·초안 또는 승인 계약이 바뀌었습니다.");
     return { w, r, f };
   }
   private async docker(
@@ -245,7 +247,8 @@ export class RunnerManager {
         throw Error(
           "선행 기능의 통합을 확인하기 전에는 실행할 수 없습니다. 의존 관계를 정리하고 설계를 재승인하세요.",
         );
-      const connection = this.vault.get(profile.connectionId);
+      let connection = this.vault.get(profile.connectionId);
+      const planning = r.runtime!.kind === "planning";
       if (
         connection.info.version !== profile.connectionVersion ||
         connection.info.testStatus !== "passed"
@@ -398,7 +401,7 @@ export class RunnerManager {
         }
       }
       let image = profile.image;
-      if (hasManifest) {
+      if (hasManifest && !planning) {
         const lockedBase = `roopre-base-${id}:locked`;
         await this.docker(["tag", profile.image, lockedBase], abort.signal);
         await writeFile(
@@ -429,7 +432,7 @@ export class RunnerManager {
           image,
           "sh",
           "-c",
-          `${hasManifest ? "cp -a /opt/project/node_modules/. /locked-deps/ && " : ""}mkdir -p /locked-deps/.vite /locked-deps/.vite-temp`,
+          `${hasManifest && !planning ? "cp -a /opt/project/node_modules/. /locked-deps/ && " : ""}mkdir -p /locked-deps/.vite /locked-deps/.vite-temp`,
         ],
         abort.signal,
         120000,
@@ -438,49 +441,57 @@ export class RunnerManager {
         ["network", "create", "--internal", n.network],
         abort.signal,
       );
-      const token = randomBytes(32).toString("hex");
-      broker = await startBroker(
-        connection.info,
-        connection.key,
-        token,
-        abort.signal,
-      );
-      await this.docker(
-        [
-          "create",
-          "--name",
-          n.proxy,
-          "--network",
-          n.network,
-          "--network-alias",
-          "model-gateway",
-          ...(process.platform !== "darwin"
-            ? ["--add-host", "host.docker.internal:host-gateway"]
-            : []),
-          "--cap-drop=ALL",
-          "--security-opt",
-          "no-new-privileges",
-          "--read-only",
-          "--pids-limit",
-          "64",
-          "--memory",
-          "128m",
-          "--env",
-          `BROKER_PORT=${broker.port}`,
-          "--mount",
-          `type=bind,src=${join(this.resources, "runner-proxy.cjs")},dst=/proxy.cjs,readonly`,
-          profile.image,
-          "node",
-          "/proxy.cjs",
-        ],
-        abort.signal,
-      );
-      await this.docker(
-        ["network", "connect", "bridge", n.proxy],
-        abort.signal,
-      );
-      await this.docker(["start", n.proxy], abort.signal);
+      let token = "";
+      const gateway = async () => {
+        await command("docker", ["rm", "-f", n.container, n.proxy]);
+        broker?.close();
+        token = randomBytes(32).toString("hex");
+        broker = await startBroker(
+          connection.info,
+          connection.key,
+          token,
+          abort.signal,
+        );
+        await this.docker(
+          [
+            "create",
+            "--name",
+            n.proxy,
+            "--network",
+            n.network,
+            "--network-alias",
+            "model-gateway",
+            ...(process.platform !== "darwin"
+              ? ["--add-host", "host.docker.internal:host-gateway"]
+              : []),
+            "--cap-drop=ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--read-only",
+            "--pids-limit",
+            "64",
+            "--memory",
+            "128m",
+            "--env",
+            `BROKER_PORT=${broker.port}`,
+            "--mount",
+            `type=bind,src=${join(this.resources, "runner-proxy.cjs")},dst=/proxy.cjs,readonly`,
+            profile.image,
+            "node",
+            "/proxy.cjs",
+          ],
+          abort.signal,
+        );
+        await this.docker(
+          ["network", "connect", "bridge", n.proxy],
+          abort.signal,
+        );
+        await this.docker(["start", n.proxy], abort.signal);
+      };
       const createContainer = async (readonly = false) => {
+        // Docker cannot create a nested mountpoint under a read-only workspace.
+        // This empty ignored directory is owned by the runner, not agent output.
+        await mkdir(join(checkout, "node_modules"), { recursive: true });
         await command("docker", ["rm", "-f", n.container]);
         await this.docker(
           [
@@ -541,6 +552,9 @@ export class RunnerManager {
           n.container,
           "claude",
           "--bare",
+          "--no-session-persistence",
+          "--setting-sources",
+          "",
           "-p",
           "--verbose",
           "--output-format",
@@ -610,6 +624,178 @@ export class RunnerManager {
           .replaceAll(token, "[redacted]")
           .replaceAll(connection.key, "[redacted]");
       };
+      const runAgent = async (
+        assignment: ResolvedAgent,
+        prompt: string,
+        readonly: boolean,
+      ) => {
+        await this.valid(id);
+        connection = this.vault.get(assignment.connectionId);
+        if (
+          connection.info.version !== assignment.connectionVersion ||
+          connection.info.testStatus !== "passed"
+        )
+          throw Error("에이전트 연결을 다시 검증하세요.");
+        await gateway();
+        await createContainer(readonly);
+        await git(checkout, "add", "-A");
+        const inputTree = await git(checkout, "write-tree");
+        const instructions = `${assignment.instructions}\n\n# 기능 입력\n${prompt}`;
+        const execution: AgentExecution = {
+          id: randomUUID(),
+          assignmentId: assignment.id,
+          name: assignment.agent.name,
+          stage: assignment.stage,
+          revision: assignment.agent.revision,
+          connectionId: assignment.connectionId,
+          connectionVersion: assignment.connectionVersion,
+          model: connection.info.model,
+          required: assignment.required,
+          status: "running",
+          attempt: (await this.store.read("owner")).runs.find(
+            (x) => x.id === id,
+          )!.runtime!.attempt,
+          startedAt: new Date().toISOString(),
+          inputTree,
+          instructionHash: createHash("sha256")
+            .update(instructions)
+            .digest("hex"),
+          instructions,
+        };
+        await this.update(id, (r) => {
+          (r.runtime!.agents ??= []).push(execution);
+        });
+        await this.event(id, `${assignment.agent.name} 실행 중`);
+        try {
+          const output = await invoke(instructions, readonly);
+          if (output.length > 60000)
+            throw Error("에이전트 결과가 저장 한도를 넘었습니다.");
+          await this.valid(id);
+          await git(checkout, "add", "-A");
+          const outputTree = await git(checkout, "write-tree");
+          if (readonly && outputTree !== inputTree)
+            throw Error("읽기 전용 단계에서 소스가 변경됐습니다.");
+          await this.update(id, (r) => {
+            Object.assign(
+              r.runtime!.agents!.find((a) => a.id === execution.id)!,
+              {
+                status: "passed",
+                endedAt: new Date().toISOString(),
+                output,
+                outputTree,
+              },
+            );
+          });
+          return { output, executionId: execution.id };
+        } catch (e) {
+          await this.update(id, (r) => {
+            Object.assign(
+              r.runtime!.agents!.find((a) => a.id === execution.id)!,
+              {
+                status: "failed",
+                endedAt: new Date().toISOString(),
+                error: (e as Error).message,
+              },
+            );
+          });
+          // A process timeout/cancellation is never a skippable advisory result.
+          throw e;
+        }
+      };
+      const defaultAssignment = (
+        stage: "implementation" | "review",
+      ): ResolvedAgent => ({
+        id: `default-${stage}`,
+        agentId: `default-${stage}`,
+        stage,
+        required: true,
+        connectionId: profile.connectionId,
+        connectionVersion: profile.connectionVersion,
+        instructions: r.effectivePolicy,
+        agent: {
+          id: `default-${stage}`,
+          revision: 1,
+          name: stage === "implementation" ? "기본 구현자" : "기본 리뷰어",
+          description: "기존 실행 계약",
+          capability:
+            stage === "implementation" ? "implementation" : "read-only",
+          markdown: "",
+          archived: false,
+        },
+      });
+      if (planning) {
+        await this.phase(
+          id,
+          "reviewing",
+          "저장소를 읽고 요구사항·설계 초안을 작성합니다. 소스는 수정하지 않습니다.",
+        );
+        let draft = { ...f.draft };
+        let validDrafts = 0;
+        const planAgents = r.runtime!.harness!.agents.filter(
+          (a) => a.stage === "requirements" || a.stage === "design",
+        );
+        for (const a of planAgents) {
+          const result = await runAgent(
+            a,
+            `Read the repository without running code. Refine requirements and design. Do not approve or implement. Return ONLY JSON {"requirements":"...", "body":"..."}. Requirements must identify AC01 etc. Body must include these markdown headings: ${sections.map((s) => "## " + s).join(", ")}.\nCurrent requirements: ${draft.requirements}\nCurrent design: ${draft.body}`,
+            true,
+          );
+          try {
+            const next = z
+              .object({
+                requirements: z.string().min(1).max(60000),
+                body: z.string().min(1).max(60000),
+              })
+              .parse(
+                JSON.parse(
+                  result.output.replace(/^```(?:json)?\s*|\s*```$/g, ""),
+                ),
+              );
+            if (
+              !sections.every((s) => next.body.includes(`## ${s}\n`)) ||
+              !/AC[- ]?\d+/i.test(next.requirements)
+            )
+              throw Error("설계 항목 또는 완료 기준이 누락됐습니다.");
+            draft = { ...draft, ...next };
+            validDrafts++;
+          } catch {
+            await this.update(id, (r) => {
+              Object.assign(
+                r.runtime!.agents!.find((a) => a.id === result.executionId)!,
+                { status: "failed", error: "초안 구조 검증 실패" },
+              );
+            });
+            if (a.required)
+              throw Error(
+                "필수 설계 에이전트가 유효한 초안을 반환하지 않았습니다.",
+              );
+          }
+        }
+        if (!validDrafts)
+          throw Error("유효한 설계 초안이 없어 기존 입력을 보존합니다.");
+        await this.valid(id);
+        await this.store.mutate((w) => {
+          const current = w.runs.find((r) => r.id === id)!;
+          const target = w.features.find((f) => f.id === current.featureId)!;
+          if (
+            abort.signal.aborted ||
+            ["blocked", "cancelled"].includes(current.status) ||
+            current.runtime!.binding !== policyBinding(w, target) ||
+            target.draft.revision !== current.runtime!.draftRevision
+          )
+            throw Error("초안이 변경됐습니다. 기존 입력을 보존합니다.");
+          target.draft = {
+            body: draft.body,
+            requirements: draft.requirements,
+            revision: draft.revision + 1,
+          };
+          target.updatedAt = new Date().toISOString();
+          current.status = "completed";
+          current.reason =
+            "새 설계 초안을 저장했습니다. 내용을 검토하고 게시한 뒤 본인 승인하세요.";
+        });
+        return;
+      }
       let feedback = "";
       let finished = false;
       for (let attempt = 0; attempt <= profile.repairLimit; attempt++) {
@@ -623,10 +809,15 @@ export class RunnerManager {
             ? "검증 실패를 승인 범위 안에서 수정합니다."
             : "승인한 설계에 따라 Claude Code가 구현합니다.",
         );
-        await createContainer();
-        await invoke(
-          `You are implementing an approved task. Work only in /workspace. Do not weaken tests, edit policy/configuration/dependency manifests, access credentials, push, deploy, or claim completion without evidence. If the design must change, stop and explain.\nTEAM POLICY\n${r.effectivePolicy}\nDESIGN\n${f.designs.at(-1)!.body}\nACCEPTANCE\n${f.designs.at(-1)!.requirements}\nFEEDBACK\n${feedback}`,
-        );
+        for (const assignment of r.runtime!.harness?.agents.filter(
+          (a) => a.stage === "implementation",
+        ) ?? [defaultAssignment("implementation")]) {
+          await runAgent(
+            assignment,
+            `You are implementing an approved task. Work only in /workspace. Do not weaken tests, edit policy/configuration/dependency manifests, access credentials, push, deploy, or claim completion without evidence. If the design must change, stop and explain.\nTEAM POLICY\n${r.effectivePolicy}\nDESIGN\n${f.designs.at(-1)!.body}\nACCEPTANCE\n${f.designs.at(-1)!.requirements}\nFEEDBACK\n${feedback}`,
+            false,
+          );
+        }
         if ((await fingerprint()) !== baseline)
           throw Error(
             "필수 검사·설정·의존성 파일이 변경됐습니다. 설계와 검사 기준 재검토가 필요합니다.",
@@ -724,35 +915,62 @@ export class RunnerManager {
             f.designs.at(-1)!.requirements.match(/AC[- ]?\d+/gi) ?? [],
           ),
         ];
-        const review = await invoke(
-          `Review skeptically. Read files but do not execute code. Compare approved requirements, design and implementation. Return ONLY JSON: {"passed": boolean,"acceptance": [{"id":"AC01","passed":boolean,"evidence":"specific file/test evidence"}],"findings":["blocking issue"]}. Every required AC must have concrete evidence.\nRequired IDs: ${ac.join(",")}\nRequirements: ${f.designs.at(-1)!.requirements}\nDesign: ${f.designs.at(-1)!.body}\nDIFF\n${diff.slice(0, 150000)}\nChecks: ${evidence.map((e) => e.name + ":" + e.status).join(", ")}`,
-          true,
-        );
-        await this.update(id, (r) => {
-          r.runtime!.review = review.slice(0, 60000);
-        });
-        let verdict: any;
-        try {
-          verdict = JSON.parse(review.replace(/^```(?:json)?\s*|\s*```$/g, ""));
-        } catch {
-          feedback = "Review did not produce valid structured evidence.";
-          continue;
+        const reviewAssignments = r.runtime!.harness?.agents.filter(
+          (a) => a.stage === "verification" || a.stage === "review",
+        ) ?? [defaultAssignment("review")];
+        let blocked = false;
+        const reviews: string[] = [];
+        for (const assignment of reviewAssignments) {
+          const { output: review, executionId } = await runAgent(
+            assignment,
+            `Review skeptically. Read files but do not execute code. Compare approved requirements, design and implementation. Return ONLY JSON: {"passed": boolean,"acceptance": [{"id":"AC01","passed":boolean,"evidence":"specific file/test evidence"}],"findings":["blocking issue"]}. Every required AC must have concrete evidence.\nRequired IDs: ${ac.join(",")}\nRequirements: ${f.designs.at(-1)!.requirements}\nDesign: ${f.designs.at(-1)!.body}\nDIFF\n${diff}\nChecks: ${evidence.map((e) => e.name + ":" + e.status).join(", ")}`,
+            true,
+          );
+          reviews.push(`${assignment.agent.name}\n${review}`);
+          let passed = false;
+          try {
+            const verdict = z
+              .object({
+                passed: z.boolean(),
+                findings: z.array(z.string()),
+                acceptance: z.array(
+                  z.object({
+                    id: z.string(),
+                    passed: z.boolean(),
+                    evidence: z.string(),
+                  }),
+                ),
+              })
+              .parse(
+                JSON.parse(review.replace(/^```(?:json)?\s*|\s*```$/g, "")),
+              );
+            passed =
+              verdict.passed &&
+              verdict.findings.length === 0 &&
+              ac.every((id) =>
+                verdict.acceptance.some(
+                  (x) => x.id === id && x.passed && x.evidence.length > 12,
+                ),
+              );
+          } catch {}
+          if (!passed) {
+            await this.update(id, (r) => {
+              Object.assign(
+                r.runtime!.agents!.find((a) => a.id === executionId)!,
+                {
+                  status: "failed",
+                  error: "리뷰 통과 기준 또는 결과 형식 미충족",
+                },
+              );
+            });
+            if (assignment.required) blocked = true;
+          }
         }
-        if (
-          verdict.passed !== true ||
-          !Array.isArray(verdict.findings) ||
-          verdict.findings.length ||
-          !ac.every((id) =>
-            verdict.acceptance?.some(
-              (x: any) =>
-                x.id === id &&
-                x.passed === true &&
-                typeof x.evidence === "string" &&
-                x.evidence.length > 12,
-            ),
-          )
-        ) {
-          feedback = review;
+        await this.update(id, (r) => {
+          r.runtime!.review = reviews.join("\n\n").slice(0, 60000);
+        });
+        if (blocked) {
+          feedback = reviews.join("\n\n").slice(0, 60000);
           continue;
         }
         await this.valid(id);
@@ -849,6 +1067,8 @@ export class RunnerManager {
         at: new Date().toISOString(),
         runtime: {
           profile: structuredClone(old.runtime.profile),
+          harness: structuredClone(old.runtime.harness),
+          agents: [],
           binding: old.runtime.binding,
           attempt: 0,
           costUsd: 0,
@@ -872,6 +1092,8 @@ export class RunnerManager {
     )
       throw Error("실패/중단된 실행만 재시도할 수 있습니다.");
     const f = w.features.find((f) => f.id === r.featureId)!;
+    if (r.runtime.kind === "planning")
+      throw Error("계획 작업은 최신 초안에서 새로 요청하세요.");
     if (!gate(w, f).eligible || r.runtime.binding !== approvalBinding(w, f))
       throw Error("현재 설계를 다시 승인하세요.");
     return { w, r, f };

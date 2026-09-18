@@ -396,6 +396,185 @@ test(
           readFile(join(timedOut.runtime!.worktree!, name)),
           { code: "ENOENT" },
         );
+
+      // Custom stages: planning is read-only, then two independent mandatory reviews.
+      await store.execute("owner", randomUUID(), {
+        type: "configure_execution",
+        projectId: "first-project",
+        profile: { ...resumed.runtime!.profile, checks, repairLimit: 0 },
+      });
+      const stageIds = [
+        "requirements",
+        "implementation",
+        "verification",
+        "review",
+      ] as const;
+      const defs = stageIds.map((stage) => ({
+        id: randomUUID(),
+        revision: 1,
+        name: `custom-${stage}`,
+        description: "fixture only",
+        capability:
+          stage === "implementation"
+            ? ("implementation" as const)
+            : ("read-only" as const),
+        markdown: `# ${stage} instructions`,
+        archived: false,
+      }));
+      for (const agent of defs)
+        await store.execute("owner", randomUUID(), {
+          type: "save_agent",
+          expectedRevision: 0,
+          agent,
+        });
+      await store.execute("owner", randomUUID(), {
+        type: "save_workflow",
+        projectId: "first-project",
+        expectedRevision: 0,
+        workflow: {
+          revision: 1,
+          instructions: {
+            requirements: "",
+            design: "",
+            implementation: "",
+            verification: "",
+            review: "",
+          },
+          assignments: defs.map((a, i) => ({
+            id: randomUUID(),
+            agentId: a.id,
+            stage: stageIds[i],
+            required: true,
+          })),
+        },
+      });
+      const custom = await store.execute("owner", randomUUID(), {
+        type: "create_feature",
+        projectId: "first-project",
+        title: "Custom harness",
+        template: "feature",
+        requirements: "AC01 create hello.txt",
+      });
+      runId = (
+        await store.execute("owner", randomUUID(), {
+          type: "queue_planning",
+          featureId: custom.entityId!,
+          expectedRevision: 0,
+        })
+      ).entityId!;
+      await runner.execute(runId, new AbortController());
+      state = await store.read("owner");
+      const planned = state.runs.find((r) => r.id === runId)!;
+      assert.equal(planned.status, "completed", JSON.stringify(planned));
+      assert.equal(planned.runtime!.agents!.length, 1);
+      assert.equal(
+        await git(planned.runtime!.worktree!, "rev-parse", "HEAD"),
+        base,
+      );
+      feature = state.features.find((f) => f.id === custom.entityId)!;
+      assert.equal(feature.designs.length, 0);
+      assert.equal(feature.draft.revision, 1);
+      await store.execute("owner", randomUUID(), {
+        type: "publish_design",
+        featureId: feature.id,
+        expectedRevision: 1,
+      });
+      state = await store.read("owner");
+      feature = state.features.find((f) => f.id === custom.entityId)!;
+      await store.execute(
+        "owner",
+        randomUUID(),
+        {
+          type: "review",
+          featureId: feature.id,
+          designId: feature.designs.at(-1)!.id,
+          decision: "approve",
+          checked: [...sections],
+        },
+        {
+          authentication: "macos-owner",
+          binding: approvalBinding(state, feature),
+        },
+      );
+      runId = (
+        await store.execute("owner", randomUUID(), {
+          type: "queue_run",
+          featureId: feature.id,
+          designId: feature.designs.at(-1)!.id,
+        })
+      ).entityId!;
+      await runner.execute(runId, new AbortController());
+      const customResult = (await store.read("owner")).runs.find(
+        (r) => r.id === runId,
+      )!;
+      assert.equal(
+        customResult.status,
+        "ready_for_merge",
+        JSON.stringify(customResult),
+      );
+      assert.deepEqual(
+        customResult.runtime!.agents!.map((a) => a.stage),
+        ["implementation", "verification", "review"],
+      );
+      assert(
+        customResult.runtime!.agents!.every(
+          (a) =>
+            a.status === "passed" &&
+            a.inputTree &&
+            a.outputTree &&
+            a.instructionHash,
+        ),
+      );
+      assert.equal(customResult.runtime!.evidence.length, 2);
+      // A single required convention failure must prevent completion even if the final reviewer passes.
+      await store.execute("owner", randomUUID(), {
+        type: "save_agent",
+        expectedRevision: 1,
+        agent: { ...defs[2], revision: 2, markdown: "REQUIRED_FAIL_FIXTURE" },
+      });
+      await store.execute("owner", randomUUID(), {
+        type: "cancel_run",
+        runId: customResult.id,
+      });
+      await store.execute("owner", randomUUID(), {
+        type: "publish_design",
+        featureId: feature.id,
+        expectedRevision: 1,
+      });
+      state = await store.read("owner");
+      feature = state.features.find((f) => f.id === custom.entityId)!;
+      await store.execute(
+        "owner",
+        randomUUID(),
+        {
+          type: "review",
+          featureId: feature.id,
+          designId: feature.designs.at(-1)!.id,
+          decision: "approve",
+          checked: [...sections],
+        },
+        {
+          authentication: "macos-owner",
+          binding: approvalBinding(state, feature),
+        },
+      );
+      runId = (
+        await store.execute("owner", randomUUID(), {
+          type: "queue_run",
+          featureId: feature.id,
+          designId: feature.designs.at(-1)!.id,
+        })
+      ).entityId!;
+      await runner.execute(runId, new AbortController());
+      const failedCustom = (await store.read("owner")).runs.find(
+        (r) => r.id === runId,
+      )!;
+      assert.equal(failedCustom.status, "failed");
+      assert.equal(failedCustom.runtime!.head, undefined);
+      assert.deepEqual(
+        failedCustom.runtime!.agents!.map((a) => a.status),
+        ["passed", "failed", "passed"],
+      );
     } finally {
       await runner?.stop();
       if (runId) await runner?.cleanup(runId);
@@ -409,6 +588,136 @@ test(
       await store.close();
       await rm(root, { recursive: true, force: true });
       await command("docker", ["image", "rm", image]);
+    }
+  },
+);
+
+test(
+  "bootstrap creates a private loopback DB, reconnects with persisted identity and preserves user records",
+  { timeout: 120000 },
+  async () => {
+    const { Bootstrap } = await import("../src/main/bootstrap/environment.ts");
+    const root = await mkdtemp(join(tmpdir(), "roopre-bootstrap-docker-"));
+    const cipher = {
+      encrypt: (s: string) => Buffer.from(s.split("").reverse().join("")),
+      decrypt: (b: Buffer) => b.toString().split("").reverse().join(""),
+    };
+    let database: Store | undefined;
+    let bootstrap: InstanceType<typeof Bootstrap> | undefined;
+    let identity = "";
+    const source = new Store(
+      `test-transfer-${randomUUID()}`,
+      undefined,
+      "local-owner",
+    );
+    const { transferWorkspace } = await import("../src/database/transfer.ts");
+    try {
+      await source.init();
+      await source.execute("owner", randomUUID(), {
+        type: "create_project",
+        name: "Original preserved",
+        description: "",
+        reviewerIds: ["owner"],
+      });
+      const sourceBefore = await source.read("owner");
+      const connect = async (url: string) => {
+        const next = new Store(source.key, url, "local-owner");
+        await next.init();
+        assert.equal((await next.read("owner")).projects.length, 0);
+        database = next;
+        const transferred = await transferWorkspace(
+          source,
+          next,
+          join(root, "backup"),
+        );
+        assert.equal(
+          (await readFile(transferred.backup, "utf8")).includes(
+            "Original preserved",
+          ),
+          true,
+        );
+        assert.equal(transferred.hash.length, 64);
+      };
+      bootstrap = new Bootstrap(
+        root,
+        cipher,
+        resolve("config/runner.Dockerfile"),
+        connect,
+        () => !!database,
+      );
+      await bootstrap.init();
+      bootstrap.prepare();
+      bootstrap.prepare();
+      for (let i = 0; i < 500 && bootstrap.status().busy; i++)
+        await new Promise((r) => setTimeout(r, 100));
+      assert.equal(bootstrap.status().error, "");
+      assert(database);
+      assert.equal(bootstrap.status().busy, false);
+      const saved = JSON.parse(
+        await readFile(join(root, "onboarding.json"), "utf8"),
+      );
+      identity = saved.database.id;
+      assert(
+        !JSON.stringify(bootstrap.status()).includes(saved.database.sealed),
+      );
+      const state = await database.read("owner");
+      assert.equal(state.projects.length, 1);
+      assert.deepEqual(await source.read("owner"), sourceBefore);
+      await database.execute("owner", randomUUID(), {
+        type: "create_project",
+        name: "Preserved real record",
+        description: "",
+        reviewerIds: ["owner"],
+      });
+      const key = database.key;
+      await database.close();
+      database = undefined;
+      const reopened = new Bootstrap(
+        root,
+        cipher,
+        resolve("config/runner.Dockerfile"),
+        async (url) => {
+          database = new Store(key, url, "local-owner");
+          await database.init();
+        },
+        () => !!database,
+      );
+      await reopened.init();
+      await reopened.restore("unused");
+      assert.equal(reopened.status().connected, true);
+      assert.equal(
+        (await database!.read("owner")).projects[1].name,
+        "Preserved real record",
+      );
+      const inspection = JSON.parse(
+        (await command("docker", ["inspect", `roopre-db-${identity}`])).output,
+      )[0];
+      assert.equal(
+        inspection.NetworkSettings.Ports["5432/tcp"][0].HostIp,
+        "127.0.0.1",
+      );
+      assert.equal(inspection.Config.Labels["dev.roopre.profile"], identity);
+    } finally {
+      await bootstrap?.stop();
+      await database?.close();
+      for (const table of ["commands", "events"])
+        await source.pool.query(`DELETE FROM ${table} WHERE workspace_id=$1`, [
+          source.key,
+        ]);
+      await source.pool.query("DELETE FROM workspaces WHERE id=$1", [
+        source.key,
+      ]);
+      await source.close();
+      if (!identity)
+        identity = await readFile(join(root, "onboarding.json"), "utf8")
+          .then((s) => JSON.parse(s).database?.id ?? "")
+          .catch(() => "");
+      // Only the random identity generated in this isolated test may be cleaned up.
+      if (/^[a-f0-9-]{36}$/.test(identity)) {
+        await command("docker", ["rm", "-f", `roopre-db-${identity}`]);
+        await command("docker", ["volume", "rm", `roopre-data-${identity}`]);
+      }
+      await rm(root, { recursive: true, force: true });
     }
   },
 );

@@ -1,7 +1,9 @@
+import { stageNames } from "../../shared/harness";
 import { useState } from "react";
 import type { Command, Feature, Snapshot } from "../../shared/contracts";
 import { activeStatuses } from "../../shared/runtime";
 export const runNames: Record<string, string> = {
+  completed: "초안 작성 완료",
   queued: "실행 대기",
   preparing: "환경 준비",
   implementing: "구현 중",
@@ -63,6 +65,28 @@ export default function RunPanel({
         </ul>
       )}
       <div className="button-row">
+        <button
+          disabled={
+            busy ||
+            runs.some(
+              (r) =>
+                activeStatuses.includes(r.status) ||
+                r.runtime?.terminationConfirmed === false,
+            ) ||
+            !snapshot.projects.find((p) => p.id === feature.projectId)?.workflow
+          }
+          onClick={() =>
+            void act(() =>
+              send({
+                type: "queue_planning",
+                featureId: feature.id,
+                expectedRevision: feature.draft.revision,
+              }),
+            )
+          }
+        >
+          요구사항·설계 에이전트 실행
+        </button>
         <button
           className="primary"
           disabled={
@@ -192,6 +216,32 @@ export default function RunPanel({
                     {e.attempt} · tree {e.tree.slice(0, 8)}
                   </summary>
                   <pre className="policy-text">{e.log || "출력 없음"}</pre>
+                </details>
+              ))}
+              {run.runtime.agents?.map((a) => (
+                <details className="agent-result" key={a.id}>
+                  <summary>
+                    {stageNames[a.stage]} · {a.name} v{a.revision} ·{" "}
+                    {a.required ? "필수" : "선택"} ·{" "}
+                    {a.status === "running"
+                      ? "실행 중"
+                      : a.status === "passed"
+                        ? "통과"
+                        : "실패"}
+                  </summary>
+                  <p>
+                    {a.model} · 시도 {a.attempt} · 지침{" "}
+                    {a.instructionHash.slice(0, 12)}
+                  </p>
+                  <p>
+                    입력 tree {a.inputTree} · 출력 tree {a.outputTree ?? "대기"}
+                  </p>
+                  {a.error && <p role="alert">{a.error}</p>}
+                  <pre className="policy-text">{a.output}</pre>
+                  <details>
+                    <summary>실제 적용한 지침</summary>
+                    <pre className="policy-text">{a.instructions}</pre>
+                  </details>
                 </details>
               ))}
               {run.runtime.review && (

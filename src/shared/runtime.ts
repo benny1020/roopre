@@ -1,3 +1,4 @@
+import type { ResolvedHarness, AgentExecution } from "./harness.ts";
 import { z } from "zod";
 export const checkSchema = z.object({
   name: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
@@ -45,6 +46,7 @@ export type Evidence = {
   attempt: number;
 };
 export type RuntimeStatus =
+  | "completed"
   | "queued"
   | "preparing"
   | "implementing"
@@ -65,6 +67,10 @@ export const activeStatuses = [
   "repairing",
 ];
 export type RuntimeDetails = {
+  kind?: "planning";
+  draftRevision?: number;
+  harness?: ResolvedHarness;
+  agents?: AgentExecution[];
   profile: ExecutionProfile;
   binding: string;
   attempt: number;

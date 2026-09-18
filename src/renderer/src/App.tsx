@@ -1,3 +1,4 @@
+import HarnessPanel from "./HarnessPanel";
 import RuntimeSettings from "./RuntimeSettings";
 import RunPanel, { runNames } from "./RunPanel";
 import RunOverview from "./RunOverview";
@@ -426,6 +427,22 @@ export default function App() {
           </nav>
           <div className="sidebar-bottom">
             <Nav
+              active={scope === "agents" && !selected}
+              icon={<Settings2 size={17} />}
+              label="에이전트 · 개발 흐름"
+              onClick={() => navigate("agents")}
+            />
+            {window.roopre?.onboarding && (
+              <Nav
+                active={false}
+                icon={<CircleDot size={17} />}
+                label="시작 가이드"
+                onClick={() =>
+                  window.dispatchEvent(new Event("roopre:onboarding"))
+                }
+              />
+            )}
+            <Nav
               active={scope === "runtime" && !selected}
               icon={<Terminal size={17} />}
               label="표준 · 연결 · 환경"
@@ -520,6 +537,8 @@ export default function App() {
                 setSelected(id);
               }}
             />
+          ) : scope === "agents" ? (
+            <HarnessPanel snapshot={snapshot} send={send} onSaved={refresh} />
           ) : scope === "runtime" ? (
             <RuntimeSettings snapshot={snapshot} onSaved={refresh} />
           ) : scope === "policies" ? (

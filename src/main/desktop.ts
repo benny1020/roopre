@@ -1,3 +1,12 @@
+import { transferWorkspace } from "../database/transfer.ts";
+import { activeStatuses } from "../shared/runtime.ts";
+import { basename, dirname } from "node:path";
+import { open } from "node:fs/promises";
+import { constants } from "node:fs";
+import { readWorkspaceFile } from "../runner/files.ts";
+import { exportAgentMarkdown, latestAgents } from "../shared/harness.ts";
+import { Bootstrap } from "./bootstrap/environment.ts";
+import { databaseUrl } from "../database/store.ts";
 import { checkedArtifact } from "../runner/artifacts.ts";
 import { shell } from "electron";
 import { app, ipcMain, dialog, BrowserWindow, safeStorage } from "electron";
@@ -15,15 +24,10 @@ import { RunnerManager } from "../runner/manager.ts";
 import { command, git } from "../runner/process.ts";
 import { trustedRenderer } from "./security.ts";
 export async function installDesktop() {
-  const store = new Store("roopre-owner-v02", undefined, "local-owner");
-  try {
-    await store.init();
-  } catch {
-    await store.close();
-    throw Error(
-      "PostgreSQL에 연결하지 못했습니다. 설치 안내의 DB 시작 단계를 확인하세요. 기존 데이터는 삭제하지 않습니다.",
-    );
-  }
+  let store: Store | undefined;
+  let runner: RunnerManager | undefined;
+  let closing = false;
+  let migrationCleanup: Promise<void> | undefined;
   const resources = join(app.getAppPath(), "resources");
   const helper = app.isPackaged
     ? join(process.resourcesPath, "roopre-approve")
@@ -39,20 +43,48 @@ export async function installDesktop() {
       decrypt: (b) => safeStorage.decryptString(b),
     },
   );
-  const runner = new RunnerManager(
-    store,
-    vault,
-    join(app.getPath("userData"), "runs"),
-    app.isPackaged ? process.resourcesPath : resources,
+  await vault.init();
+  const connect = async (url: string) => {
+    if (store) return;
+    const next = new Store("roopre-owner-v02", url, "local-owner");
+    const nextRunner = new RunnerManager(
+      next,
+      vault,
+      join(app.getPath("userData"), "runs"),
+      app.isPackaged ? process.resourcesPath : resources,
+    );
+    try {
+      await next.init();
+      if (closing) throw Error("앱 종료 중입니다.");
+      await nextRunner.init();
+    } catch (error) {
+      await nextRunner.stop();
+      await next.close();
+      throw error;
+    }
+    store = next;
+    runner = nextRunner;
+  };
+  const bootstrap = new Bootstrap(
+    join(app.getPath("userData"), "private"),
+    {
+      encrypt: (s) => {
+        if (!safeStorage.isEncryptionAvailable())
+          throw Error("macOS 비밀 저장 기능을 사용할 수 없습니다.");
+        return safeStorage.encryptString(s);
+      },
+      decrypt: (b) => safeStorage.decryptString(b),
+    },
+    app.isPackaged
+      ? join(process.resourcesPath, "setup/runner.Dockerfile")
+      : join(app.getAppPath(), "config/runner.Dockerfile"),
+    connect,
+    () => !!store,
   );
-  try {
-    await vault.init();
-    await runner.init();
-  } catch (error) {
-    await store.close();
-    throw error;
-  }
+  await bootstrap.init();
+  const restoration = bootstrap.restore(databaseUrl);
   let authenticating = false;
+  let migrating = false;
   ipcMain.handle(
     "roopre:request",
     async (event, operation: string, payload: unknown) => {
@@ -70,13 +102,155 @@ export async function installDesktop() {
       )
         return { ok: false, error: "허용되지 않은 앱 요청입니다." };
       try {
+        if (closing) throw Error("앱 종료 중입니다.");
         let value: unknown;
+        if (
+          migrating &&
+          ![
+            "bootstrap",
+            "cancelEnvironment",
+            "snapshot",
+            "connections",
+          ].includes(operation)
+        )
+          throw Error(
+            "데이터 이전 중입니다. 완료될 때까지 변경을 기다려 주세요.",
+          );
+        if (
+          ![
+            "bootstrap",
+            "prepareEnvironment",
+            "cancelEnvironment",
+            "onboarding",
+            "connections",
+            "saveConnection",
+            "removeConnection",
+            "testConnection",
+            "diagnostics",
+            "chooseRepository",
+          ].includes(operation) &&
+          !store
+        )
+          throw Error("시작 가이드에서 환경을 먼저 준비하세요.");
         switch (operation) {
+          case "migrateEnvironment": {
+            const source = store!;
+            const state = await source.read("owner");
+            if (
+              state.runs.some(
+                (r) =>
+                  activeStatuses.includes(r.status) ||
+                  r.runtime?.terminationConfirmed === false,
+              )
+            )
+              throw Error("진행 중인 실행을 종료하고 다시 시도하세요.");
+            migrating = true;
+            let pending: Store | undefined;
+            try {
+              await runner!.stop();
+              value = bootstrap.migrate(async (url, backup) => {
+                pending = new Store(source.key, url, "local-owner");
+                await pending.init();
+                await transferWorkspace(source, pending, backup);
+                const next = pending;
+                return async () => {
+                  store = next;
+                  pending = undefined;
+                  runner = new RunnerManager(
+                    next,
+                    vault,
+                    join(app.getPath("userData"), "runs"),
+                    app.isPackaged ? process.resourcesPath : resources,
+                  );
+                  if (!closing) await runner.init();
+                  await source.close();
+                };
+              });
+              // Bootstrap owns the durable switch; keep mutations disabled until it settles.
+              migrationCleanup = (async () => {
+                while (bootstrap.status().busy)
+                  await new Promise((r) => setTimeout(r, 100));
+                await pending?.close();
+                if (store === source && !closing) await runner!.init();
+                migrating = false;
+              })().catch(() => {
+                migrating = false;
+              });
+            } catch (e) {
+              migrating = false;
+              if (!closing) await runner!.init();
+              throw e;
+            }
+            break;
+          }
+          case "bootstrap":
+            value = bootstrap.status();
+            break;
+          case "prepareEnvironment":
+            value = bootstrap.prepare();
+            break;
+          case "cancelEnvironment":
+            value = bootstrap.cancel();
+            break;
+          case "onboarding":
+            value = await bootstrap.progress(payload);
+            break;
+          case "readMarkdown": {
+            const chosen = await dialog.showOpenDialog(sender, {
+              properties: ["openFile"],
+              filters: [{ name: "Markdown", extensions: ["md"] }],
+            });
+            value = chosen.canceled
+              ? null
+              : (
+                  await readWorkspaceFile(
+                    dirname(chosen.filePaths[0]),
+                    basename(chosen.filePaths[0]),
+                    24000,
+                  )
+                ).toString("utf8");
+            break;
+          }
+          case "exportAgent": {
+            const agent = latestAgents(await store!.read("owner")).find(
+              (a) => a.id === z.string().uuid().parse(payload),
+            );
+            if (!agent) throw Error("에이전트가 없습니다.");
+            const chosen = await dialog.showSaveDialog(sender, {
+              defaultPath: "roopre-agent.md",
+              filters: [{ name: "Markdown", extensions: ["md"] }],
+            });
+            if (!chosen.canceled && chosen.filePath) {
+              const file = await open(
+                chosen.filePath,
+                constants.O_WRONLY |
+                  constants.O_CREAT |
+                  constants.O_NOFOLLOW |
+                  constants.O_NONBLOCK,
+                0o600,
+              );
+              try {
+                if (!(await file.stat()).isFile())
+                  throw Error("일반 파일만 저장할 수 있습니다.");
+                await file.truncate(0);
+                await file.writeFile(exportAgentMarkdown(agent));
+              } finally {
+                await file.close();
+              }
+            }
+            value = null;
+            break;
+          }
           case "snapshot":
-            value = await store.read("owner");
+            value = await store!.read("owner");
             break;
           case "command": {
             const c = commandSchema.parse(payload);
+            if (c.type === "save_agent" && c.agent.connectionId) {
+              c.agent.connectionVersion = vault.get(
+                c.agent.connectionId,
+              ).info.version;
+            }
             if (c.type === "configure_execution")
               throw Error("저장소 선택 경로를 사용하세요.");
             if (c.type === "review" && c.decision === "approve") {
@@ -84,7 +258,7 @@ export async function installDesktop() {
                 throw Error("진행 중인 본인 확인을 완료하세요.");
               authenticating = true;
               try {
-                const w = await store.read("owner");
+                const w = await store!.read("owner");
                 const f = w.features.find((f) => f.id === c.featureId);
                 if (!f || f.designs.at(-1)?.id !== c.designId)
                   throw Error("최신 설계를 확인하세요.");
@@ -93,14 +267,14 @@ export async function installDesktop() {
                   helper,
                   `루프리: ${f.title.slice(0, 70)} 설계 v${f.designs.at(-1)!.number} 승인`,
                 );
-                value = await store.execute("owner", randomUUID(), c, {
+                value = await store!.execute("owner", randomUUID(), c, {
                   binding,
                   authentication: "macos-owner",
                 });
               } finally {
                 authenticating = false;
               }
-            } else value = await store.execute("owner", randomUUID(), c);
+            } else value = await store!.execute("owner", randomUUID(), c);
             break;
           }
           case "connections":
@@ -162,10 +336,10 @@ export async function installDesktop() {
             ]);
             if (image.code !== 0)
               throw Error(
-                "실행 이미지가 없습니다. pnpm runner:image로 준비하세요.",
+                "실행 이미지가 없습니다. 시작 가이드에서 환경을 준비하세요.",
               );
             p.image = image.output.trim();
-            value = await store.execute("owner", randomUUID(), {
+            value = await store!.execute("owner", randomUUID(), {
               type: "configure_execution",
               projectId: input.projectId,
               profile: p,
@@ -199,7 +373,7 @@ export async function installDesktop() {
                 index: z.number().int().nonnegative(),
               })
               .parse(payload);
-            const r = (await store.read("owner")).runs.find(
+            const r = (await store!.read("owner")).runs.find(
               (r) => r.id === a.runId,
             );
             const file = r?.runtime?.artifacts?.[a.index];
@@ -221,8 +395,8 @@ export async function installDesktop() {
               .parse(payload);
             value =
               a.action === "retry"
-                ? JSON.stringify(await runner.retry(a.id))
-                : await runner.diff(a.id);
+                ? JSON.stringify(await runner!.retry(a.id))
+                : await runner!.diff(a.id);
             break;
           }
           default:
@@ -242,14 +416,18 @@ export async function installDesktop() {
       }
     },
   );
-  let closing = false;
   app.on("before-quit", (event) => {
     if (closing) return;
     event.preventDefault();
     closing = true;
-    void runner.stop().finally(async () => {
-      await store.close();
-      app.quit();
-    });
+    void bootstrap
+      .stop()
+      .then(() => restoration)
+      .then(() => migrationCleanup)
+      .then(() => runner?.stop())
+      .finally(async () => {
+        await store?.close();
+        app.quit();
+      });
   });
 }
