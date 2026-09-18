@@ -50,7 +50,7 @@ export function applyPackage(
     profile.assignments.some((x) => x.agentId === a.id),
   );
   for (const a of used)
-    if (a.connection !== "project" && !c.bindings[a.connection])
+    if (a.connection !== "project" && !Object.hasOwn(c.bindings, a.connection))
       throw Error(`연결을 매핑하세요: ${a.connection}`);
   const ids = Object.fromEntries(
     used.map((a) => [a.id, stableId(p.id, pack.id, "agent", a.id)]),

@@ -407,6 +407,9 @@ test("harness standard edits, previews, applies atomically and persists feature 
   await page
     .getByRole("button", { name: "표준 스펙 편집", exact: true })
     .click();
+  await expect(
+    page.getByRole("button", { name: "편집 내용 검증", exact: true }),
+  ).toBeEnabled();
   const editor = page.getByLabel("표준 정의 JSON", { exact: true });
   const spec = JSON.parse(await editor.inputValue());
   spec.id = "company.commerce";

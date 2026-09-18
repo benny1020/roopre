@@ -499,7 +499,9 @@ export default function PackageSettings({
                       연결 매핑 · {alias}
                       <select
                         aria-label={`연결 ${alias}`}
-                        value={bindings[alias] ?? ""}
+                        value={
+                          Object.hasOwn(bindings, alias) ? bindings[alias] : ""
+                        }
                         onChange={(e) =>
                           setBindings({ ...bindings, [alias]: e.target.value })
                         }
@@ -527,7 +529,7 @@ export default function PackageSettings({
               )}
               <div className="package-actions">
                 <button
-                  disabled={busy || !changed}
+                  disabled={busy}
                   onClick={() =>
                     void act(async () => {
                       await load(
@@ -574,7 +576,9 @@ export default function PackageSettings({
                     changed ||
                     !project ||
                     !profile ||
-                    aliases.some((a) => !bindings[a])
+                    aliases.some(
+                      (a) => !Object.hasOwn(bindings, a) || !bindings[a],
+                    )
                   }
                   onClick={() =>
                     void act(async () => {

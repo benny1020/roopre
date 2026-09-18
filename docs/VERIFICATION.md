@@ -164,7 +164,7 @@ Docker 통합 검사에서 **Claude Code는 테스트용 프로그램으로 대�
 
 직접 수행한 검사:
 
-- `pnpm check`: 타입·문서 링크/승인 원본 hash·빌드와 67개 검사 통과. 새 검사는 엄격한 참조/권한/경로, Markdown 왕복과 lock 불일치, 실제 Git 객체의 고정 commit/symlink 거절, 후보 위변조 방지, 반복 적용의 안정적인 ID/버전, 원자적 실패·다른 프로젝트 보존·연결 별칭·요청 중복 충돌을 포함한다.
+- `pnpm check`: 타입·문서 링크/승인 원본 hash·빌드와 68개 검사 통과. 새 검사는 엄격한 참조/권한/경로, Markdown 왕복과 lock 불일치, 실제 Git 객체의 고정 commit/symlink 거절, 후보 위변조 방지, 반복 적용의 안정적인 ID/버전, 원자적 실패·다른 프로젝트 보존·연결 별칭·요청 중복 충돌을 포함한다.
 - `pnpm test:web`: 7개 Chromium 시나리오 통과. JSON 편집 → 검증 → 미리보기 → 동일 후보의 두 프로젝트 적용 → 재적용 → 기능 디렉토리 연결 → 새로고침 보존. 다크 Markdown 편집 화면 확인.
 - `pnpm test:runner`: 실제 Docker/DB 통합 2개 통과. 추가 회귀는 표준과 기능 범위를 적용한 후 fixture 구현자가 범위 밖 파일을 만들면 고정 검사/최종 commit 전에 실패하며 성공 head가 생기지 않는 것을 확인한다.
 - `pnpm test:desktop`: 실제 빌드된 Electron의 DB 없는 시작·재시작 시나리오 1개 통과. 기본 표준의 main/preload API → 폴더 export → lock → 동일 폴더 import/digest 일치를 추가했다. 파일 선택 결과만 격리된 임시 폴더 fixture이며 사용자 네이티브 인증 성공 검사는 아니다.
@@ -173,3 +173,5 @@ Docker 통합 검사에서 **Claude Code는 테스트용 프로그램으로 대�
 근거: git에서 제외된 `artifacts/package-check.log`, `package-tests.log`, `package-web.log`, `package-runner.log`, `package-desktop.log`, `package-mac-check.log`, `harness-package-dark.png`. Git의 실제 객체/고정 commit 읽기는 로컬 저장소로 검증했다. 원격 HTTPS 서버와 private Git 자격 증명 성공 경로는 별도 실환경 검증이 필요하다. 실제 provider 호출·본인 인증 성공/취소·서명 변경 후 Keychain·별도 Mac 설치 미검증은 유지한다. 브라우저의 native 파일/연결 API는 fixture이며 실제 파일 왕복은 Electron 검사에서 검증했다.
 
 표준은 프로젝트별 DB 스냅샷으로 실행하며 팀 공유 파일에는 인증·경로·실행/승인 이력을 담지 않는다. 임의 Markdown/검사 argv에 사람이 넣은 비밀의 자동 제거는 보장하지 않는다. 경로 제한은 후보 diff 검증이며 컨테이너 파일별 쓰기 권한 분리는 아니다. UI 초안은 화면 이동 전에 검증·내보내기해야 한다. 다른 프로젝트 상태 변경도 현재 workspace revision 비교를 보수적으로 실패시킬 수 있다. 전담 리뷰와 원격 CI 결과는 해당 PR의 정확한 head를 기준으로 별도 확인한다.
+
+전담 리뷰는 `0a50cb4`에서 `constructor` 연결 별칭이 객체의 상속 속성 때문에 누락 검사를 통과해 프로젝트 연결로 대체되는 P2를 독립 재현했다. domain과 UI에서 실제 등록된 키만 인정하도록 수정하고 회귀를 추가했다. 후보의 30분 만료 뒤 편집 없이도 재검증할 수 있도록 버튼을 보완하고 만료/재검증 검사도 추가했다. 새 head의 전담 재리뷰와 CI를 다시 확인한다.

@@ -214,6 +214,9 @@ test("invalid connection mapping, stale state and same-version content changes c
   pack.agents[0].connection = "designer-model";
   assert.throws(() => applyPackage(w, input()), /연결/);
   assert.equal(canonical(w), before);
+  pack.agents[0].connection = "constructor";
+  assert.throws(() => applyPackage(w, input()), /연결/);
+  assert.equal(canonical(w), before);
   pack.agents[0].connection = "project";
   assert.throws(
     () => applyPackage(w, { ...input(), expectedRevision: 999 }),
@@ -402,4 +405,16 @@ test("real Git objects import a pinned package and reject symbolic Markdown entr
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("expired candidates can be revalidated from the unchanged canonical definition", (t) => {
+  let now = 1_000_000;
+  t.mock.method(Date, "now", () => now);
+  const library = new HarnessLibrary();
+  const first = library.add(defaultPackage(), { kind: "folder" });
+  now += 31 * 60000;
+  assert.throws(() => library.get(first.token), /만료/);
+  const renewed = library.add(first.package, { kind: "editor" });
+  assert.equal(library.get(renewed.token).digest, first.digest);
+  assert.notEqual(renewed.token, first.token);
 });
