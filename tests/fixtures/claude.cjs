@@ -28,6 +28,16 @@ const fs = require("node:fs");
     dependenciesReadonly = true;
   }
   if (!dependenciesReadonly) throw Error("Dependency tools are writable");
+  if (fs.existsSync("/workspace/node_modules/.vite/verification-cache"))
+    throw Error("Previous container cache leaked into agent");
+  fs.writeFileSync(
+    "/workspace/node_modules/.vite/agent-cache",
+    "must not survive the container",
+  );
+  fs.writeFileSync(
+    "/workspace/node_modules/.vite-temp/config.js",
+    "temporary config bundle",
+  );
   const review =
     process.argv[process.argv.indexOf("--tools") + 1] === "Read,Glob,Grep";
   let result = "Fixture implementation";
@@ -53,6 +63,11 @@ const fs = require("node:fs");
     });
   } else {
     fs.writeFileSync("/workspace/hello.txt", "hello from fixture");
+    fs.mkdirSync("/workspace/.roopre-artifacts", { recursive: true });
+    fs.writeFileSync(
+      "/workspace/.roopre-artifacts/agent-only.json",
+      "untrusted ignored output",
+    );
     if (
       prompt.includes("SLOW_SCENARIO") &&
       !fs.existsSync("/workspace/checkpoint.txt")

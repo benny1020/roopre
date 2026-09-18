@@ -88,7 +88,7 @@ test(
           argv: [
             "node",
             "-e",
-            "const fs=require('fs');if(fs.existsSync('/run/docker.sock'))process.exit(1);fs.mkdirSync('test-results',{recursive:true});fs.writeFileSync('test-results/result.json',JSON.stringify({passed:true}))",
+            "const fs=require('fs');if(fs.existsSync('/run/docker.sock')||fs.existsSync('.roopre-artifacts/agent-only.json')||fs.existsSync('node_modules/.vite/agent-cache')||fs.existsSync('node_modules/.vite-temp/config.js'))process.exit(1);fs.writeFileSync('node_modules/.vite/verification-cache','fresh cache');fs.mkdirSync('test-results',{recursive:true});fs.writeFileSync('test-results/result.json',JSON.stringify({passed:true}))",
           ],
           timeoutSeconds: 30,
         },

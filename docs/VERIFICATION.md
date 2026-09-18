@@ -104,3 +104,7 @@ Docker 통합 검사에서 **Claude Code는 테스트용 프로그램으로 대�
 - 원본 리뷰 보고서는 보존한다. 새 head의 별도 재리뷰와 CI가 통과해야 머지 승인을 요청한다. 보고서 head/base·CI·차단 지적·본인 인증 취소·승인 대기 중 커밋 변경에 대한 회귀 검사를 추가했다. 전체 `pnpm check` 37개와 브라우저 3개, Docker 통합 시나리오가 통과했다.
 
 검사 로그는 `artifacts/review-process-tests.log`, `artifacts/review-process-runner.log`, `artifacts/review-process-check.log`에 기록한다. 실제 사용자 머지 승인과 GitHub merge는 수행하지 않았으며, 취소/변경 시 머지 차단은 외부 부작용 없는 모의 동작으로 검증한다. native 인증 성공과 실제 API 미검증 조건은 그대로 유지한다.
+
+전담 재리뷰에서 Vite 7.3.6의 기본 `.vite-temp` 생성이 읽기 전용 의존성에 막히는 P2 회귀도 재현했다. `.vite`/`.vite-temp`만 컨테이너별 tmpfs로 분리하고 구현→검사→리뷰 사이 캐시가 보존되지 않는 회귀 검사를 추가했다. 의존성 실행 도구는 계속 읽기 전용이다.
+
+검증 전에는 격리 체크아웃의 후보 Git tree를 고정하고 에이전트가 만든 ignored 파일을 제거한다. `.gitignore` 변경도 보호한다. Docker fixture에서 agent가 남긴 ignored 산출물이 검사 단계에 존재하지 않는 것을 확인한다. 원본 저장소와 이미 보존된 시도별 근거는 유지한다.

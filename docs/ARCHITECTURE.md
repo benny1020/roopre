@@ -38,11 +38,11 @@ PostgreSQL workspace JSONB 행 잠금으로 명령과 실행 claim을 직렬화�
 
 ## 격리와 검증 근거
 
-독립 Git clone을 사용해 원본 저장소와 `.git` 쓰기 경계를 분리한다. agent 안의 `.git`은 읽기 전용이며 호스트 home, Docker socket, API key를 마운트하지 않는다. 구현/검사/리뷰 사이 컨테이너를 교체해 이전 background 작업을 제거한다. 리뷰에서는 체크아웃 전체가 읽기 전용이다.
+독립 Git clone을 사용해 원본 저장소와 `.git` 쓰기 경계를 분리한다. agent 안의 `.git`은 읽기 전용이며 호스트 home, Docker socket, API key를 마운트하지 않는다. 구현/검사/리뷰 사이 컨테이너를 교체해 이전 background 작업을 제거한다. 검사 전에 변경을 Git index에 고정하고 격리 체크아웃의 미추적/ignored 파일을 정리해 에이전트가 남긴 빌드 결과나 캐시에 기대어 통과하지 않게 한다. 원본 저장소와 별도 보존 산출물은 정리 대상이 아니다. 리뷰에서는 체크아웃 전체가 읽기 전용이다.
 
 agent 네트워크는 internal Docker network다. sidecar는 호스트 broker만 전달하며 broker는 실행별 토큰·모델·Messages 경로를 제한한다. 실제 key는 호스트에서 HTTPS 요청에만 붙인다. broker는 Docker 접속을 위해 임시 포트에서 listen하므로 실행 토큰 보호가 필요하다. 호스트 OS와 Docker 관리자는 신뢰 경계 안에 있다.
 
-의존성 준비는 승인한 이미지 ID와 잠금 파일을 사용하며 설치 스크립트를 비활성화한다. 준비한 node_modules는 별도 볼륨에 담아 구현·검증·리뷰 모두 읽기 전용으로 마운트한다. node_modules 안에 캐시를 쓰는 도구는 별도 캐시 경로 설정이 필요하다. 기존 테스트/설정/manifest hash를 보호하고 고정 argv 검사를 실행한다. 검사 전후 Git tree와 리뷰 후 tree가 일치해야 완료한다. AC별 AI 검토 근거도 요구하지만 그 정확성을 수학적으로 보장하지는 않는다.
+의존성 준비는 승인한 이미지 ID와 잠금 파일을 사용하며 설치 스크립트를 비활성화한다. 준비한 node_modules는 별도 볼륨에 담아 구현·검증·리뷰 모두 읽기 전용으로 마운트한다. Vite 기본 캐시 `.vite`와 `.vite-temp`만 컨테이너마다 새 tmpfs를 사용해 구현 캐시가 검증에 이어지지 않는다. 그 밖의 node_modules 내부 캐시는 별도 경로 설정이 필요하다. 기존 테스트/설정/manifest hash를 보호하고 고정 argv 검사를 실행한다. 검사 전후 Git tree와 리뷰 후 tree가 일치해야 완료한다. AC별 AI 검토 근거도 요구하지만 그 정확성을 수학적으로 보장하지는 않는다.
 
 각 시도의 검사 로그와 제한된 이미지/trace/report 산출물을 보존하고 파일 hash 확인 후 Finder에서 찾는다. HTML을 앱 권한으로 실행하지 않는다. 실패/중단 복구는 같은 승인 binding의 변경만 새로운 체크아웃에 적용한다. 대량 diff는 자동 검토/복구를 중단한다.
 
