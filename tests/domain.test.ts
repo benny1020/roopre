@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { apply, DomainError } from "../src/domain/index.ts";
-import { seed } from "../src/database/seed.ts";
+import { seed } from "./fixtures/workspace.ts";
 import {
   gate,
   latestDesign,

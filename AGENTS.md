@@ -2,7 +2,9 @@
 
 - 제품 요구와 상태: `docs/design/PRODUCT-DESIGN.md`, `docs/design/DESIGN-REVIEW.md`, `docs/VERIFICATION.md`.
 - 구조: `docs/ARCHITECTURE.md`. 절차: `docs/DEVELOPMENT.md`.
-- 현재 범위는 M1. Claude Code, worktree 병렬 개발, 자동 테스트 runner, 실제 팀 인증을 연결했다고 주장하지 않는다.
+- 현재 승인 범위는 M2-A/B/C 구현이다. 완료된 기능과 실제 검증 범위는 docs/VERIFICATION.md로 확인한다. 실제 팀 인증은 M3이며 연결했다고 주장하지 않는다.
+- v0.2 구현은 사용자의 “0.2 개발 ㄱㄱ”로 승인됐다. `docs/design/V02-APPROVAL.md`와 원본 설계를 함께 읽는다. 사용자가 말한 개발자 리뷰는 사용자 본인의 설계 승인이며, AI나 개발 fixture의 승인을 대신 기록하지 않는다. v0.1의 M1 승인을 M2 구현 승인으로 재사용하지 않는다.
+- 제품의 핵심 목적과 M2-A의 표준 계약 보완은 `docs/design/TEAM-STANDARD-ADDENDUM.md`를 함께 읽는다. 개발 흐름과 품질 기준의 팀 표준화가 목적이며 실행·병렬 처리·시각화는 그 수단이다. 이 보완도 승인 범위에 포함한다.
 - 승인된 기능의 필수 검사·개발자 리뷰를 생략하거나 테스트 기대값을 완화해 통과시키지 않는다.
 - 명령: `pnpm install --frozen-lockfile`, `pnpm db:start`, `pnpm check`, `pnpm build:mac`.
 - renderer는 Node/Electron main/server/database 모듈을 import하지 않는다. 공유 계약은 src/shared에 둔다.
@@ -10,3 +12,12 @@
 - API/명령 계약을 바꾸면 요구와 검토 영향을 설명한다. 승인된 범위의 통상 구현 선택은 자율적으로 진행한다.
 - 작업 종료 시 변경·수행 검사·미검증 범위를 간단히 보고한다. 실제로 수행하지 않은 검사를 통과로 표시하지 않는다.
 - 사용자 저장소·DB 볼륨·이전 조사 폴더를 삭제하지 않는다. credentials와 로컬 산출물을 커밋하지 않는다.
+
+- v0.3 구현 및 검사·전담 리뷰 통과 후 이번 PR의 main 반영은 `docs/design/V03-APPROVAL.md`에 기록한 최신 사용자 지시로 승인됐다. 제품 내 설계 승인 규칙을 해제하지 않는다.
+
+## PR 리뷰와 머지
+
+- 모든 PR 생성/수정 후 `docs/PR-REVIEW-PROCESS.md`를 따르고 `agents/pr-reviewer.md`를 읽은 별도 리뷰 전담 에이전트를 호출한다. 이 절은 전담 sub-agent 사용 지시다. 구현 담당이 자기 보고서로 대체하지 않는다.
+- PR 번호와 정확한 head/base를 고정한다. 차단 지적 수정 → 검사 → 새 커밋 전담 재리뷰를 반복한다. 기존 결과나 승인으로 새 커밋을 머지하지 않는다.
+- 보고서를 PR에 게시하고 `pnpm pr:check`가 통과한 뒤 사용자에게 결과를 보고한다. `pnpm pr:merge`는 macOS 본인 승인 이후에만 머지한다. 리뷰 에이전트/CI가 승인·머지를 대신하지 않는다.
+- 현재 GitHub 요금제는 이 private repo의 branch protection을 지원하지 않는다. 서버 강제가 활성화됐다고 주장하지 않으며 직접 `gh pr merge --admin`, auto-merge, main push로 절차를 우회하지 않는다.

@@ -55,6 +55,7 @@ select {
   color: inherit;
 }
 button {
+  appearance: none;
   cursor: pointer;
 }
 button:disabled {
@@ -175,7 +176,8 @@ kbd {
   -webkit-app-region: drag;
   user-select: none;
 }
-.titlebar button {
+.titlebar button,
+.titlebar select {
   -webkit-app-region: no-drag;
 }
 .window-space {
@@ -1646,4 +1648,322 @@ kbd {
 .phase-board button span {
   font-size: 11px;
   color: var(--muted);
+}
+
+.theme-select {
+  width: auto;
+  max-width: 130px;
+  font-size: 12px;
+  padding: 4px 7px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.runtime-settings {
+  overflow-y: auto;
+}
+.runtime-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 22px;
+  margin: 20px 0;
+}
+.runtime-card h2 {
+  margin-top: 0;
+}
+.runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+.runtime-grid input,
+.runtime-grid select,
+.runtime-settings textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.standard-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 18px;
+}
+.standard-steps p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.standard-steps small,
+.connection-row small {
+  display: block;
+  color: var(--muted);
+}
+.connection-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+}
+.connection-row > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.runtime-card details {
+  margin: 14px 0;
+}
+.runtime-card summary {
+  cursor: pointer;
+}
+@media (max-width: 1100px) {
+  .standard-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.runtime-card button:not(.primary):not(.soft) {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+
+.agent-library {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.agent-library .runtime-card {
+  margin: 0;
+}
+.harness-panel .page-heading {
+  padding: 0 0 24px;
+}
+.instruction-editor {
+  min-height: 250px;
+  font-family: ui-monospace, monospace;
+  line-height: 1.65;
+}
+.workflow-stage {
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+}
+.assignment-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 10px 0;
+}
+.assignment-row select {
+  flex: 1;
+  min-width: 0;
+}
+.markdown-preview {
+  padding: 20px;
+  background: var(--bg);
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  max-height: 500px;
+  overflow: auto;
+}
+.markdown-preview h3 {
+  margin: 16px 0 8px;
+}
+.markdown-preview p {
+  margin: 12px 0;
+}
+.agent-result {
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+.agent-result summary {
+  cursor: pointer;
+}
+
+.onboarding-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 18px;
+  background: var(--bg);
+  color: var(--text);
+}
+.onboarding-loading img {
+  width: 64px;
+}
+.onboarding-shell {
+  display: flex;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+.onboarding-rail {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 50px 30px 30px;
+  display: flex;
+  flex-direction: column;
+}
+.onboarding-brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 20px;
+  margin-bottom: 45px;
+}
+.onboarding-brand img {
+  width: 42px;
+  height: 42px;
+}
+.onboarding-rail h1 {
+  font-size: 25px;
+  line-height: 1.5;
+  letter-spacing: -1px;
+}
+.onboarding-rail p {
+  margin: 18px 0;
+  color: var(--muted);
+  line-height: 1.7;
+  font-size: 13px;
+}
+.onboarding-rail ol {
+  list-style: none;
+  padding: 0;
+  margin: 25px 0;
+}
+.onboarding-rail li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  color: var(--muted);
+}
+.onboarding-rail li span {
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+.onboarding-rail li.current {
+  color: var(--text);
+  font-weight: 650;
+}
+.onboarding-rail li.current span {
+  background: #285ac0;
+  color: white;
+  border-color: #285ac0;
+}
+.onboarding-rail small {
+  margin-top: auto;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.onboarding-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.onboarding-main > header,
+.onboarding-main > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 35px;
+  gap: 15px;
+  flex-shrink: 0;
+}
+.onboarding-main > header {
+  padding-top: 35px;
+  color: var(--muted);
+}
+.onboarding-main > footer {
+  border-top: 1px solid var(--line);
+}
+.onboarding-content {
+  padding: 18px 35px 35px;
+  overflow: auto;
+  flex: 1;
+}
+.onboarding-content > h2 {
+  font-size: 27px;
+  letter-spacing: -0.7px;
+  margin-bottom: 15px;
+}
+.onboarding-content > p {
+  line-height: 1.7;
+  margin: 14px 0;
+}
+.onboarding-form {
+  max-width: 680px;
+  margin: 24px 0;
+}
+.onboarding-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 18px;
+}
+.onboarding-check p {
+  margin-top: 7px;
+  color: var(--muted);
+}
+.onboarding-content .harness-panel {
+  padding: 0;
+  overflow: visible;
+}
+.onboarding-content .harness-panel .page-heading h1 {
+  font-size: 20px;
+}
+.onboarding-shell input,
+.onboarding-shell textarea,
+.onboarding-shell select {
+  max-width: 100%;
+}
+.onboarding-shell textarea {
+  min-height: 115px;
+}
+@media (max-width: 1100px) {
+  .onboarding-rail {
+    width: 250px;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .onboarding-main > header,
+  .onboarding-main > footer,
+  .onboarding-content {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+.onboarding-shell button:not(.primary),
+.harness-panel button:not(.primary) {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.onboarding-shell button:disabled,
+.harness-panel button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.onboarding-shell button:focus-visible,
+.harness-panel button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
 }

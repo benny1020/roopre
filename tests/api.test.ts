@@ -1,3 +1,4 @@
+import { seed } from "./fixtures/workspace.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -6,7 +7,12 @@ import { createApp } from "../src/server/app.ts";
 import { sections, type Command } from "../src/shared/contracts.ts";
 
 test("PostgreSQL API: authorization, atomic competing edits, idempotency, approvals and reconnect events", async (t) => {
-  const store = new Store(`test-${randomUUID()}`);
+  const store = new Store(
+    `test-${randomUUID()}`,
+    undefined,
+    "development-fixture",
+    seed,
+  );
   await store.init();
   const app = await createApp(store);
   t.after(async () => {
@@ -27,6 +33,55 @@ test("PostgreSQL API: authorization, atomic competing edits, idempotency, approv
       headers: { "x-devflow-actor": actor },
       payload: { requestId, command: c },
     });
+  await t.test(
+    "untrusted origins and DNS-rebound hosts cannot read or mutate the local fixture",
+    async () => {
+      for (const headers of [
+        { host: "attacker.invalid", "x-devflow-actor": "mina" },
+        { origin: "null", "x-devflow-actor": "mina" },
+        { origin: "https://attacker.invalid", "x-devflow-actor": "mina" },
+      ]) {
+        assert.equal(
+          (await app.inject({ url: "/state", headers })).statusCode,
+          403,
+        );
+        assert.equal(
+          (
+            await app.inject({
+              method: "POST",
+              url: "/commands",
+              headers,
+              payload: {},
+            })
+          ).statusCode,
+          403,
+        );
+      }
+      assert.equal(
+        (
+          await app.inject({
+            url: "/state",
+            headers: {
+              origin: "http://127.0.0.1:4317",
+              "x-devflow-actor": "mina",
+            },
+          })
+        ).statusCode,
+        200,
+      );
+      assert.equal(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/commands",
+            headers: { "content-type": "application/json" },
+            payload: JSON.stringify({ body: "x".repeat(160000) }),
+          })
+        ).statusCode,
+        413,
+      );
+    },
+  );
   await t.test(
     "T01: reads are shared by two human identities, forbidden outside team",
     async () => {
@@ -160,7 +215,12 @@ test("PostgreSQL API: authorization, atomic competing edits, idempotency, approv
     "T10 storage recovery: recreating a store preserves existing state and revision",
     async () => {
       const before = await store.read("jun");
-      const second = new Store(store.key);
+      const second = new Store(
+        store.key,
+        undefined,
+        "development-fixture",
+        seed,
+      );
       await second.init();
       const after = await second.read("mina");
       await second.close();

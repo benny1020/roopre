@@ -1,3 +1,8 @@
+import HarnessPanel from "./HarnessPanel";
+import RuntimeSettings from "./RuntimeSettings";
+import RunPanel, { runNames } from "./RunPanel";
+import RunOverview from "./RunOverview";
+import { activeStatuses } from "../../shared/runtime";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -45,15 +50,19 @@ import appIcon from "../../../resources/icon.png";
 import { APP_NAME } from "../../shared/brand";
 
 const API = "http://127.0.0.1:4318";
+const localKey = (key: string) =>
+  (window.roopre && key !== "theme" ? "owner:" : "") + key;
 const readLocal = <T,>(key: string, fallback: T): T => {
   try {
-    return JSON.parse(localStorage.getItem(key) || "null") ?? fallback;
+    return (
+      JSON.parse(localStorage.getItem(localKey(key)) || "null") ?? fallback
+    );
   } catch {
     return fallback;
   }
 };
 const saveLocal = (key: string, value: unknown) =>
-  localStorage.setItem(key, JSON.stringify(value));
+  localStorage.setItem(localKey(key), JSON.stringify(value));
 const labels = {
   draft: "설계 초안",
   in_review: "설계 리뷰",
@@ -71,11 +80,12 @@ const ago = (date: string) => {
 type Send = (command: Command) => Promise<any>;
 
 export default function App() {
-  const [actor, setActor] = useState(readLocal("actor", "mina"));
+  const actor = "owner";
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [connected, setConnected] = useState(false);
   const [lastSync, setLastSync] = useState("");
   const [error, setError] = useState("");
+  const [syncError, setSyncError] = useState("");
   const [notice, setNotice] = useState("");
   const [view, setView] = useState(readLocal("view", "list"));
   useEffect(() => saveLocal("view", view), [view]);
@@ -87,13 +97,23 @@ export default function App() {
   const [search, setSearch] = useState(false);
   const [notifications, setNotifications] = useState(false);
   const [modal, setModal] = useState<"feature" | "project" | null>(null);
-  const [theme, setTheme] = useState(readLocal("theme", "light"));
+  const [theme, setTheme] = useState(readLocal("theme", "system"));
   const [events, setEvents] = useState<
     { type: string; at: string; featureId?: string }[]
   >([]);
   const currentActor = useRef(actor);
   currentActor.current = actor;
   const refresh = async (as = actor) => {
+    if (window.roopre) {
+      const data = await window.roopre.snapshot();
+      setSnapshot((previous) =>
+        previous && previous.revision > data.revision ? previous : data,
+      );
+      setConnected(true);
+      setSyncError("");
+      setLastSync(new Date().toISOString());
+      return data;
+    }
     const response = await fetch(`${API}/state`, {
       headers: { "x-devflow-actor": as },
     });
@@ -109,6 +129,27 @@ export default function App() {
     return data as Snapshot;
   };
   useEffect(() => {
+    if (window.roopre) {
+      let live = true;
+      let timer: ReturnType<typeof setTimeout>;
+      const poll = async () => {
+        try {
+          await refresh(actor);
+        } catch (e) {
+          if (live) {
+            setConnected(false);
+            setSyncError((e as Error).message);
+          }
+        } finally {
+          if (live) timer = setTimeout(() => void poll(), 1000);
+        }
+      };
+      void poll();
+      return () => {
+        live = false;
+        clearTimeout(timer);
+      };
+    }
     saveLocal("actor", actor);
     let active = true;
     let stream: EventSource | undefined;
@@ -158,8 +199,15 @@ export default function App() {
     saveLocal("selected", selected);
   }, [scope, selected]);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      document.documentElement.dataset.theme =
+        theme === "system" ? (media.matches ? "dark" : "light") : theme;
+    };
+    apply();
+    media.addEventListener("change", apply);
     saveLocal("theme", theme);
+    return () => media.removeEventListener("change", apply);
   }, [theme]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -188,6 +236,11 @@ export default function App() {
   const send: Send = async (command) => {
     if (!connected)
       throw new Error("연결이 끊겼습니다. 동기화 후 다시 시도하세요.");
+    if (window.roopre) {
+      const result = await window.roopre.command(command);
+      await refresh();
+      return result;
+    }
     const as = actor;
     const response = await fetch(`${API}/commands`, {
       method: "POST",
@@ -269,13 +322,16 @@ export default function App() {
             <span className="dot" />
             {connected ? "동기화됨" : "연결 확인 중"}
           </span>
-          <button
-            className="icon-button"
-            aria-label={theme === "light" ? "다크 모드" : "라이트 모드"}
-            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+          <select
+            className="theme-select"
+            aria-label="화면 테마"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
           >
-            {theme === "light" ? <Moon size={15} /> : <Sun size={15} />}
-          </button>
+            <option value="system">시스템 설정</option>
+            <option value="light">라이트</option>
+            <option value="dark">다크</option>
+          </select>
         </div>
       </header>
       <div className="shell">
@@ -313,8 +369,11 @@ export default function App() {
             <Nav
               active={scope === "queued" && !selected}
               icon={<Clock3 size={17} />}
-              label="실행 대기"
-              count={snapshot?.runs.filter((r) => r.status === "queued").length}
+              label={window.roopre ? "실행 현황" : "실행 대기"}
+              count={
+                snapshot?.runs.filter((r) => activeStatuses.includes(r.status))
+                  .length
+              }
               onClick={() => navigate("queued")}
             />
           </nav>
@@ -368,37 +427,62 @@ export default function App() {
           </nav>
           <div className="sidebar-bottom">
             <Nav
+              active={scope === "agents" && !selected}
+              icon={<Settings2 size={17} />}
+              label="에이전트 · 개발 흐름"
+              onClick={() => navigate("agents")}
+            />
+            {window.roopre?.onboarding && (
+              <Nav
+                active={false}
+                icon={<CircleDot size={17} />}
+                label="시작 가이드"
+                onClick={() =>
+                  window.dispatchEvent(new Event("roopre:onboarding"))
+                }
+              />
+            )}
+            <Nav
+              active={scope === "runtime" && !selected}
+              icon={<Terminal size={17} />}
+              label="표준 · 연결 · 환경"
+              onClick={() => navigate("runtime")}
+            />
+            <Nav
               active={scope === "policies" && !selected}
               icon={<Settings2 size={17} />}
               label="지침 · 팀 설정"
               onClick={() => navigate("policies")}
             />
-            <div className="profile">
-              <div className="avatar">
-                {actor === "jun" ? "준" : actor === "mina" ? "민" : "소"}
+            {window.roopre ? (
+              <div className="profile">
+                <div className="avatar">나</div>
+                <span>
+                  프로젝트 소유자
+                  <br />
+                  <small>macOS 본인 승인</small>
+                </span>
               </div>
-              <label>
-                <span>개발용 사용자 전환</span>
-                <select
-                  aria-label="개발용 사용자"
-                  value={actor}
-                  onChange={(e) => {
-                    setActor(e.target.value);
-                    setEvents([]);
-                  }}
-                >
-                  <option value="jun">준 · 작성자 / 관리자</option>
-                  <option value="mina">민아 · 검토자</option>
-                  <option value="sora">소라 · 검토자</option>
-                </select>
-              </label>
-            </div>
+            ) : (
+              <div className="profile">
+                <div className="avatar">나</div>
+                <span>
+                  로컬 미리보기
+                  <br />
+                  <small>실제 실행·승인은 맥 앱에서</small>
+                </span>
+              </div>
+            )}
           </div>
         </aside>
         <main className="workspace">
           <div className="dev-strip">
-            <span className="dev-label">M1 개발 빌드</span>샘플 프로젝트 · 실제
-            저장/리뷰 · 에이전트 실행은 M2에서 연결
+            <span className="dev-label">
+              {window.roopre ? "로컬 워크스페이스" : "개발 미리보기"}
+            </span>
+            {window.roopre
+              ? "본인 승인 · 격리 실행 · 고정 품질 기준"
+              : "로컬 미리보기 · 실제 실행은 macOS 앱에서"}
             <span>필수 설계 승인 적용</span>
             <ShieldCheck size={14} />
           </div>
@@ -407,6 +491,12 @@ export default function App() {
               <WifiOff size={16} />
               마지막 동기화 {lastSync ? ago(lastSync) : "미확인"} · 읽기와 초안
               작성만 가능합니다.
+            </div>
+          )}
+          {syncError && (
+            <div className="error-banner" role="alert">
+              연결 복구 중 · {syncError} · 저장된 화면을 유지하며 자동으로 다시
+              연결합니다.
             </div>
           )}
           {error && (
@@ -439,6 +529,18 @@ export default function App() {
               act={act}
               onBack={() => setSelected(null)}
             />
+          ) : scope === "queued" && window.roopre ? (
+            <RunOverview
+              snapshot={snapshot}
+              onSelect={(id) => {
+                saveLocal(`tab:${id}`, "execution");
+                setSelected(id);
+              }}
+            />
+          ) : scope === "agents" ? (
+            <HarnessPanel snapshot={snapshot} send={send} onSaved={refresh} />
+          ) : scope === "runtime" ? (
+            <RuntimeSettings snapshot={snapshot} onSaved={refresh} />
           ) : scope === "policies" ? (
             <PolicyView
               snapshot={snapshot}
@@ -447,6 +549,27 @@ export default function App() {
               act={act}
               connected={connected}
             />
+          ) : !snapshot.projects.length ? (
+            <div className="content-page">
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">시작하기</div>
+                  <h1>내 프로젝트로 시작하세요</h1>
+                  <p>
+                    프로젝트를 만들고 저장소와 AI 연결을 설정한 뒤, 요구사항과
+                    설계부터 진행하세요.
+                  </p>
+                  <button
+                    className="primary spaced"
+                    disabled={!connected}
+                    onClick={() => setModal("project")}
+                  >
+                    <Plus size={16} />
+                    프로젝트 만들기
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
             <>
               <div className="page-heading">
@@ -554,9 +677,12 @@ export default function App() {
                   </div>
                   {visible.map((f) => {
                     const g = snapshot.gates[f.id];
-                    const run = snapshot.runs.find(
-                      (r) => r.featureId === f.id && r.status !== "cancelled",
-                    );
+                    const run = snapshot.runs
+                      .slice()
+                      .reverse()
+                      .find(
+                        (r) => r.featureId === f.id && r.status !== "cancelled",
+                      );
                     return (
                       <button
                         className="feature-row"
@@ -586,11 +712,7 @@ export default function App() {
                           </div>
                         </div>
                         <span className={`status ${run ? "queued" : g.status}`}>
-                          {run
-                            ? run.status === "blocked"
-                              ? "실행 차단"
-                              : "실행 대기"
-                            : labels[g.status]}
+                          {run ? runNames[run.status] : labels[g.status]}
                         </span>
                         <span className="approval-count">
                           <ShieldCheck size={14} />
@@ -754,7 +876,7 @@ export default function App() {
         <CreateDialog
           kind={modal}
           snapshot={snapshot}
-          defaultProject={project?.id || snapshot.projects[0].id}
+          defaultProject={project?.id || snapshot.projects[0]?.id || ""}
           send={send}
           onClose={() => setModal(null)}
           onCreated={(id) => {
@@ -891,7 +1013,7 @@ function FeatureView({
     });
     const next = { ...draft, revision: draft.revision + 1 };
     setDraft(next);
-    localStorage.removeItem(draftKey);
+    localStorage.removeItem(localKey(draftKey));
     return next;
   };
   const publish = async () => {
@@ -903,9 +1025,19 @@ function FeatureView({
     });
     setEdit(false);
   };
-  const reviewer = actor !== f.authorId && !!d?.reviewers.includes(actor);
+  const reviewer =
+    (snapshot.mode === "local-owner" || actor !== f.authorId) &&
+    !!d?.reviewers.includes(actor);
   const myDecision = d?.decisions.find((x) => x.actorId === actor)?.decision;
   const run = snapshot.runs.filter((r) => r.featureId === f.id).at(-1);
+  const executionStage =
+    run?.runtime && !["cancelled", "blocked"].includes(run.status)
+      ? ["verifying", "reviewing"].includes(run.status)
+        ? 3
+        : run.status === "ready_for_merge"
+          ? 4
+          : 2
+      : 1;
   const threadItems = f.threads.filter(
     (t) => threadFilter === "all" || t.status !== "resolved",
   );
@@ -948,16 +1080,36 @@ function FeatureView({
           요구사항
         </span>
         <ChevronRight size={13} />
-        <span className="current">
+        <span className={executionStage === 1 ? "current" : "complete"}>
           <CircleDot size={14} />
           설계 · {labels[g.status]}
         </span>
         <ChevronRight size={13} />
-        <span>구현</span>
+        <span
+          className={
+            executionStage === 2
+              ? "current"
+              : executionStage > 2
+                ? "complete"
+                : ""
+          }
+        >
+          구현{executionStage === 2 && run ? ` · ${runNames[run.status]}` : ""}
+        </span>
         <ChevronRight size={13} />
-        <span>리뷰·테스트</span>
+        <span
+          className={
+            executionStage === 3
+              ? "current"
+              : executionStage > 3
+                ? "complete"
+                : ""
+          }
+        >
+          리뷰·테스트
+        </span>
         <ChevronRight size={13} />
-        <span>결과 검토</span>
+        <span className={executionStage === 4 ? "current" : ""}>결과 검토</span>
       </div>
       <div className="detail-tabs" role="tablist" aria-label="기능 정보">
         {[
@@ -1024,7 +1176,7 @@ function FeatureView({
                   <button
                     className="soft"
                     onClick={() => {
-                      if (!edit && !localStorage.getItem(draftKey))
+                      if (!edit && !localStorage.getItem(localKey(draftKey)))
                         setDraft({
                           body: f.draft.body,
                           requirements: f.draft.requirements,
@@ -1492,6 +1644,8 @@ function FeatureView({
             </>
           )}
         </div>
+      ) : snapshot.mode === "local-owner" ? (
+        <RunPanel snapshot={snapshot} feature={f} send={send} />
       ) : (
         <div className="content-page">
           <div className="execution-heading">
@@ -1682,7 +1836,8 @@ function ThreadCard({
     }
   };
   const canResolve =
-    actor !== f.authorId && latestDesign(f)?.reviewers.includes(actor);
+    (snapshot.mode === "local-owner" || actor !== f.authorId) &&
+    latestDesign(f)?.reviewers.includes(actor);
   return (
     <div className={`thread ${t.status === "resolved" ? "resolved" : ""}`}>
       <div className="thread-meta">
@@ -1820,20 +1975,22 @@ function PolicyView({
   const [draft, setDraft] = useState(p);
   const [busy, setBusy] = useState(false);
   const admin = snapshot.people.find((p) => p.id === actor)?.role === "admin";
-  const [projectId, setProjectId] = useState(snapshot.projects[0].id);
-  const project = snapshot.projects.find((p) => p.id === projectId)!;
-  const [instructions, setInstructions] = useState(project.instructions || "");
-  const [checks, setChecks] = useState(project.requiredChecks.join(", "));
-  const [reviewers, setReviewers] = useState(project.reviewerIds);
+  const [projectId, setProjectId] = useState(snapshot.projects[0]?.id ?? "");
+  const project = snapshot.projects.find((p) => p.id === projectId);
+  const [instructions, setInstructions] = useState(project?.instructions || "");
+  const [checks, setChecks] = useState(
+    project?.requiredChecks.join(", ") ?? "",
+  );
+  const [reviewers, setReviewers] = useState(project?.reviewerIds ?? []);
   useEffect(() => {
-    setInstructions(project.instructions || "");
-    setChecks(project.requiredChecks.join(", "));
-    setReviewers(project.reviewerIds);
+    setInstructions(project?.instructions || "");
+    setChecks(project?.requiredChecks.join(", ") ?? "");
+    setReviewers(project?.reviewerIds ?? []);
   }, [
     projectId,
-    project.requiredChecks.join(","),
-    project.reviewerIds.join(","),
-    project.instructions,
+    project?.requiredChecks.join(","),
+    project?.reviewerIds.join(","),
+    project?.instructions,
   ]);
   useEffect(() => setDraft(p), [p.version]);
   const submit = async (fn: () => Promise<any>, message: string) => {
@@ -1925,8 +2082,15 @@ function PolicyView({
         </section>
         <section>
           <h2>프로젝트별 기준</h2>
+          {!project && (
+            <p className="muted">
+              프로젝트를 만든 뒤 프로젝트별 지침을 설정하세요. 전역 지침은 지금
+              작성할 수 있습니다.
+            </p>
+          )}
           <select
             aria-label="설정할 프로젝트"
+            disabled={!project}
             value={projectId}
             onChange={(e) => setProjectId(e.target.value)}
           >
@@ -1940,14 +2104,14 @@ function PolicyView({
             필수 검사
             <input
               value={checks}
-              readOnly={!admin}
+              readOnly={!admin || !project}
               onChange={(e) => setChecks(e.target.value)}
             />
           </label>
           <label className="field">
             프로젝트 지침
             <textarea
-              readOnly={!admin}
+              readOnly={!admin || !project}
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="프로젝트 구조, 명령, 환경, 도메인 규칙"
@@ -1960,7 +2124,7 @@ function PolicyView({
               <label className="checkbox" key={person.id}>
                 <input
                   type="checkbox"
-                  disabled={!admin}
+                  disabled={!admin || !project}
                   checked={reviewers.includes(person.id)}
                   onChange={(e) =>
                     setReviewers(
@@ -1976,7 +2140,7 @@ function PolicyView({
           {admin && (
             <button
               className="secondary spaced"
-              disabled={!connected || busy || !reviewers.length}
+              disabled={!connected || busy || !project || !reviewers.length}
               onClick={() =>
                 submit(
                   () =>
@@ -2068,7 +2232,7 @@ function CreateDialog({
                     type: "create_project",
                     name: title,
                     description,
-                    reviewerIds: ["mina", "sora"],
+                    reviewerIds: ["owner"],
                   },
             );
             onCreated(result.entityId);

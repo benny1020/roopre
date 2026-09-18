@@ -1,7 +1,7 @@
 import pg from "pg";
 import { createHash } from "node:crypto";
 import { apply, DomainError } from "../domain/index.ts";
-import { seed } from "./seed.ts";
+import { emptyWorkspace } from "./initial.ts";
 import {
   gate,
   type Workspace,
@@ -18,8 +18,24 @@ export class Store {
   constructor(
     public key = "team-local",
     url = databaseUrl,
+    public mode: "development-fixture" | "local-owner" = "development-fixture",
+    private initialize: typeof emptyWorkspace = emptyWorkspace,
   ) {
-    this.pool = new pg.Pool({ connectionString: url, max: 8 });
+    this.pool = new pg.Pool({
+      connectionString: url,
+      max: 8,
+      connectionTimeoutMillis: 5000,
+      statement_timeout: 15000,
+      lock_timeout: 5000,
+      idle_in_transaction_session_timeout: 15000,
+    });
+    // pg emits background errors when Docker/DB restarts. An unhandled event
+    // would terminate the app; failed foreground operations still reject.
+    this.pool.on("error", () => {
+      console.error(
+        "PostgreSQL 연결이 끊어졌습니다. 다음 요청에서 재연결합니다.",
+      );
+    });
   }
   async init() {
     await this.pool
@@ -27,9 +43,10 @@ export class Store {
       CREATE TABLE IF NOT EXISTS events (sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, workspace_id text NOT NULL REFERENCES workspaces(id), type text NOT NULL, actor_id text NOT NULL, feature_id text, at timestamptz NOT NULL DEFAULT now(), revision integer NOT NULL);
       CREATE INDEX IF NOT EXISTS events_workspace ON events(workspace_id, sequence);
       CREATE TABLE IF NOT EXISTS commands (workspace_id text NOT NULL REFERENCES workspaces(id), request_id text NOT NULL, actor_id text NOT NULL, digest text NOT NULL, command jsonb NOT NULL, response jsonb NOT NULL, PRIMARY KEY(workspace_id,request_id));`);
+    const initial = this.initialize(this.key, this.mode);
     await this.pool.query(
       "INSERT INTO workspaces(id,state) VALUES($1,$2) ON CONFLICT DO NOTHING",
-      [this.key, JSON.stringify(seed())],
+      [this.key, JSON.stringify(initial)],
     );
   }
   authorize(state: Workspace, actorId: string) {
@@ -54,11 +71,16 @@ export class Store {
       gates: Object.fromEntries(
         state.features.map((f) => [f.id, gate(state, f)]),
       ),
-      mode: "development-fixture",
-      runnerConnected: false,
+      mode: this.mode,
+      runnerConnected: this.mode === "local-owner",
     };
   }
-  async execute(actorId: string, requestId: string, command: Command) {
+  async execute(
+    actorId: string,
+    requestId: string,
+    command: Command,
+    proof?: { binding: string; authentication: "macos-owner" },
+  ) {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -87,7 +109,7 @@ export class Store {
         await client.query("COMMIT");
         return prior.response;
       }
-      const result = apply(state, actorId, command);
+      const result = apply(state, actorId, command, proof);
       await client.query("UPDATE workspaces SET state=$2 WHERE id=$1", [
         this.key,
         JSON.stringify(state),
@@ -149,6 +171,34 @@ export class Store {
       at: r.at.toISOString(),
       revision: r.revision,
     }));
+  }
+  async mutate(fn: (state: Workspace) => void) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const state = (
+        await client.query(
+          "SELECT state FROM workspaces WHERE id=$1 FOR UPDATE",
+          [this.key],
+        )
+      ).rows[0].state as Workspace;
+      fn(state);
+      state.revision++;
+      await client.query("UPDATE workspaces SET state=$2 WHERE id=$1", [
+        this.key,
+        JSON.stringify(state),
+      ]);
+      await client.query(
+        "INSERT INTO events(workspace_id,type,actor_id,revision) VALUES($1,'runtime','runner',$2)",
+        [this.key, state.revision],
+      );
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
   }
   async close() {
     await this.pool.end();
