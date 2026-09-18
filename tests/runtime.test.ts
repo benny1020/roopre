@@ -16,6 +16,7 @@ import {
 import { sameToken, startBroker } from "../src/runner/broker.ts";
 import { Store } from "../src/database/store.ts";
 import { createApp } from "../src/server/app.ts";
+import { RunnerManager } from "../src/runner/manager.ts";
 const profile = {
   repositoryPath: "/repo",
   baseBranch: "main",
@@ -479,4 +480,39 @@ test("broker forwards stream and host credential while redacting gateway failure
   } finally {
     broker.close();
   }
+});
+
+test("an unconfirmed prior container occupies the project slot even after failure", async () => {
+  const { w, f, review } = fixture();
+  apply(w, "jun", review, {
+    authentication: "macos-owner",
+    binding: approvalBinding(w, f),
+  });
+  apply(w, "jun", {
+    type: "queue_run",
+    featureId: f.id,
+    designId: review.designId,
+  });
+  const queued = w.runs[0];
+  const other = structuredClone(f);
+  other.id = "another-feature";
+  w.features.push(other);
+  const old = structuredClone(queued);
+  old.id = "run-aaaaaaaa-aaaa";
+  old.featureId = other.id;
+  old.status = "blocked";
+  old.runtime!.terminationConfirmed = false;
+  w.runs.push(old);
+  const store = {
+    mutate: async (fn: (w: Workspace) => void) => fn(w),
+  } as unknown as Store;
+  const runner = new RunnerManager(
+    store,
+    {} as ConnectionVault,
+    "/unused",
+    "/unused",
+  );
+  await runner.execute(queued.id, new AbortController());
+  assert.equal(queued.status, "queued");
+  assert.equal(queued.runtime?.lease, undefined);
 });

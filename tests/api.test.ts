@@ -28,6 +28,55 @@ test("PostgreSQL API: authorization, atomic competing edits, idempotency, approv
       payload: { requestId, command: c },
     });
   await t.test(
+    "untrusted origins and DNS-rebound hosts cannot read or mutate the local fixture",
+    async () => {
+      for (const headers of [
+        { host: "attacker.invalid", "x-devflow-actor": "mina" },
+        { origin: "null", "x-devflow-actor": "mina" },
+        { origin: "https://attacker.invalid", "x-devflow-actor": "mina" },
+      ]) {
+        assert.equal(
+          (await app.inject({ url: "/state", headers })).statusCode,
+          403,
+        );
+        assert.equal(
+          (
+            await app.inject({
+              method: "POST",
+              url: "/commands",
+              headers,
+              payload: {},
+            })
+          ).statusCode,
+          403,
+        );
+      }
+      assert.equal(
+        (
+          await app.inject({
+            url: "/state",
+            headers: {
+              origin: "http://127.0.0.1:4317",
+              "x-devflow-actor": "mina",
+            },
+          })
+        ).statusCode,
+        200,
+      );
+      assert.equal(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/commands",
+            headers: { "content-type": "application/json" },
+            payload: JSON.stringify({ body: "x".repeat(160000) }),
+          })
+        ).statusCode,
+        413,
+      );
+    },
+  );
+  await t.test(
     "T01: reads are shared by two human identities, forbidden outside team",
     async () => {
       const a = await app.inject({

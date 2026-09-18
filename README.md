@@ -10,6 +10,8 @@
 
 ## 시작하기
 
+외부 배포 준비 상태·설치 파일 검증·남은 결정은 [배포 안내](docs/DISTRIBUTION.md)를 확인하세요. `0.2.1-beta.1`은 품질 보강 중인 베타 후보이며 아직 공개 배포 완료 버전이 아닙니다.
+
 준비: Apple Silicon macOS, Node.js 24, pnpm 11.0.4, Xcode Command Line Tools, 실행 중인 Docker Desktop.
 
 ```bash
@@ -70,18 +72,21 @@ electron.vite.config.ts  main/preload/renderer 빌드
 
 ## 명령
 
-| 명령                | 용도                                                |
-| ------------------- | --------------------------------------------------- |
-| `pnpm dev`          | 로컬 API + Electron 개발 앱                         |
-| `pnpm server`       | 로컬 API만 시작                                     |
-| `pnpm dev:web`      | 같은 renderer를 브라우저에서 확인; API 별도 실행    |
-| `pnpm check`        | 포맷·문서 링크·타입·빌드·실제 DB 테스트             |
-| `pnpm test`         | 도메인·API 테스트; 실행 중인 DB 필요                |
-| `pnpm build:mac`    | `release/루프리-darwin-arm64/루프리.app` 생성       |
-| `pnpm start`        | 빌드된 Electron 앱 실행; DB/Docker 별도 필요        |
-| `pnpm runner:image` | Claude Code·Playwright 실행 이미지 준비             |
-| `pnpm test:runner`  | 실제 Docker + 가짜 Claude 계약 검사; DB/이미지 필요 |
-| `pnpm test:web`     | 실제 renderer/DB + 테스트용 IPC 브라우저 시나리오   |
+| 명령                | 용도                                                                     |
+| ------------------- | ------------------------------------------------------------------------ |
+| `pnpm dev`          | 로컬 API + Electron 개발 앱                                              |
+| `pnpm server`       | 로컬 API만 시작                                                          |
+| `pnpm dev:web`      | 같은 renderer를 브라우저에서 확인; API 별도 실행                         |
+| `pnpm check`        | 포맷·문서 링크·타입·빌드·실제 DB 테스트                                  |
+| `pnpm test`         | 도메인·API 테스트; 실행 중인 DB 필요                                     |
+| `pnpm build:mac`    | `release/<version>/`에 미공증 앱·ZIP·체크섬 생성                         |
+| `pnpm start`        | 빌드된 Electron 앱 실행; DB/Docker 별도 필요                             |
+| `pnpm runner:image` | Claude Code·Playwright 실행 이미지 준비                                  |
+| `pnpm test:runner`  | 실제 Docker + 가짜 Claude 계약 검사; DB/이미지 필요                      |
+| `pnpm test:web`     | 실제 renderer/DB + 테스트용 IPC 브라우저 시나리오                        |
+| `pnpm test:desktop` | 실제 Electron 시작 실패·재연결·종료, 응답은 fixture                      |
+| `pnpm verify:mac`   | 패키지 파일·보안 fuse·서명 무결성 검사                                   |
+| `pnpm release:mac`  | Developer ID·Keychain profile 필요. 서명·공증 후 ZIP 생성, 게시하지 않음 |
 
 패키지는 개발용 미공증 빌드입니다. 앱에 DB 클라이언트·실행기를 포함하지만 PostgreSQL과 Docker는 별도로 실행해야 합니다. GitHub의 **macOS package** 워크플로우에서도 수동 빌드를 할 수 있으며 공개 GitHub Release를 자동 발행하지 않습니다.
 

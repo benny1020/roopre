@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 export async function command(
   file: string,
   args: string[],
@@ -11,7 +12,11 @@ export async function command(
     env?: NodeJS.ProcessEnv;
   } = {},
 ) {
-  return new Promise<{ code: number; output: string }>((resolve, reject) => {
+  return new Promise<{
+    code: number;
+    output: string;
+    outputTruncated: boolean;
+  }>((resolve, reject) => {
     const child = spawn(file, args, {
       cwd: options.cwd,
       env: options.env ?? {
@@ -33,6 +38,13 @@ export async function command(
       pending = "";
     let settled = false;
     let terminated = false;
+    let outputTruncated = false;
+    const stdoutDecoder = new StringDecoder("utf8");
+    const stderrDecoder = new StringDecoder("utf8");
+    const append = (text: string) => {
+      if (output.length + text.length > 200000) outputTruncated = true;
+      output = (output + text).slice(-200000);
+    };
     let forceStop: ReturnType<typeof setTimeout> | undefined;
     const stop = () => {
       if (settled || terminated) return;
@@ -50,8 +62,8 @@ export async function command(
     options.signal?.addEventListener("abort", stop, { once: true });
     if (options.signal?.aborted) stop();
     const add = (b: Buffer) => {
-      const t = b.toString();
-      output = (output + t).slice(-200000);
+      const t = stdoutDecoder.write(b);
+      append(t);
       pending += t;
       const lines = pending.split("\n");
       pending = lines.pop()!.slice(-200000);
@@ -59,7 +71,7 @@ export async function command(
     };
     child.stdout.on("data", add);
     child.stderr.on("data", (b: Buffer) => {
-      output = (output + b.toString()).slice(-200000);
+      append(stderrDecoder.write(b));
     });
     child.stdin.on("error", () => {});
     child.stdin.end(options.input);
@@ -79,8 +91,15 @@ export async function command(
       if (!settled) {
         settled = true;
         cleanup();
+        const tail = stdoutDecoder.end();
+        append(tail + stderrDecoder.end());
+        pending += tail;
         if (pending) options.onLine?.(pending);
-        resolve({ code: terminated ? -1 : (code ?? -1), output });
+        resolve({
+          code: terminated ? -1 : (code ?? -1),
+          output,
+          outputTruncated,
+        });
       }
     });
   });
@@ -105,5 +124,9 @@ export async function git(cwd: string, ...args: string[]) {
   });
   if (r.code !== 0)
     throw Error(`Git ${args[0]} 실패. 저장소·브랜치·권한을 확인하세요.`);
+  if (r.outputTruncated)
+    throw Error(
+      "Git 출력이 검토 한도를 넘었습니다. 일부 파일만 검사하지 않도록 실행을 중지합니다. 작업 범위를 줄이세요.",
+    );
   return r.output.trim();
 }

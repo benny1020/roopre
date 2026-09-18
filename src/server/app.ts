@@ -7,8 +7,22 @@ import { DomainError } from "../domain/index.ts";
 
 export async function createApp(store: Store) {
   const app = Fastify({ logger: false, bodyLimit: 150000 });
+  const origins = ["http://127.0.0.1:4317", "http://localhost:4317"];
+  app.addHook("onRequest", async (request, reply) => {
+    // CORS alone does not stop requests. This is a loopback development fixture,
+    // never an authenticated server for other sites or DNS-rebound hosts.
+    if (
+      !/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(request.headers.host ?? "") ||
+      (request.headers.origin !== undefined &&
+        !origins.includes(request.headers.origin))
+    )
+      return reply.status(403).send({
+        code: "forbidden_origin",
+        message: "로컬 개발 화면에서만 접근할 수 있습니다.",
+      });
+  });
   await app.register(cors, {
-    origin: ["http://127.0.0.1:4317", "http://localhost:4317", "null"],
+    origin: origins,
     methods: ["GET", "POST"],
   });
   app.setErrorHandler((error, _request, reply) => {
@@ -30,7 +44,12 @@ export async function createApp(store: Store) {
         code: "invalid_json",
         message: "JSON 요청 형식을 확인하세요.",
       });
-    console.error(error);
+    if ((error as { statusCode?: number }).statusCode === 413)
+      return reply.status(413).send({
+        code: "payload_too_large",
+        message: "요청 크기 한도를 넘었습니다.",
+      });
+    console.error("Roopre 개발 API 요청 처리 실패");
     return reply.status(500).send({
       code: "internal_error",
       message: "저장하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
@@ -79,10 +98,7 @@ export async function createApp(store: Store) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
-      ...(origin &&
-      ["http://127.0.0.1:4317", "http://localhost:4317", "null"].includes(
-        origin,
-      )
+      ...(origin && origins.includes(origin)
         ? { "Access-Control-Allow-Origin": origin }
         : {}),
     });

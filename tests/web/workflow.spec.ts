@@ -70,6 +70,33 @@ test.beforeEach(async ({ page, store }) => {
   await page.goto("/");
   await expect(page.getByText("동기화됨", { exact: true })).toBeVisible();
 });
+
+test("temporary database loss preserves the last screen and clears the warning on reconnect", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: /^표준 · 연결/ }).click();
+  let calls = 0;
+  await page.route("**/__test/snapshot", async (route) => {
+    if (++calls <= 2)
+      await route.fulfill({
+        status: 503,
+        json: { error: "fixture DB unavailable" },
+      });
+    else await route.fallback();
+  });
+  await expect(
+    page.getByRole("alert").filter({ hasText: "연결 복구 중" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "표준 · 연결 · 실행 환경" }),
+  ).toBeVisible();
+  await expect(page.getByText("동기화됨", { exact: true })).toBeVisible({
+    timeout: 10000,
+  });
+  await expect(
+    page.getByRole("alert").filter({ hasText: "연결 복구 중" }),
+  ).toHaveCount(0);
+});
 test("theme choice persists and system mode follows OS appearance", async ({
   page,
 }) => {

@@ -86,6 +86,7 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [lastSync, setLastSync] = useState("");
   const [error, setError] = useState("");
+  const [syncError, setSyncError] = useState("");
   const [notice, setNotice] = useState("");
   const [view, setView] = useState(readLocal("view", "list"));
   useEffect(() => saveLocal("view", view), [view]);
@@ -106,8 +107,11 @@ export default function App() {
   const refresh = async (as = actor) => {
     if (window.roopre) {
       const data = await window.roopre.snapshot();
-      setSnapshot(data);
+      setSnapshot((previous) =>
+        previous && previous.revision > data.revision ? previous : data,
+      );
       setConnected(true);
+      setSyncError("");
       setLastSync(new Date().toISOString());
       return data;
     }
@@ -128,18 +132,23 @@ export default function App() {
   useEffect(() => {
     if (window.roopre) {
       let live = true;
-      const poll = () => {
-        if (live)
-          void refresh(actor).catch((e) => {
+      let timer: ReturnType<typeof setTimeout>;
+      const poll = async () => {
+        try {
+          await refresh(actor);
+        } catch (e) {
+          if (live) {
             setConnected(false);
-            setError(e.message);
-          });
+            setSyncError((e as Error).message);
+          }
+        } finally {
+          if (live) timer = setTimeout(() => void poll(), 1000);
+        }
       };
-      poll();
-      const timer = setInterval(poll, 1000);
+      void poll();
       return () => {
         live = false;
-        clearInterval(timer);
+        clearTimeout(timer);
       };
     }
     saveLocal("actor", actor);
@@ -479,6 +488,12 @@ export default function App() {
               <WifiOff size={16} />
               마지막 동기화 {lastSync ? ago(lastSync) : "미확인"} · 읽기와 초안
               작성만 가능합니다.
+            </div>
+          )}
+          {syncError && (
+            <div className="error-banner" role="alert">
+              연결 복구 중 · {syncError} · 저장된 화면을 유지하며 자동으로 다시
+              연결합니다.
             </div>
           )}
           {error && (

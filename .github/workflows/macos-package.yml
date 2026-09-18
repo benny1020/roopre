@@ -1,6 +1,7 @@
 name: macOS package
 on:
   workflow_dispatch:
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -16,9 +17,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:mac
-      - run: ditto -c -k --sequesterRsrc --keepParent release/루프리-darwin-arm64/루프리.app release/roopre-macos-arm64.zip
+      - run: pnpm test:desktop
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: roopre-macos-arm64-unsigned
-          path: release/roopre-macos-arm64.zip
+          path: |
+            release/*/*.zip
+            release/*/*.sha256
+            release/*/build-manifest.json
           retention-days: 7

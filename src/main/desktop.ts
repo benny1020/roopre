@@ -13,9 +13,17 @@ import { ConnectionVault } from "./connections/vault.ts";
 import { authenticateOwner } from "./approval/native.ts";
 import { RunnerManager } from "../runner/manager.ts";
 import { command, git } from "../runner/process.ts";
+import { trustedRenderer } from "./security.ts";
 export async function installDesktop() {
   const store = new Store("roopre-owner-v02", undefined, "local-owner");
-  await store.init();
+  try {
+    await store.init();
+  } catch {
+    await store.close();
+    throw Error(
+      "PostgreSQL에 연결하지 못했습니다. 설치 안내의 DB 시작 단계를 확인하세요. 기존 데이터는 삭제하지 않습니다.",
+    );
+  }
   const resources = join(app.getAppPath(), "resources");
   const helper = app.isPackaged
     ? join(process.resourcesPath, "roopre-approve")
@@ -31,14 +39,19 @@ export async function installDesktop() {
       decrypt: (b) => safeStorage.decryptString(b),
     },
   );
-  await vault.init();
   const runner = new RunnerManager(
     store,
     vault,
     join(app.getPath("userData"), "runs"),
     app.isPackaged ? process.resourcesPath : resources,
   );
-  await runner.init();
+  try {
+    await vault.init();
+    await runner.init();
+  } catch (error) {
+    await store.close();
+    throw error;
+  }
   let authenticating = false;
   ipcMain.handle(
     "roopre:request",
@@ -49,10 +62,11 @@ export async function installDesktop() {
         !sender ||
         event.senderFrame !== event.sender.mainFrame ||
         !url ||
-        !(app.isPackaged
-          ? url.startsWith("file://")
-          : url.startsWith("http://127.0.0.1:4317/") ||
-            url.startsWith("http://localhost:4317/"))
+        !trustedRenderer(
+          url,
+          join(app.getAppPath(), "out/renderer/index.html"),
+          !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
+        )
       )
         return { ok: false, error: "허용되지 않은 앱 요청입니다." };
       try {

@@ -17,6 +17,7 @@ import { gate, type Run, type Workspace } from "../shared/contracts.ts";
 import { approvalBinding } from "../domain/runtime.ts";
 import { command, git } from "./process.ts";
 import { startBroker } from "./broker.ts";
+import { readWorkspaceFile } from "./files.ts";
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
   private busy = false;
@@ -210,14 +211,17 @@ export class RunnerManager {
       const r = w.runs.find((r) => r.id === id);
       if (!r?.runtime || r.status !== "queued") return;
       const f = w.features.find((f) => f.id === r.featureId)!;
-      const running = w.runs.filter((x) =>
-        [
-          "preparing",
-          "implementing",
-          "verifying",
-          "reviewing",
-          "repairing",
-        ].includes(x.status),
+      const running = w.runs.filter(
+        (x) =>
+          x.id !== id &&
+          (x.runtime?.terminationConfirmed === false ||
+            [
+              "preparing",
+              "implementing",
+              "verifying",
+              "reviewing",
+              "repairing",
+            ].includes(x.status)),
       );
       if (
         running.length >= 2 ||
@@ -327,7 +331,9 @@ export class RunnerManager {
               h.update("SYMLINK");
               continue;
             }
-            h.update(await readFile(join(checkout, p)));
+            h.update(
+              await readWorkspaceFile(checkout, p, 20_000_000, abort.signal),
+            );
           } catch {
             h.update("MISSING");
           }
@@ -664,13 +670,21 @@ export class RunnerManager {
           await this.update(id, (r) => {
             r.runtime!.evidence.push(evidence.at(-1)!);
           });
+          if (test.code === -1) {
+            // Killing docker exec's client does not kill the container's process.
+            // Leave this attempt immediately; finally destroys and verifies it.
+            throw Error(
+              `검사 ${check.name} 시간 한도 또는 중단: 컨테이너를 종료하고 후속 검사를 중지합니다.`,
+            );
+          }
         }
         await createContainer(true);
         const artifactRoot = join(area, "artifacts");
         const artifacts = await archiveArtifacts(
           checkout,
           artifactRoot,
-          await collectArtifacts(checkout, attempt + 1),
+          await collectArtifacts(checkout, attempt + 1, abort.signal),
+          abort.signal,
         );
         await this.update(id, (r) => {
           r.runtime!.artifactRoot = artifactRoot;

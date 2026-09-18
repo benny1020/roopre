@@ -20,7 +20,21 @@ export class Store {
     url = databaseUrl,
     public mode: "development-fixture" | "local-owner" = "development-fixture",
   ) {
-    this.pool = new pg.Pool({ connectionString: url, max: 8 });
+    this.pool = new pg.Pool({
+      connectionString: url,
+      max: 8,
+      connectionTimeoutMillis: 5000,
+      statement_timeout: 15000,
+      lock_timeout: 5000,
+      idle_in_transaction_session_timeout: 15000,
+    });
+    // pg emits background errors when Docker/DB restarts. An unhandled event
+    // would terminate the app; failed foreground operations still reject.
+    this.pool.on("error", () => {
+      console.error(
+        "PostgreSQL 연결이 끊어졌습니다. 다음 요청에서 재연결합니다.",
+      );
+    });
   }
   async init() {
     await this.pool

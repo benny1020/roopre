@@ -1,4 +1,12 @@
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  writeFile,
+  rename,
+  rm,
+  lstat,
+} from "node:fs/promises";
+import { z } from "zod";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
@@ -22,6 +30,26 @@ export type Cipher = {
   decrypt: (b: Buffer) => string;
 };
 type VaultRecord = { info: ConnectionInfo; sealed: string };
+const recordsSchema = z
+  .array(
+    z.object({
+      info: connectionInputSchema.omit({ key: true }).extend({
+        id: z.string().uuid(),
+        version: z.number().int().positive(),
+        hasKey: z.literal(true),
+        testedAt: z.string().datetime().optional(),
+        testStatus: z.enum(["passed", "failed"]).optional(),
+        diagnostic: z.string().max(2000).optional(),
+      }),
+      sealed: z
+        .string()
+        .min(1)
+        .max(50000)
+        .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+    }),
+  )
+  .max(100)
+  .refine((rows) => new Set(rows.map((r) => r.info.id)).size === rows.length);
 export class ConnectionVault {
   private records: VaultRecord[] = [];
   private chain = Promise.resolve();
@@ -32,7 +60,13 @@ export class ConnectionVault {
   async init() {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
     try {
-      this.records = JSON.parse(await readFile(this.path, "utf8"));
+      const stat = await lstat(this.path);
+      if (!stat.isFile() || stat.size > 6_000_000) throw Error("Invalid vault");
+      const records = recordsSchema.parse(
+        JSON.parse(await readFile(this.path, "utf8")),
+      );
+      for (const record of records) validateEndpoint(record.info.endpoint);
+      this.records = records;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT")
         throw Error(
@@ -54,14 +88,17 @@ export class ConnectionVault {
   private async change(fn: () => void) {
     const work = this.chain.then(async () => {
       const previous = structuredClone(this.records);
+      const temp = `${this.path}.${randomUUID()}.tmp`;
       try {
         fn();
-        const temp = `${this.path}.${randomUUID()}.tmp`;
+        recordsSchema.parse(this.records);
         await writeFile(temp, JSON.stringify(this.records), { mode: 0o600 });
         await rename(temp, this.path);
       } catch (e) {
         this.records = previous;
         throw e;
+      } finally {
+        await rm(temp, { force: true }).catch(() => {});
       }
     });
     this.chain = work.catch(() => {});
@@ -133,17 +170,18 @@ export class ConnectionVault {
         await response.body?.cancel();
       } else {
         const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
         let body = "";
         while (true) {
           const r = await reader.read();
           if (r.done) break;
-          body += new TextDecoder().decode(r.value);
+          body += decoder.decode(r.value, { stream: true });
           if (body.length > 64000) {
             await reader.cancel();
             throw Error();
           }
         }
-        const data = JSON.parse(body);
+        const data = JSON.parse(body + decoder.decode());
         passed = data.type === "message" && Array.isArray(data.content);
         diagnostic = passed
           ? "인증·모델 응답 확인. 스트리밍·도구 실행은 실제 실행 시 추가 검증합니다."

@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import ErrorBoundary from "./ErrorBoundary";
 
 try {
   const theme = JSON.parse(localStorage.getItem("theme") || '"system"');
@@ -11,4 +12,8 @@ try {
       ? "dark"
       : "light";
 } catch {}
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+);

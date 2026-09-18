@@ -53,11 +53,14 @@ export async function startBroker(
       if (!res.writableEnded) controller.abort();
     });
     try {
-      let body = "";
+      const chunks: Buffer[] = [];
+      let bytes = 0;
       for await (const chunk of req) {
-        body += chunk;
-        if (body.length > 8_000_000) throw Error("size");
+        bytes += chunk.length;
+        if (bytes > 8_000_000) throw Error("size");
+        chunks.push(chunk);
       }
+      const body = Buffer.concat(chunks, bytes).toString("utf8");
       const parsed = JSON.parse(body);
       if (parsed.model !== info.model) {
         res.writeHead(403).end();

@@ -302,6 +302,98 @@ test(
         "preserved checkpoint",
       );
       assert.equal(await git(repo, "rev-parse", "HEAD"), base);
+      // A timed-out exec must stop the attempt, destroy its process and never
+      // overlap the next check. This fixture never contacts a real model.
+      await store.execute("owner", randomUUID(), {
+        type: "configure_execution",
+        projectId: "first-project",
+        profile: {
+          ...resumed.runtime!.profile,
+          checks: [
+            {
+              name: "typecheck",
+              argv: [
+                "node",
+                "-e",
+                "setTimeout(()=>require('fs').writeFileSync('late-write.txt','orphan'),8000);setInterval(()=>{},1000)",
+              ],
+              timeoutSeconds: 5,
+            },
+            {
+              name: "test",
+              argv: [
+                "node",
+                "-e",
+                "require('fs').writeFileSync('next-check.txt','should not run')",
+              ],
+              timeoutSeconds: 5,
+            },
+          ],
+        },
+      });
+      const created = await store.execute("owner", randomUUID(), {
+        type: "create_feature",
+        projectId: "first-project",
+        title: "Timeout isolation",
+        template: "feature",
+        requirements: "AC01 create hello.txt with the expected fixture content",
+      });
+      await store.execute("owner", randomUUID(), {
+        type: "save_draft",
+        featureId: created.entityId!,
+        expectedRevision: 0,
+        requirements: "AC01 create hello.txt with the expected fixture content",
+        body: sections
+          .map((s) => `## ${s}\nFixture evidence for ${s}`)
+          .join("\n\n"),
+      });
+      await store.execute("owner", randomUUID(), {
+        type: "publish_design",
+        featureId: created.entityId!,
+        expectedRevision: 1,
+      });
+      state = await store.read("owner");
+      feature = state.features.find((f) => f.id === created.entityId)!;
+      await store.execute(
+        "owner",
+        randomUUID(),
+        {
+          type: "review",
+          featureId: feature.id,
+          designId: feature.designs[0].id,
+          checked: [...sections],
+          decision: "approve",
+        },
+        {
+          authentication: "macos-owner",
+          binding: approvalBinding(state, feature),
+        },
+      );
+      runId = (
+        await store.execute("owner", randomUUID(), {
+          type: "queue_run",
+          featureId: feature.id,
+          designId: feature.designs[0].id,
+        })
+      ).entityId!;
+      await runner.execute(runId, new AbortController());
+      const timedOut = (await store.read("owner")).runs.find(
+        (r) => r.id === runId,
+      )!;
+      assert.equal(timedOut.status, "failed");
+      assert.match(timedOut.reason, /시간 한도/);
+      assert.equal(timedOut.runtime!.terminationConfirmed, true);
+      assert.deepEqual(
+        timedOut.runtime!.evidence.map((e) => e.name),
+        ["typecheck"],
+      );
+      assert.equal(timedOut.runtime!.evidence[0].code, -1);
+      await new Promise((resolve) => setTimeout(resolve, 3500));
+      for (const name of ["late-write.txt", "next-check.txt"])
+        await assert.rejects(
+          readFile(join(timedOut.runtime!.worktree!, name)),
+          { code: "ENOENT" },
+        );
     } finally {
       await runner?.stop();
       if (runId) await runner?.cleanup(runId);
