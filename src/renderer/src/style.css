@@ -1967,3 +1967,196 @@ kbd {
   outline: 2px solid var(--blue);
   outline-offset: 3px;
 }
+
+.package-settings {
+  max-width: 1400px;
+}
+.package-settings button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.package-settings button.primary {
+  background: var(--blue);
+  color: var(--surface);
+}
+.package-settings button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.package-settings button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.package-toolbar {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) 2fr;
+  align-items: end;
+  gap: 16px;
+  margin: 20px 0;
+}
+.package-installed {
+  padding: 16px;
+  border-left: 3px solid var(--green);
+  background: var(--green-wash);
+  display: grid;
+  gap: 8px;
+}
+.package-settings code {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.package-settings pre {
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--bg);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  max-height: 420px;
+  font-size: 12px;
+}
+.package-git {
+  margin: 20px 0;
+  padding: 14px 0;
+  border-block: 1px solid var(--line);
+}
+.package-settings summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.package-empty {
+  padding: 40px 0;
+  color: var(--muted);
+}
+.package-candidate {
+  margin-top: 24px;
+}
+.package-candidate small {
+  color: var(--muted);
+  font-size: 14px;
+}
+.package-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 20px 0;
+}
+.package-tabs button[aria-pressed="true"] {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-wash);
+}
+.package-browser {
+  display: grid;
+  grid-template-columns: minmax(160px, 27%) minmax(0, 1fr);
+  gap: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+.package-browser nav {
+  max-height: 550px;
+  overflow: auto;
+}
+.package-browser nav button {
+  display: block;
+  text-align: left;
+  width: 100%;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  border: 0;
+  margin-bottom: 4px;
+}
+.package-browser nav button.selected {
+  color: var(--blue);
+  background: var(--blue-wash);
+}
+.package-browser textarea {
+  display: block;
+  width: 100%;
+  min-height: 220px;
+  margin: 12px 0;
+}
+.package-code {
+  min-height: 450px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+.package-stages {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 16px 0;
+  overflow: hidden;
+}
+.package-stages section {
+  padding: 12px;
+  border-right: 1px solid var(--line);
+}
+.package-stages section:last-child {
+  border-right: 0;
+}
+.package-stages h3 {
+  font-size: 14px;
+  color: var(--blue);
+}
+.package-stages p {
+  margin: 12px 0;
+  font-size: 12px;
+}
+.package-stages small {
+  display: block;
+  color: var(--muted);
+}
+.package-overview table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.package-overview th,
+.package-overview td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.package-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+}
+.package-warning {
+  padding: 12px;
+  background: var(--amber-wash);
+  color: var(--amber);
+}
+.package-scopes {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 1150px) {
+  .package-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .package-stages {
+    grid-template-columns: 1fr;
+  }
+  .package-stages section {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .package-browser {
+    grid-template-columns: 1fr;
+  }
+  .package-browser nav {
+    max-height: 180px;
+  }
+}

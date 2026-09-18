@@ -1,3 +1,9 @@
+import { applyPackage } from "./harness-package.ts";
+import {
+  packageInstructions,
+  profileOf,
+  packageLimitIssues,
+} from "../shared/harness-package.ts";
 import {
   latestAgents,
   resolveHarness,
@@ -59,7 +65,7 @@ function reviewers(w: Workspace, ids: string[]) {
 export function effectivePolicy(w: Workspace, f: Feature) {
   const p = w.policies.at(-1)!;
   const project = w.projects.find((p) => p.id === f.projectId)!;
-  return `전역 v${p.version}\n${p.global}\n\n프로젝트: ${project.name}\n${project.instructions || "추가 지침 없음"}\n필수 검사: ${[...new Set([...p.requiredChecks, ...project.requiredChecks])].join(", ")}\n\n설계 단계\n${p.design}\n\n구현 단계\n${p.implementation}\n\n리뷰 역할\n${p.reviewer}\n\n이번 기능\n${latestDesign(f)?.requirements || f.draft.requirements}`;
+  return `${packageInstructions(project.harness, f.harnessScope)}\n\n전역 v${p.version}\n${p.global}\n\n프로젝트: ${project.name}\n${project.instructions || "추가 지침 없음"}\n필수 검사: ${[...new Set([...p.requiredChecks, ...project.requiredChecks])].join(", ")}\n\n설계 단계\n${p.design}\n\n구현 단계\n${p.implementation}\n\n리뷰 역할\n${p.reviewer}\n\n이번 기능\n${latestDesign(f)?.requirements || f.draft.requirements}`;
 }
 
 export function apply(
@@ -90,12 +96,58 @@ export function apply(
     );
   let entityId: string | undefined;
   switch (c.type) {
+    case "apply_harness_package": {
+      requireThat(
+        actor.role === "admin",
+        "forbidden",
+        "관리자만 표준을 적용할 수 있습니다.",
+        403,
+      );
+      applyPackage(w, c);
+      break;
+    }
+    case "set_feature_scope": {
+      canEdit();
+      requireThat(
+        w.revision === c.expectedRevision,
+        "revision_conflict",
+        "상태가 변경됐습니다. 다시 확인하세요.",
+      );
+      const p = w.projects.find((p) => p.id === f!.projectId)!;
+      requireThat(
+        !c.scopeId ||
+          (p.harness &&
+            profileOf(p.harness).scopes.some((s) => s.id === c.scopeId)),
+        "invalid_scope",
+        "기능 범위가 없습니다.",
+      );
+      requireThat(
+        !w.runs.some(
+          (r) =>
+            r.featureId === f!.id &&
+            (activeStatuses.includes(r.status) ||
+              r.runtime?.terminationConfirmed === false),
+        ),
+        "active_run",
+        "기능 실행을 먼저 종료하세요.",
+      );
+      f!.harnessScope = c.scopeId;
+      if (latestDesign(f!)) latestDesign(f!)!.decisions = [];
+      break;
+    }
     case "save_agent": {
       requireThat(
         actor.role === "admin",
         "forbidden",
         "관리자만 에이전트를 수정할 수 있습니다.",
         403,
+      );
+      requireThat(
+        !w.projects.some((p) =>
+          Object.values(p.harness?.agents ?? {}).includes(c.agent.id),
+        ),
+        "standard_managed",
+        "공유 표준 에이전트는 하네스 설정에서 새 버전으로 수정하세요.",
       );
       const old = latestAgents(w).find((a) => a.id === c.agent.id);
       requireThat(
@@ -149,6 +201,11 @@ export function apply(
         "revision_conflict",
         "개발 흐름이 변경됐습니다. 최신 버전을 다시 여세요.",
       );
+      requireThat(
+        !p.harness,
+        "standard_managed",
+        "공유 개발 흐름은 하네스 설정에서 새 버전으로 수정하세요.",
+      );
       const issues = workflowIssues(w, p, c.workflow);
       requireThat(!issues.length, "invalid_workflow", issues.join(" "));
       p.workflow = structuredClone(c.workflow);
@@ -182,7 +239,7 @@ export function apply(
         "profile_required",
         "프로젝트 실행 프로필을 먼저 설정하세요.",
       );
-      const harness = resolveHarness(w, p);
+      const harness = resolveHarness(w, p, f!.harnessScope);
       requireThat(
         harness?.agents.some(
           (a) => a.stage === "requirements" || a.stage === "design",
@@ -245,10 +302,13 @@ export function apply(
         "active_run",
         "실행을 먼저 취소하세요.",
       );
-      const issues = executionProfileIssues(c.profile, [
-        ...w.policies.at(-1)!.requiredChecks,
-        ...p.requiredChecks,
-      ]);
+      const issues = [
+        ...packageLimitIssues(p, c.profile),
+        ...executionProfileIssues(c.profile, [
+          ...w.policies.at(-1)!.requiredChecks,
+          ...p.requiredChecks,
+        ]),
+      ];
       requireThat(!issues.length, "missing_checks", issues.join(" "));
       p.executionProfile = c.profile;
       for (const f of w.features.filter((f) => f.projectId === p.id))
@@ -546,6 +606,7 @@ export function apply(
                 harness: resolveHarness(
                   w,
                   w.projects.find((p) => p.id === f!.projectId)!,
+                  f!.harnessScope,
                 ),
                 agents: [],
                 binding: approvalBinding(w, f!),

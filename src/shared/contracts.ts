@@ -1,4 +1,10 @@
 import {
+  harnessPackageSchema,
+  packageSourceSchema,
+  bindingSchema,
+  type HarnessInstallation,
+} from "./harness-package.ts";
+import {
   agentSchema,
   workflowSchema,
   workflowIssues,
@@ -30,6 +36,7 @@ export type Person = {
   teamId: string;
 };
 export type Project = {
+  harness?: HarnessInstallation;
   workflow?: Workflow;
   id: string;
   name: string;
@@ -75,6 +82,7 @@ export type Thread = {
   resolvedBy?: string;
 };
 export type Feature = {
+  harnessScope?: string;
   id: string;
   projectId: string;
   title: string;
@@ -147,6 +155,21 @@ const id = z.string().min(1).max(100);
 const body = z.string().trim().min(1).max(60000);
 const featureId = { featureId: id };
 export const commandSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("apply_harness_package"),
+    projectId: id,
+    expectedRevision: z.number().int().nonnegative(),
+    package: harnessPackageSchema,
+    profileId: z.string(),
+    bindings: bindingSchema,
+    source: packageSourceSchema,
+  }),
+  z.object({
+    type: z.literal("set_feature_scope"),
+    featureId: id,
+    expectedRevision: z.number().int().nonnegative(),
+    scopeId: z.string().optional(),
+  }),
   z.object({
     type: z.literal("save_agent"),
     expectedRevision: z.number().int().nonnegative(),

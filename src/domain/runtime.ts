@@ -9,6 +9,8 @@ export function policyBinding(w: Workspace, f: Feature) {
         policy: w.policies.at(-1),
         project: {
           id: p.id,
+          package: p.harness,
+          scope: f.harnessScope,
           instructions: p.instructions,
           reviewers: p.reviewerIds,
           requiredChecks: p.requiredChecks,

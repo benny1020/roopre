@@ -17,6 +17,7 @@
     "../src/runner/**/*.ts",
     "../src/adapters/**/*.ts",
     "./review/**/*.ts",
-    "./scripts/pr-workflow.ts"
+    "./scripts/pr-workflow.ts",
+    "./scripts/harness.ts"
   ]
 }

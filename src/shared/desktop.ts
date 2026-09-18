@@ -1,3 +1,4 @@
+import type { PackageCandidate } from "./harness-package";
 import type { BootstrapStatus, OnboardingProgress } from "./onboarding";
 import type { Command, Snapshot } from "./contracts";
 import type {
@@ -7,6 +8,21 @@ import type {
 } from "./runtime";
 export interface DesktopAPI {
   name: string;
+  harnessCandidate: (
+    input:
+      | { kind: "default" | "folder" }
+      | { kind: "project"; projectId: string }
+      | { kind: "git"; url: string; ref: string }
+      | { kind: "json"; text: string },
+  ) => Promise<PackageCandidate | null>;
+  harnessApply: (input: {
+    token: string;
+    projectId: string;
+    profileId: string;
+    expectedRevision: number;
+    bindings: Record<string, string>;
+  }) => Promise<unknown>;
+  harnessExport: (token: string) => Promise<string | null>;
   readMarkdown: () => Promise<string | null>;
   exportAgent: (id: string) => Promise<void>;
   bootstrap: () => Promise<BootstrapStatus>;

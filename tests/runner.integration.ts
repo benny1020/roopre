@@ -1,3 +1,4 @@
+import { defaultPackage } from "../src/shared/default-package.ts";
 import { ownerFixture } from "./fixtures/workspace.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -626,6 +627,87 @@ test(
           .draft,
         originalDraft,
       );
+      // A portable feature directory is enforced against the staged candidate, before checks/commit.
+      const pack = defaultPackage();
+      pack.profiles[0].scopes = [
+        {
+          id: "scoped",
+          name: "Scoped",
+          paths: ["src/"],
+          instructions: "Only src/",
+        },
+      ];
+      state = await store.read("owner");
+      await store.execute("owner", randomUUID(), {
+        type: "apply_harness_package",
+        projectId: "first-project",
+        expectedRevision: state.revision,
+        package: pack,
+        profileId: "standard",
+        bindings: {},
+        source: { kind: "folder" },
+      });
+      const scopeFeature = await store.execute("owner", randomUUID(), {
+        type: "create_feature",
+        projectId: "first-project",
+        title: "Directory enforcement",
+        template: "feature",
+        requirements: "AC01 create hello.txt",
+      });
+      await store.execute("owner", randomUUID(), {
+        type: "save_draft",
+        featureId: scopeFeature.entityId!,
+        expectedRevision: 0,
+        requirements: "AC01 create hello.txt",
+        body: sections
+          .map((s) => `## ${s}\nFixture evidence for ${s}`)
+          .join("\n\n"),
+      });
+      state = await store.read("owner");
+      feature = state.features.find((f) => f.id === scopeFeature.entityId)!;
+      await store.execute("owner", randomUUID(), {
+        type: "set_feature_scope",
+        featureId: feature.id,
+        expectedRevision: state.revision,
+        scopeId: "scoped",
+      });
+      await store.execute("owner", randomUUID(), {
+        type: "publish_design",
+        featureId: feature.id,
+        expectedRevision: feature.draft.revision,
+      });
+      state = await store.read("owner");
+      feature = state.features.find((f) => f.id === scopeFeature.entityId)!;
+      await store.execute(
+        "owner",
+        randomUUID(),
+        {
+          type: "review",
+          featureId: feature.id,
+          designId: feature.designs.at(-1)!.id,
+          decision: "approve",
+          checked: [...sections],
+        },
+        {
+          authentication: "macos-owner",
+          binding: approvalBinding(state, feature),
+        },
+      );
+      runId = (
+        await store.execute("owner", randomUUID(), {
+          type: "queue_run",
+          featureId: feature.id,
+          designId: feature.designs.at(-1)!.id,
+        })
+      ).entityId!;
+      await runner.execute(runId, new AbortController());
+      const scoped = (await store.read("owner")).runs.find(
+        (r) => r.id === runId,
+      )!;
+      assert.equal(scoped.status, "failed");
+      assert.match(scoped.reason, /디렉토리 밖/);
+      assert.equal(scoped.runtime!.head, undefined);
+      assert.equal(scoped.runtime!.evidence.length, 0);
     } finally {
       await runner?.stop();
       if (runId) await runner?.cleanup(runId);

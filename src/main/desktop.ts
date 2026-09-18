@@ -1,3 +1,11 @@
+import { HarnessLibrary, harnessApplyRequestId } from "./harness/library.ts";
+import {
+  importPackageFolder,
+  exportPackageFolder,
+  importPackageGit,
+} from "./harness/files.ts";
+import { exportProject } from "../domain/harness-package.ts";
+import { defaultPackage } from "../shared/default-package.ts";
 import { transferWorkspace } from "../database/transfer.ts";
 import { activeStatuses } from "../shared/runtime.ts";
 import { basename, dirname } from "node:path";
@@ -83,6 +91,7 @@ export async function installDesktop() {
   );
   await bootstrap.init();
   const restoration = bootstrap.restore(databaseUrl);
+  const harnessLibrary = new HarnessLibrary();
   let authenticating = false;
   let migrating = false;
   ipcMain.handle(
@@ -128,11 +137,114 @@ export async function installDesktop() {
             "testConnection",
             "diagnostics",
             "chooseRepository",
+            "harnessCandidate",
+            "harnessExport",
           ].includes(operation) &&
           !store
         )
           throw Error("시작 가이드에서 환경을 먼저 준비하세요.");
         switch (operation) {
+          case "harnessCandidate": {
+            const input = z
+              .discriminatedUnion("kind", [
+                z.object({ kind: z.literal("default") }),
+                z.object({ kind: z.literal("folder") }),
+                z.object({ kind: z.literal("project"), projectId: z.string() }),
+                z.object({
+                  kind: z.literal("git"),
+                  url: z.string().max(2000),
+                  ref: z.string().max(151),
+                }),
+                z.object({
+                  kind: z.literal("json"),
+                  text: z.string().max(4_000_000),
+                }),
+              ])
+              .parse(payload);
+            if (input.kind === "default")
+              value = harnessLibrary.add(defaultPackage(), { kind: "editor" });
+            else if (input.kind === "json")
+              value = harnessLibrary.add(JSON.parse(input.text), {
+                kind: "editor",
+              });
+            else if (input.kind === "git") {
+              const result = await importPackageGit(input);
+              value = harnessLibrary.add(result.package, result.source);
+            } else if (input.kind === "folder") {
+              const chosen = await dialog.showOpenDialog(sender, {
+                title: "harness.json이 있는 폴더 선택",
+                properties: ["openDirectory"],
+              });
+              value = chosen.canceled
+                ? null
+                : harnessLibrary.add(
+                    await importPackageFolder(chosen.filePaths[0]),
+                    { kind: "folder" },
+                  );
+            } else {
+              if (!store) throw Error("프로젝트 환경을 먼저 준비하세요.");
+              const w = await store.read("owner");
+              const p = w.projects.find((p) => p.id === input.projectId);
+              if (!p) throw Error("프로젝트가 없습니다.");
+              value = harnessLibrary.add(
+                exportProject(w, p, {
+                  id: p.harness?.package.id ?? `project.${p.id}`,
+                  version: p.harness?.package.version ?? "1.0.0",
+                  name: p.harness?.package.name ?? `${p.name} 개발 표준`,
+                }),
+                { kind: "editor" },
+              );
+            }
+            break;
+          }
+          case "harnessExport": {
+            const candidate = harnessLibrary.get(
+              z.string().uuid().parse(payload),
+            );
+            const chosen = await dialog.showOpenDialog(sender, {
+              title: "하네스 폴더를 만들 위치 선택",
+              properties: ["openDirectory", "createDirectory"],
+            });
+            value = chosen.canceled
+              ? null
+              : await exportPackageFolder(
+                  chosen.filePaths[0],
+                  candidate.package,
+                );
+            break;
+          }
+          case "harnessApply": {
+            const input = z
+              .object({
+                token: z.string().uuid(),
+                projectId: z.string(),
+                profileId: z.string(),
+                expectedRevision: z.number().int().nonnegative(),
+                bindings: z.record(z.string(), z.string().uuid()),
+              })
+              .parse(payload);
+            const candidate = harnessLibrary.get(input.token);
+            const bindings = Object.fromEntries(
+              Object.entries(input.bindings).map(([alias, id]) => {
+                const c = vault.get(id);
+                return [alias, { id, version: c.info.version }];
+              }),
+            );
+            value = await store!.execute(
+              "owner",
+              harnessApplyRequestId(input.token, { ...input, bindings }),
+              {
+                type: "apply_harness_package",
+                projectId: input.projectId,
+                profileId: input.profileId,
+                expectedRevision: input.expectedRevision,
+                package: candidate.package,
+                source: candidate.source,
+                bindings,
+              },
+            );
+            break;
+          }
           case "migrateEnvironment": {
             const source = store!;
             const state = await source.read("owner");
@@ -251,6 +363,8 @@ export async function installDesktop() {
                 c.agent.connectionId,
               ).info.version;
             }
+            if (c.type === "apply_harness_package")
+              throw Error("하네스 미리보기 적용 경로를 사용하세요.");
             if (c.type === "configure_execution")
               throw Error("저장소 선택 경로를 사용하세요.");
             if (c.type === "review" && c.decision === "approve") {

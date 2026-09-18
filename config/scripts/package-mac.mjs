@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import { fuses } from "../distribution/fuses.mjs";
 import { writeNotices } from "../distribution/notices.mjs";
 
+const checkOnly = process.argv.includes("--check");
 const release = process.argv.includes("--release");
 if (process.platform !== "darwin" || process.arch !== "arm64")
   throw Error(
@@ -79,7 +80,9 @@ try {
   await cp("config/compose.yaml", join(setup, "compose.yaml"));
   await cp("config/runner.Dockerfile", join(setup, "runner.Dockerfile"));
   await writeNotices(setup);
-  const out = resolve("release", metadata.version);
+  const out = checkOnly
+    ? join(temp, "verified")
+    : resolve("release", metadata.version);
   const [folder] = await packager({
     extraResource: [
       resolve("resources/bin/roopre-approve"),
@@ -130,47 +133,51 @@ try {
     run("spctl", ["--assess", "--type", "execute", "--verbose=2", app]);
   }
   run(process.execPath, ["config/scripts/verify-mac.mjs", app]);
-  const archive = join(
-    out,
-    `roopre-${metadata.version}-macos-arm64-${release ? "notarized" : "unsigned"}.zip`,
-  );
-  run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, archive]);
-  const sha256 = createHash("sha256")
-    .update(await readFile(archive))
-    .digest("hex");
-  await writeFile(
-    `${archive}.sha256`,
-    `${sha256}  ${archive.split("/").at(-1)}\n`,
-  );
-  await writeFile(
-    join(out, "build-manifest.json"),
-    JSON.stringify(
-      {
-        version: metadata.version,
-        electron: metadata.devDependencies.electron,
-        commit: execFileSync("git", ["rev-parse", "HEAD"], {
-          encoding: "utf8",
-        }).trim(),
-        dirty: !!execFileSync(
-          "git",
-          ["status", "--porcelain", "--untracked-files=normal"],
-          { encoding: "utf8" },
-        ).trim(),
-        lockfileSha256: createHash("sha256")
-          .update(await readFile("pnpm-lock.yaml"))
-          .digest("hex"),
-        signedAndNotarized: release,
-        archive: archive.split("/").at(-1),
-        sha256,
-        builtAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
-  );
-  console.log(
-    `검증된 ${release ? "서명·공증" : "개발용 미공증"} 패키지: ${archive}`,
-  );
+  if (checkOnly) {
+    console.log("PASS: 임시 macOS 앱 검증 완료 (ZIP 생성 없음)");
+  } else {
+    const archive = join(
+      out,
+      `roopre-${metadata.version}-macos-arm64-${release ? "notarized" : "unsigned"}.zip`,
+    );
+    run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, archive]);
+    const sha256 = createHash("sha256")
+      .update(await readFile(archive))
+      .digest("hex");
+    await writeFile(
+      `${archive}.sha256`,
+      `${sha256}  ${archive.split("/").at(-1)}\n`,
+    );
+    await writeFile(
+      join(out, "build-manifest.json"),
+      JSON.stringify(
+        {
+          version: metadata.version,
+          electron: metadata.devDependencies.electron,
+          commit: execFileSync("git", ["rev-parse", "HEAD"], {
+            encoding: "utf8",
+          }).trim(),
+          dirty: !!execFileSync(
+            "git",
+            ["status", "--porcelain", "--untracked-files=normal"],
+            { encoding: "utf8" },
+          ).trim(),
+          lockfileSha256: createHash("sha256")
+            .update(await readFile("pnpm-lock.yaml"))
+            .digest("hex"),
+          signedAndNotarized: release,
+          archive: archive.split("/").at(-1),
+          sha256,
+          builtAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
+    console.log(
+      `검증된 ${release ? "서명·공증" : "개발용 미공증"} 패키지: ${archive}`,
+    );
+  }
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

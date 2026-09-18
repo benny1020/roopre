@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "roopre.harness/v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9.-]{0,99}$"
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 80,
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[a-zA-Z0-9.-]+)?$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "instructions": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "agents": {
+      "minItems": 2,
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "capability": {
+            "type": "string",
+            "enum": ["read-only", "implementation"]
+          },
+          "instructions": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "connection": {
+            "default": "project",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "capability",
+          "instructions",
+          "connection"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "profiles": {
+      "minItems": 1,
+      "maxItems": 30,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "stageInstructions": {
+            "type": "object",
+            "properties": {
+              "requirements": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "design": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "implementation": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "verification": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "review": {
+                "type": "string",
+                "maxLength": 20000
+              }
+            },
+            "required": [
+              "requirements",
+              "design",
+              "implementation",
+              "verification",
+              "review"
+            ],
+            "additionalProperties": false
+          },
+          "assignments": {
+            "minItems": 2,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                },
+                "agentId": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                },
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "requirements",
+                    "design",
+                    "implementation",
+                    "verification",
+                    "review"
+                  ]
+                },
+                "required": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["id", "agentId", "stage", "required"],
+              "additionalProperties": false
+            }
+          },
+          "checks": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                },
+                "argv": {
+                  "minItems": 1,
+                  "maxItems": 30,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "timeoutSeconds": {
+                  "type": "integer",
+                  "minimum": 5,
+                  "maximum": 1800
+                }
+              },
+              "required": ["name", "argv", "timeoutSeconds"],
+              "additionalProperties": false
+            }
+          },
+          "requiredChecks": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+            }
+          },
+          "scopes": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "paths": {
+                  "minItems": 1,
+                  "maxItems": 30,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "instructions": {
+                  "type": "string",
+                  "maxLength": 20000
+                }
+              },
+              "required": ["id", "name", "paths", "instructions"],
+              "additionalProperties": false
+            }
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "budgetUsd": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1000
+              },
+              "timeoutMinutes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 240
+              },
+              "repairLimit": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              }
+            },
+            "required": ["budgetUsd", "timeoutMinutes", "repairLimit"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "instructions",
+          "stageInstructions",
+          "assignments",
+          "checks",
+          "requiredChecks",
+          "scopes"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "version",
+    "name",
+    "instructions",
+    "agents",
+    "profiles"
+  ],
+  "additionalProperties": false
+}
