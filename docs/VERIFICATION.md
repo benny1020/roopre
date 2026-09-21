@@ -175,3 +175,11 @@ Docker 통합 검사에서 **Claude Code는 테스트용 프로그램으로 대�
 표준은 프로젝트별 DB 스냅샷으로 실행하며 팀 공유 파일에는 인증·경로·실행/승인 이력을 담지 않는다. 임의 Markdown/검사 argv에 사람이 넣은 비밀의 자동 제거는 보장하지 않는다. 경로 제한은 후보 diff 검증이며 컨테이너 파일별 쓰기 권한 분리는 아니다. UI 초안은 화면 이동 전에 검증·내보내기해야 한다. 다른 프로젝트 상태 변경도 현재 workspace revision 비교를 보수적으로 실패시킬 수 있다. 전담 리뷰와 원격 CI 결과는 해당 PR의 정확한 head를 기준으로 별도 확인한다.
 
 전담 리뷰는 `0a50cb4`에서 `constructor` 연결 별칭이 객체의 상속 속성 때문에 누락 검사를 통과해 프로젝트 연결로 대체되는 P2를 독립 재현했다. domain과 UI에서 실제 등록된 키만 인정하도록 수정하고 회귀를 추가했다. 후보의 30분 만료 뒤 편집 없이도 재검증할 수 있도록 버튼을 보완하고 만료/재검증 검사도 추가했다. 새 head의 전담 재리뷰와 CI를 다시 확인한다.
+
+## ADE workspace redesign (2026-09-21)
+
+Implementation and audit: [ADE workspace](design/ADE-WORKSPACE.md). Renderer-only presentation/navigation changes preserve Electron IPC, authenticated design approval, execution contracts and package import/export. New shared renderer primitives cover keyboard tabs/dialogs/separators, run-specific diff, evidence and contextual instructions.
+
+Local verification: `pnpm check` (format, approved-doc integrity, typecheck, Electron build and 71 unit/database tests); `pnpm test:web` (11 browser scenarios, including 7 WCAG A/AA axe scans across dark/light, compact design/execution, review, overview and command dialog); `pnpm test:runner` (2 Docker integration scenarios); `pnpm test:desktop` (1 Electron installation/restart/theme/native-file scenario); `pnpm check:mac` (temporary app integrity, no ZIP). Logs: `artifacts/ade-{check,web-check,runner,desktop,mac-check}.log`.
+
+Visual inspection included 1440×940 and 1024×700, both themes, diff, design review, settings/package editor and command palette. The command input width and focus behavior have explicit regression assertions. Browser fixtures exercise rendering and IPC dispatch, not paid provider calls or OS authentication success. Actual Electron automated launch passed, but manually operating the user's already-open app through CUA was blocked by the locked Mac. Developer ID signing/notarization and a separate Mac install remain outside this verification. There is no new live code editor, interactive terminal, automatic merge or fabricated execution feed.

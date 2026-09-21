@@ -1,0 +1,231 @@
+import { test, expect, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import { adeFixture, patch } from "../fixtures/ade";
+const state = adeFixture();
+async function prepare(page: Page, state = adeFixture()) {
+  await page.addInitScript(
+    ({ state, patch }) => {
+      const w = globalThis as unknown as {
+        roopre: unknown;
+        __diffResolvers: Record<string, (s: string) => void>;
+        __revealed: unknown[];
+      };
+      w.__diffResolvers = {};
+      w.__revealed = [];
+      w.roopre = {
+        snapshot: async () => state,
+        connections: async () => [],
+        command: async () => {
+          throw Error("No mutation in ADE display fixture");
+        },
+        runAction: async (id: string, action: string) => {
+          if (action === "diff")
+            return new Promise<string>((resolve) => {
+              w.__diffResolvers[id] = resolve;
+            });
+          throw Error("unsupported");
+        },
+        revealArtifact: async (...args: unknown[]) => {
+          w.__revealed.push(args);
+        },
+      };
+      localStorage.setItem(
+        "owner:selected",
+        JSON.stringify(state.features[0].id),
+      );
+      localStorage.setItem(
+        `owner:tab:${state.features[0].id}`,
+        JSON.stringify("execution"),
+      );
+      localStorage.setItem("theme", JSON.stringify("dark"));
+    },
+    { state, patch },
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: state.features[0].title, exact: true }),
+  ).toBeVisible();
+}
+async function axe(page: Page) {
+  const result = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(
+    result.violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((n) => ({
+        target: n.target,
+        summary: n.failureSummary,
+      })),
+    })),
+  ).toEqual([]);
+}
+test("run-specific diff rejects stale responses, checks retain attempt identity, artifacts dispatch", async ({
+  page,
+}) => {
+  await prepare(page);
+  await expect(page.getByText("현재 시도 2 · 결과 1개")).toBeVisible();
+  await expect(
+    page.getByText("이전 시도 검사 1개 · 현재 시도의 통과 근거가 아닙니다"),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "변경", exact: true }).click();
+  await page.getByRole("button", { name: "변경 내용 보기" }).click();
+  await page.getByLabel("실행 선택").selectOption("ade-run-previous");
+  await page.evaluate(() => {
+    (globalThis as any).__diffResolvers["ade-run-current"](
+      "WRONG CURRENT PATCH",
+    );
+  });
+  await expect(page.getByText("WRONG CURRENT PATCH")).toHaveCount(0);
+  await page.getByRole("button", { name: "변경 내용 보기" }).click();
+  await page.evaluate((patch) => {
+    (globalThis as any).__diffResolvers["ade-run-previous"](patch);
+  }, patch);
+  await expect(
+    page.getByRole("navigation", { name: "변경 파일" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /tests\/payment.test.ts/ }).click();
+  await expect(
+    page.getByRole("region", { name: "파일 변경 내용" }),
+  ).toContainText("duplicate payment is never retried");
+  await page.getByRole("tab", { name: "산출물" }).click();
+  await page.getByRole("button", { name: /tests\/report.txt/ }).click();
+  expect(await page.evaluate(() => (globalThis as any).__revealed)).toEqual([
+    ["ade-run-previous", 0],
+  ]);
+});
+test("keyboard commands trap and restore focus, project search, no background filter mutation", async ({
+  page,
+}) => {
+  await prepare(page);
+  const opener = page.getByRole("button", { name: /명령 · 작업 검색/ });
+  await opener.click();
+  const search = page.getByRole("combobox", { name: "명령과 작업 검색" });
+  await expect(search).toBeFocused();
+  expect((await search.boundingBox())!.width).toBeGreaterThan(400);
+  await search.fill("Commerce");
+  await search.press("ArrowDown");
+  await search.press("ArrowUp");
+  await search.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "Commerce", exact: true }),
+  ).toBeVisible();
+  await opener.click();
+  await search.press("Shift+Tab");
+  await expect(page.getByRole("button", { name: "검색 닫기" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(opener).toBeFocused();
+  await expect(page.getByPlaceholder("기능 검색")).toHaveValue("");
+  await opener.click();
+  await search.fill("새 프로젝트");
+  await search.press("Enter");
+  await expect(page.getByRole("dialog", { name: "새 프로젝트" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+test("pane keyboard controls, accessible light/dark layouts and compact viewport", async ({
+  page,
+}) => {
+  await prepare(page);
+  const width = page.getByRole("separator", { name: "에이전트 패널 너비" });
+  await width.focus();
+  await width.press("End");
+  await expect(width).toHaveAttribute("aria-valuenow", "360");
+  await width.press("Home");
+  await expect(width).toHaveAttribute("aria-valuenow", "240");
+  const height = page.getByRole("separator", { name: "실행 출력 높이" });
+  await height.focus();
+  await height.press("Home");
+  await expect(height).toHaveAttribute("aria-valuenow", "120");
+  await page.setViewportSize({ width: 1440, height: 940 });
+  await axe(page);
+  await page.screenshot({ path: "artifacts/ade-execution-dark.png" });
+  await page.getByLabel("화면 테마").selectOption("light");
+  await axe(page);
+  await page.screenshot({ path: "artifacts/ade-execution-light.png" });
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await expect(
+    page.getByRole("button", { name: "개발 시작", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        (globalThis as any).document.documentElement.scrollWidth <=
+        (globalThis as any).innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({ path: "artifacts/ade-execution-compact.png" });
+  await axe(page);
+  await page
+    .getByRole("button", { name: "에이전트 패널", exact: true })
+    .click();
+  await expect(
+    page.getByRole("complementary", { name: "에이전트 상태" }),
+  ).toHaveCount(0);
+  await page.getByRole("tab", { name: /설계·리뷰/ }).click();
+  await page.getByRole("separator", { name: "리뷰 패널 너비" }).focus();
+  await page.keyboard.press("Home");
+  await expect(
+    page.getByRole("separator", { name: "리뷰 패널 너비" }),
+  ).toHaveAttribute("aria-valuenow", "280");
+  await axe(page);
+  await page.screenshot({ path: "artifacts/ade-design-compact.png" });
+  await page.getByRole("tab", { name: /설계·리뷰/ }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    page.getByRole("tab", { name: "요구사항", exact: true }),
+  ).toBeFocused();
+});
+
+test("review presents real acceptance evidence, overview preserves selected historical run", async ({
+  page,
+}) => {
+  const reviewState = adeFixture();
+  const run = reviewState.runs.at(-1)!;
+  run.status = "ready_for_merge";
+  run.runtime!.terminationConfirmed = true;
+  const report = JSON.stringify({
+    passed: true,
+    acceptance: [
+      {
+        id: "AC01",
+        passed: true,
+        evidence:
+          "src/payment.ts and tests/payment.test.ts cover retryable and duplicate responses",
+      },
+    ],
+    findings: [],
+  });
+  run.runtime!.agents!.push({
+    ...run.runtime!.agents![0],
+    id: "review-agent",
+    name: "독립 리뷰 에이전트",
+    stage: "review",
+    output: report,
+  });
+  run.runtime!.review = `독립 리뷰 에이전트\n${report}`;
+  await prepare(page, reviewState);
+  await page.getByRole("tab", { name: "AI 리뷰", exact: true }).click();
+  await expect(
+    page.getByText("AC01 · 충족 의견", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("기록된 차단 지적이 없습니다.", { exact: true }),
+  ).toBeVisible();
+  await axe(page);
+  await page.screenshot({ path: "artifacts/ade-review-dark.png" });
+  await page.getByRole("button", { name: /실행 현황/ }).click();
+  await page
+    .locator(".run-table-row")
+    .filter({ has: page.locator(".work-state", { hasText: /^실패$/ }) })
+    .click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
+  await page.getByRole("button", { name: /전체 작업/ }).click();
+  await axe(page);
+  await page.screenshot({ path: "artifacts/ade-overview-dark.png" });
+  await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+  await axe(page);
+  await page.screenshot({ path: "artifacts/ade-commands-dark.png" });
+});

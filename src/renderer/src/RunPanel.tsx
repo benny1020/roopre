@@ -1,40 +1,96 @@
+import ReviewEvidence from "./workspace/ReviewEvidence";
 import { stageNames } from "../../shared/harness";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  FileCode2,
+  PanelRight,
+  Play,
+  RefreshCw,
+  Square,
+  Terminal,
+  XCircle,
+} from "lucide-react";
 import type { Command, Feature, Snapshot } from "../../shared/contracts";
 import { activeStatuses } from "../../shared/runtime";
-export const runNames: Record<string, string> = {
-  completed: "초안 작성 완료",
-  queued: "실행 대기",
-  preparing: "환경 준비",
-  implementing: "구현 중",
-  verifying: "검증 중",
-  reviewing: "AI 리뷰",
-  repairing: "수정 중",
-  ready_for_merge: "결과 확인",
-  interrupted: "중단됨",
-  failed: "실패",
-  cancelled: "취소됨",
-  blocked: "승인 확인 필요",
-};
+import { runNames } from "./workspace/presentation";
+import { Tabs, Empty, ResizeHandle } from "./workspace/Controls";
+import DiffViewer from "./workspace/DiffViewer";
+export { runNames } from "./workspace/presentation";
+
 export default function RunPanel({
   snapshot,
   feature,
   send,
+  connected = true,
 }: {
   snapshot: Snapshot;
   feature: Feature;
   send: (c: Command) => Promise<unknown>;
+  connected?: boolean;
 }) {
   const runs = snapshot.runs
     .filter((r) => r.featureId === feature.id)
     .slice()
     .reverse();
   const current = runs[0];
+  const [selected, setSelected] = useState(
+    () => localStorage.getItem(`ade:run:${feature.id}`) || "",
+  );
+  const run = runs.find((r) => r.id === selected) || current;
+  const runtime = run?.runtime;
   const gate = snapshot.gates[feature.id];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [diff, setDiff] = useState("");
+  const [tab, setTab] = useState("checks");
+  const [inspector, setInspector] = useState(true);
+  const [output, setOutput] = useState(true);
+  const [outputTab, setOutputTab] = useState("events");
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const [availableHeight, setAvailableHeight] = useState(600);
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) =>
+      setAvailableHeight(entry.contentRect.height),
+    );
+    if (workspaceRef.current) observer.observe(workspaceRef.current);
+    return () => observer.disconnect();
+  }, []);
+  const outputLimit = Math.max(
+    120,
+    Math.min(320, Math.floor(availableHeight * 0.35)),
+  );
+  const [height, setHeight] = useState(() => {
+    const n = Number(localStorage.getItem("ade:output-height"));
+    return n ? Math.max(120, Math.min(320, n)) : 180;
+  });
+  const [width, setWidth] = useState(() => {
+    const n = Number(localStorage.getItem("ade:inspector-width"));
+    return n ? Math.max(240, Math.min(360, n)) : 280;
+  });
+  useEffect(() => {
+    localStorage.setItem("ade:output-height", String(height));
+  }, [height]);
+  useEffect(() => {
+    localStorage.setItem("ade:inspector-width", String(width));
+  }, [width]);
+  const [diff, setDiff] = useState<{
+    runId: string;
+    patch: string;
+    at: string;
+  }>();
+  const [diffLoading, setDiffLoading] = useState(false);
+  const request = useRef(0);
+  useEffect(() => {
+    request.current++;
+    setDiff(undefined);
+    setDiffLoading(false);
+    setError("");
+  }, [run?.id]);
   const act = async (fn: () => Promise<unknown>) => {
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -45,230 +101,583 @@ export default function RunPanel({
       setBusy(false);
     }
   };
+  const fetchDiff = async () => {
+    if (!run || !window.roopre) return;
+    const runId = run.id;
+    const ticket = ++request.current;
+    setDiffLoading(true);
+    setError("");
+    try {
+      const patch = await window.roopre.runAction(runId, "diff");
+      if (ticket === request.current)
+        setDiff({ runId, patch, at: new Date().toLocaleTimeString() });
+    } catch (e) {
+      if (ticket === request.current) setError((e as Error).message);
+    } finally {
+      if (ticket === request.current) setDiffLoading(false);
+    }
+  };
+  const working = runs.some(
+    (r) =>
+      activeStatuses.includes(r.status) ||
+      r.runtime?.terminationConfirmed === false,
+  );
+  const agent =
+    runtime?.agents?.find((a) => a.status === "running") ||
+    runtime?.agents?.at(-1);
+  const evidence =
+    runtime?.evidence.filter((e) => e.attempt === runtime.attempt) || [];
+  const history =
+    runtime?.evidence.filter((e) => e.attempt !== runtime.attempt) || [];
   return (
-    <div className="content-page">
-      <h2>개발 실행과 검증 결과</h2>
-      <p>
-        승인된 계약 안에서 구현·검사·별도 리뷰를 진행합니다. 자동 병합·배포하지
-        않습니다.
-      </p>
-      {error && (
-        <p role="alert" className="error-banner">
-          {error}
-        </p>
-      )}
-      {!gate.eligible && (
-        <ul>
-          {gate.reasons.map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
-      )}
-      <div className="button-row">
-        <button
-          disabled={
-            busy ||
-            runs.some(
-              (r) =>
-                activeStatuses.includes(r.status) ||
-                r.runtime?.terminationConfirmed === false,
-            ) ||
-            !snapshot.projects.find((p) => p.id === feature.projectId)?.workflow
-          }
-          onClick={() =>
-            void act(() =>
-              send({
-                type: "queue_planning",
-                featureId: feature.id,
-                expectedRevision: feature.draft.revision,
-              }),
-            )
-          }
-        >
-          요구사항·설계 에이전트 실행
-        </button>
-        <button
-          className="primary"
-          disabled={
-            busy ||
-            !gate.eligible ||
-            runs.some(
-              (r) =>
-                activeStatuses.includes(r.status) ||
-                r.status === "blocked" ||
-                r.status === "interrupted" ||
-                r.runtime?.terminationConfirmed === false,
-            )
-          }
-          onClick={() =>
-            void act(() =>
-              send({
-                type: "queue_run",
-                featureId: feature.id,
-                designId: feature.designs.at(-1)!.id,
-              }),
-            )
-          }
-        >
-          개발 시작
-        </button>
-        {current && ["failed", "interrupted"].includes(current.status) && (
+    <div className="execution-workspace" ref={workspaceRef}>
+      <div className="execution-toolbar">
+        <label className="run-picker">
+          실행
+          <select
+            aria-label="실행 선택"
+            value={run?.id || ""}
+            onChange={(e) => {
+              setSelected(e.target.value);
+              localStorage.setItem(`ade:run:${feature.id}`, e.target.value);
+            }}
+          >
+            {!runs.length && <option value="">아직 실행 없음</option>}
+            {runs.map((r, i) => (
+              <option key={r.id} value={r.id}>
+                {i === 0 ? "최신 · " : ""}
+                {runNames[r.status]} · {r.id.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="button-row">
           <button
-            disabled={busy}
+            className="secondary"
+            disabled={
+              !connected ||
+              busy ||
+              working ||
+              !snapshot.projects.find((p) => p.id === feature.projectId)
+                ?.workflow
+            }
             onClick={() =>
-              void act(() => window.roopre!.runAction(current.id, "retry"))
+              void act(() =>
+                send({
+                  type: "queue_planning",
+                  featureId: feature.id,
+                  expectedRevision: feature.draft.revision,
+                }),
+              )
             }
           >
-            변경을 이어서 재시도
+            <Bot size={14} />
+            요구사항·설계 에이전트 실행
           </button>
-        )}
-        {current &&
-          !["cancelled", "ready_for_merge"].includes(current.status) && (
-            <button
-              disabled={busy}
-              onClick={() =>
-                void act(() => send({ type: "cancel_run", runId: current.id }))
-              }
-            >
-              실행 취소
-            </button>
-          )}
+          <button
+            className="primary"
+            disabled={
+              !connected ||
+              busy ||
+              !gate.eligible ||
+              working ||
+              runs.some((r) => ["blocked", "interrupted"].includes(r.status))
+            }
+            onClick={() =>
+              void act(() =>
+                send({
+                  type: "queue_run",
+                  featureId: feature.id,
+                  designId: feature.designs.at(-1)!.id,
+                }),
+              )
+            }
+          >
+            <Play size={13} />
+            개발 시작
+          </button>
+          <button
+            className="icon-button"
+            aria-label="에이전트 패널"
+            aria-pressed={inspector}
+            onClick={() => setInspector(!inspector)}
+          >
+            <PanelRight size={16} />
+          </button>
+        </div>
       </div>
-      {runs.length === 0 && (
-        <div className="result-placeholder">
-          <h3>실행 전입니다</h3>
-          <p>연결·환경을 설정하고 설계를 본인 승인한 뒤 시작하세요.</p>
+      {error && (
+        <div role="alert" className="error-banner">
+          {error}
         </div>
       )}
-      {runs.map((run) => (
-        <section className="runtime-card" key={run.id}>
-          <h3>
-            {runNames[run.status]} <small>{run.id}</small>
-          </h3>
-          <p>{run.reason}</p>
-          {run.runtime && (
-            <>
-              <div className="runtime-grid">
-                <span>
-                  시도 {run.runtime.attempt} /{" "}
-                  {run.runtime.profile.repairLimit + 1}
+      {!gate.eligible && (
+        <details className="execution-gate">
+          <summary>설계 승인 조건 · {gate.reasons.length}개 확인 필요</summary>
+          <ul>
+            {gate.reasons.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {!run ? (
+        <Empty title="설계에서 시작해, 검증된 변경까지">
+          요구사항과 설계를 작성하고 본인 승인을 받으세요. 실행을 시작하면 변경
+          파일, 검사 결과와 에이전트 활동이 여기에 표시됩니다.
+        </Empty>
+      ) : (
+        <>
+          <div
+            className={`execution-split ${inspector ? "with-inspector" : ""}`}
+            style={{ "--inspector-width": `${width}px` } as React.CSSProperties}
+          >
+            <section className="execution-center" aria-label="실행 작업 공간">
+              <div className="run-context">
+                <span
+                  className={`work-state ${["failed", "interrupted"].includes(run.status) ? "danger" : activeStatuses.includes(run.status) ? "active" : "quiet"}`}
+                >
+                  <i />
+                  {runNames[run.status]}
                 </span>
-                <span>
-                  추정 비용 $
-                  {run.runtime.costReported
-                    ? run.runtime.costUsd.toFixed(4)
-                    : "미확인"}{" "}
-                  / ${run.runtime.profile.budgetUsd}
-                </span>
-                <span>
-                  최근 확인{" "}
-                  {run.runtime.heartbeat
-                    ? new Date(run.runtime.heartbeat).toLocaleTimeString()
-                    : "대기"}
-                </span>
-                <span>설계 계약 {run.runtime.binding.slice(0, 12)}</span>
+                <code title={run.id}>{run.id.slice(0, 8)}</code>
+                <span>시도 {runtime?.attempt ?? 1}</span>
+                {selected && run.id !== current?.id && (
+                  <strong>이전 실행</strong>
+                )}
               </div>
-              <p className="muted">
-                비용은 CLI 추정값이며 확정 청구액이 아닙니다.
-              </p>
-              {run.runtime.head && (
-                <p>
-                  검증한 commit: <code>{run.runtime.head}</code>
-                </p>
-              )}
-              {run.runtime.worktree && (
-                <>
-                  <p className="muted">작업 경로: {run.runtime.worktree}</p>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      void act(async () =>
-                        setDiff(await window.roopre!.runAction(run.id, "diff")),
-                      )
-                    }
-                  >
-                    변경 내용 보기
-                  </button>
-                </>
-              )}
-              {run.runtime.artifacts?.map((file, index) => (
-                <div key={file.path}>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      void act(() =>
-                        window.roopre!.revealArtifact(run.id, index),
-                      )
-                    }
-                  >
-                    산출물: {file.path}
-                  </button>
-                  <small>
-                    {" "}
-                    {file.bytes} bytes · {file.hash.slice(0, 8)}
-                  </small>
-                </div>
-              ))}
-              {run.runtime.evidence.map((e, i) => (
-                <details key={i}>
-                  <summary>
-                    {e.status === "passed" ? "통과" : "실패"} · {e.name} · 시도{" "}
-                    {e.attempt} · tree {e.tree.slice(0, 8)}
-                  </summary>
-                  <pre className="policy-text">{e.log || "출력 없음"}</pre>
-                </details>
-              ))}
-              {run.runtime.agents?.map((a) => (
-                <details className="agent-result" key={a.id}>
-                  <summary>
-                    {stageNames[a.stage]} · {a.name} v{a.revision} ·{" "}
-                    {a.required ? "필수" : "선택"} ·{" "}
-                    {a.status === "running"
-                      ? "실행 중"
-                      : a.status === "passed"
-                        ? "통과"
-                        : "실패"}
-                  </summary>
-                  <p>
-                    {a.model} · 시도 {a.attempt} · 지침{" "}
-                    {a.instructionHash.slice(0, 12)}
-                  </p>
-                  <p>
-                    입력 tree {a.inputTree} · 출력 tree {a.outputTree ?? "대기"}
-                  </p>
-                  {a.error && <p role="alert">{a.error}</p>}
-                  <pre className="policy-text">{a.output}</pre>
-                  <details>
-                    <summary>실제 적용한 지침</summary>
-                    <pre className="policy-text">{a.instructions}</pre>
-                  </details>
-                </details>
-              ))}
-              {run.runtime.review && (
-                <details>
-                  <summary>별도 AI 검토 근거</summary>
-                  <pre className="policy-text">{run.runtime.review}</pre>
-                </details>
-              )}
-              <details>
-                <summary>진행 기록</summary>
-                <ol>
-                  {run.runtime.events.map((e, i) => (
-                    <li key={i}>
-                      {new Date(e.at).toLocaleTimeString()} · {e.message}
-                    </li>
-                  ))}
-                </ol>
-              </details>
-            </>
+              <Tabs
+                label="실행 결과"
+                value={tab}
+                onChange={setTab}
+                items={[
+                  { id: "changes", label: <>변경</> },
+                  {
+                    id: "checks",
+                    label: (
+                      <>
+                        검증 <span>{evidence.length}</span>
+                      </>
+                    ),
+                  },
+                  { id: "review", label: "AI 리뷰" },
+                  { id: "artifacts", label: "산출물" },
+                ]}
+              />
+              <div className="execution-surface">
+                {tab === "changes" && (
+                  <>
+                    <div className="surface-toolbar">
+                      <span>
+                        {diff?.runId === run.id
+                          ? `작업 공간 diff · ${diff.at} 조회`
+                          : "작업 공간의 변경 내용"}
+                      </span>
+                      <button
+                        className="soft"
+                        disabled={
+                          !connected || diffLoading || !runtime?.worktree
+                        }
+                        onClick={() => void fetchDiff()}
+                      >
+                        <RefreshCw
+                          size={13}
+                          className={diffLoading ? "spin" : ""}
+                        />
+                        {diffLoading ? "불러오는 중…" : "변경 내용 보기"}
+                      </button>
+                    </div>
+                    {diff?.runId === run.id ? (
+                      <DiffViewer
+                        key={`${diff.runId}:${diff.at}`}
+                        patch={diff.patch}
+                      />
+                    ) : (
+                      <Empty
+                        title={
+                          runtime?.worktree
+                            ? "변경 내용을 확인하세요"
+                            : "아직 작업 공간이 없습니다"
+                        }
+                      >
+                        {runtime?.worktree
+                          ? "현재 작업 공간에서 diff를 가져옵니다. 실행 중인 변경은 검증한 commit과 다를 수 있습니다."
+                          : "격리된 작업 공간이 준비되면 변경 파일을 확인할 수 있습니다."}
+                      </Empty>
+                    )}
+                  </>
+                )}
+                {tab === "checks" && (
+                  <div className="evidence-list">
+                    <div className="surface-toolbar">
+                      <strong>SYSTEM · 고정 검사</strong>
+                      <span>
+                        현재 시도 {runtime?.attempt ?? 1} · 결과{" "}
+                        {evidence.length}개
+                      </span>
+                    </div>
+                    {runtime?.head && (
+                      <p className="evidence-binding">
+                        검증 commit <code>{runtime.head}</code>
+                      </p>
+                    )}
+                    {!evidence.length && (
+                      <Empty title="아직 검증 근거가 없습니다">
+                        검사를 실행하면 종료 코드, 검사한 tree와 출력을 확인할
+                        수 있습니다. 대기는 통과가 아닙니다.
+                      </Empty>
+                    )}
+                    {evidence.map((e, i) => (
+                      <details className={`check-result ${e.status}`} key={i}>
+                        <summary>
+                          {e.status === "passed" ? (
+                            <Check size={15} />
+                          ) : (
+                            <XCircle size={15} />
+                          )}
+                          <strong>{e.name}</strong>
+                          <span>{e.status === "passed" ? "통과" : "실패"}</span>
+                          <code>tree {e.tree.slice(0, 8)}</code>
+                        </summary>
+                        <div className="evidence-binding">
+                          종료 코드 {e.code} · {new Date(e.at).toLocaleString()}{" "}
+                          · 시도 {e.attempt}
+                          <br />
+                          <code>{e.tree}</code>
+                        </div>
+                        <pre className="output-text">
+                          {e.log || "출력 없음"}
+                        </pre>
+                      </details>
+                    ))}
+                    {runtime?.profile.checks.map((check) => (
+                      <div className="check-command" key={check.name}>
+                        <span>{check.name}</span>
+                        <code>{check.argv.join(" ")}</code>
+                        <small>{check.timeoutSeconds}s 제한</small>
+                      </div>
+                    ))}
+                    {!!history.length && (
+                      <details className="history-evidence">
+                        <summary>
+                          이전 시도 검사 {history.length}개 · 현재 시도의 통과
+                          근거가 아닙니다
+                        </summary>
+                        {history.map((e, i) => (
+                          <details key={i}>
+                            <summary>
+                              시도 {e.attempt} · {e.name} · {e.status} · tree{" "}
+                              {e.tree.slice(0, 8)}
+                            </summary>
+                            <pre className="output-text">
+                              {e.log || "출력 없음"}
+                            </pre>
+                          </details>
+                        ))}
+                      </details>
+                    )}
+                  </div>
+                )}
+                {tab === "review" && (
+                  <div className="review-evidence">
+                    <div className="surface-toolbar">
+                      <strong>AGENT · 독립 리뷰</strong>
+                      <span>최종 판단은 검증 근거와 함께</span>
+                    </div>
+                    {runtime?.review ? (
+                      <details className="review-original">
+                        <summary>전체 리뷰 원본 기록</summary>
+                        <pre className="output-text">{runtime.review}</pre>
+                      </details>
+                    ) : !runtime?.agents?.some((a) => a.stage === "review") ? (
+                      <Empty title="아직 AI 리뷰가 없습니다">
+                        구현과 검사가 끝나면 독립 리뷰의 결과와 근거를 확인할 수
+                        있습니다.
+                      </Empty>
+                    ) : null}
+                    {runtime?.agents
+                      ?.filter((a) => a.stage === "review")
+                      .map((a) => (
+                        <details key={a.id} open>
+                          <summary>
+                            {a.name} v{a.revision} · {a.status}
+                          </summary>
+                          <ReviewEvidence
+                            value={a.output || a.error || "출력 대기"}
+                          />
+                        </details>
+                      ))}
+                  </div>
+                )}
+                {tab === "artifacts" && (
+                  <div className="artifact-list">
+                    <div className="surface-toolbar">
+                      <strong>실행 산출물</strong>
+                      <span>무결성 검증 후 Finder에서 열기</span>
+                    </div>
+                    {!runtime?.artifacts?.length ? (
+                      <Empty title="아직 저장된 산출물이 없습니다">
+                        실행기가 수집한 보고서, 테스트 결과와 증거 파일이 여기에
+                        표시됩니다.
+                      </Empty>
+                    ) : (
+                      runtime.artifacts.map((file, i) => (
+                        <button
+                          key={file.path}
+                          className="artifact-row"
+                          disabled={!connected || busy}
+                          onClick={() =>
+                            void act(() =>
+                              window.roopre!.revealArtifact(run.id, i),
+                            )
+                          }
+                        >
+                          <FileCode2 size={16} />
+                          <span>
+                            {file.path}
+                            <small>
+                              {file.bytes.toLocaleString()} bytes · 시도{" "}
+                              {file.attempt}
+                            </small>
+                          </span>
+                          <code>{file.hash.slice(0, 12)}</code>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+            {inspector && (
+              <>
+                <ResizeHandle
+                  value={width}
+                  onChange={setWidth}
+                  min={240}
+                  max={360}
+                  label="에이전트 패널 너비"
+                />
+                <aside className="agent-inspector" aria-label="에이전트 상태">
+                  <header>
+                    <Bot size={15} />
+                    <strong>에이전트</strong>
+                    <span>{runtime?.agents?.length || 0}</span>
+                  </header>
+                  <div className="inspector-scroll">
+                    <div className="actor-label">
+                      {agent?.status === "running"
+                        ? "AGENT · 작업 중"
+                        : "AGENT · 최근 활동"}
+                    </div>
+                    <h3>{agent?.name || "실행 준비"}</h3>
+                    <p>
+                      {run.reason ||
+                        (agent
+                          ? `${stageNames[agent.stage]} · ${agent.status === "running" ? "실행 중" : agent.status === "passed" ? "완료" : "실패"}`
+                          : "실행기에서 작업을 시작하면 활동이 표시됩니다.")}
+                    </p>
+                    {agent?.error && (
+                      <p className="failure-text">{agent.error}</p>
+                    )}
+                    <dl>
+                      <dt>모델</dt>
+                      <dd>{agent?.model || "실행 후 표시"}</dd>
+                      <dt>최근 확인</dt>
+                      <dd>
+                        {runtime?.heartbeat
+                          ? new Date(runtime.heartbeat).toLocaleTimeString()
+                          : "대기"}
+                      </dd>
+                      <dt>추정 비용</dt>
+                      <dd>
+                        {runtime?.costReported
+                          ? `$${runtime.costUsd.toFixed(4)}`
+                          : "미확인"}{" "}
+                        / ${runtime?.profile.budgetUsd ?? "—"}
+                      </dd>
+                    </dl>
+                    <small className="muted">
+                      CLI 추정값 · 확정 청구액 아님
+                    </small>
+                    {!!runtime?.agents?.length && (
+                      <section>
+                        <h4>단계별 작업</h4>
+                        {runtime.agents.map((a) => (
+                          <details className="agent-task" key={a.id}>
+                            <summary>
+                              <i className={`agent-dot ${a.status}`} />
+                              <span>
+                                {a.name}
+                                <small>
+                                  {stageNames[a.stage]} · v{a.revision} ·{" "}
+                                  {a.required ? "필수" : "선택"}
+                                </small>
+                              </span>
+                            </summary>
+                            <p>
+                              {a.model} · 시도 {a.attempt}
+                            </p>
+                            <p className="failure-text">{a.error}</p>
+                            <details>
+                              <summary>작업 결과</summary>
+                              <pre className="output-text">
+                                {a.output || "출력 대기"}
+                              </pre>
+                            </details>
+                            <details>
+                              <summary>실제 적용한 지침</summary>
+                              <code>{a.instructionHash}</code>
+                              <pre className="output-text">
+                                {a.instructions}
+                              </pre>
+                            </details>
+                            <p>
+                              입력 tree <code>{a.inputTree}</code>
+                            </p>
+                            <p>
+                              출력 tree <code>{a.outputTree || "대기"}</code>
+                            </p>
+                          </details>
+                        ))}
+                      </section>
+                    )}
+                    <section>
+                      <h4>SYSTEM · 실행 계약</h4>
+                      <dl>
+                        <dt>설계</dt>
+                        <dd>
+                          <code>{runtime?.binding.slice(0, 12) || "대기"}</code>
+                        </dd>
+                        <dt>브랜치</dt>
+                        <dd>{runtime?.branch || "대기"}</dd>
+                        <dt>작업 공간</dt>
+                        <dd>{runtime?.worktree || "준비 전"}</dd>
+                      </dl>
+                      <details>
+                        <summary>실행 시점의 전체 지침</summary>
+                        <pre className="output-text">
+                          {run.effectivePolicy || "기록 없음"}
+                        </pre>
+                      </details>
+                    </section>
+                    {current && (
+                      <section className="run-actions">
+                        <h4>실행 제어 · 최신 작업</h4>
+                        {["failed", "interrupted"].includes(current.status) && (
+                          <button
+                            disabled={!connected || busy}
+                            onClick={() =>
+                              void act(() =>
+                                window.roopre!.runAction(current.id, "retry"),
+                              )
+                            }
+                          >
+                            <RefreshCw size={13} />
+                            변경을 이어서 재시도
+                          </button>
+                        )}
+                        {(![
+                          "cancelled",
+                          "ready_for_merge",
+                          "completed",
+                        ].includes(current.status) ||
+                          current.runtime?.terminationConfirmed === false) && (
+                          <button
+                            disabled={!connected || busy}
+                            onClick={() =>
+                              void act(() =>
+                                send({ type: "cancel_run", runId: current.id }),
+                              )
+                            }
+                          >
+                            <Square size={12} />
+                            실행 취소
+                          </button>
+                        )}
+                        <p>
+                          {current.status === "ready_for_merge"
+                            ? "결과 검토 후 기존 병합 절차를 따르세요. 자동 병합하지 않습니다."
+                            : "재시도·취소는 최신 실행에 적용됩니다."}
+                        </p>
+                      </section>
+                    )}
+                  </div>
+                </aside>
+              </>
+            )}
+          </div>
+          {output && (
+            <ResizeHandle
+              horizontal
+              value={Math.min(height, outputLimit)}
+              onChange={setHeight}
+              min={120}
+              max={outputLimit}
+              label="실행 출력 높이"
+            />
           )}
-        </section>
-      ))}
-      {diff && (
-        <section>
-          <h3>변경 내용</h3>
-          <pre className="policy-text">{diff}</pre>
-        </section>
+          <section
+            className={`execution-output ${output ? "expanded" : ""}`}
+            style={
+              {
+                "--output-height": `${Math.min(height, outputLimit)}px`,
+              } as React.CSSProperties
+            }
+            aria-label="실행 출력"
+          >
+            <header>
+              <button
+                className="soft"
+                onClick={() => setOutput(!output)}
+                aria-expanded={output}
+              >
+                <Terminal size={14} />
+                실행 출력{" "}
+                {output ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+              </button>
+              {output && (
+                <Tabs
+                  label="출력 종류"
+                  value={outputTab}
+                  onChange={setOutputTab}
+                  items={[
+                    { id: "events", label: "진행 기록" },
+                    { id: "agent", label: "에이전트 결과" },
+                  ]}
+                />
+              )}
+              <span>
+                {run.id.slice(0, 8)} · 시도 {runtime?.attempt ?? 1}
+              </span>
+            </header>
+            {output && (
+              <div className="output-scroll" tabIndex={0}>
+                {outputTab === "events" ? (
+                  runtime?.events.length ? (
+                    <ol className="event-log">
+                      {runtime.events.map((e, i) => (
+                        <li key={i}>
+                          <time>{new Date(e.at).toLocaleTimeString()}</time>
+                          <span>{e.message}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="quiet-empty">
+                      실행기에서 진행 기록을 기다립니다.
+                    </p>
+                  )
+                ) : (
+                  <pre className="output-text">
+                    {agent?.output ||
+                      agent?.error ||
+                      "완료된 결과가 아직 없습니다. 실시간 내부 추론은 표시하지 않습니다."}
+                  </pre>
+                )}
+              </div>
+            )}
+          </section>
+        </>
       )}
     </div>
   );
