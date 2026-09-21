@@ -183,3 +183,12 @@ Implementation and audit: [ADE workspace](design/ADE-WORKSPACE.md). Renderer-onl
 Local verification: `pnpm check` (format, approved-doc integrity, typecheck, Electron build and 72 unit/database tests); `pnpm test:web` (13 browser scenarios, including 7 WCAG A/AA axe scans across dark/light, compact design/execution, review, overview and command dialog); `pnpm test:runner` (2 Docker integration scenarios); `pnpm test:desktop` (1 Electron installation/restart/theme/native-file scenario); `pnpm check:mac` (temporary app integrity, no ZIP). Logs: `artifacts/ade-{check,web-check,runner,desktop,mac-check}.log`.
 
 Visual inspection included 1440×940 and 1024×700, both themes, diff, design review, settings/package editor and command palette. The command input width and focus behavior have explicit regression assertions. Browser fixtures exercise rendering and IPC dispatch, not paid provider calls or OS authentication success. Actual Electron automated launch passed, but manually operating the user's already-open app through CUA was blocked by the locked Mac. Developer ID signing/notarization and a separate Mac install remain outside this verification. There is no new live code editor, interactive terminal, automatic merge or fabricated execution feed.
+
+## 단계 내부 기본 병렬 실행 (2026-09-21)
+
+- [승인된 변경 범위](design/PARALLEL-STAGES.md): 같은 단계는 기본 병렬, 단계별 순차 선택, 단계 간 대기, 실행 방식 스냅샷과 승인 binding, 하네스 import/export 왕복.
+- `pnpm check`: 형식·문서·타입·빌드·단위/DB 검사 80개. 스케줄러의 동시 시작·묶음 대기·실패/취소, 동일 입력 clone, 독립 패치 통합과 충돌 시 원본 보존 포함.
+- `pnpm test:web`: 13개 시나리오. 기본 병렬, 설계 단계 순차 선택과 저장/복원, 기존 ADE 접근성·키보드·결과 근거 회귀. 실제 렌더링 스크린샷 `artifacts/parallel-stage-settings.png` 확인.
+- `pnpm test:runner`: 기존 Docker 검사 2개와 병렬 Docker 검사 1개. 서로 다른 모델 연결과 동시 작업 구간, 단계 barrier, 예산 분할, 요구사항/설계 병렬 결과 통합, 코드 충돌·작업 공간 보존, 복수 실행 중 취소와 컨테이너 정리.
+- `pnpm check:mac`: 임시 앱 무결성 확인. ZIP 생성 없음. Developer ID 서명·공증과 구분한다.
+- Docker 검사는 Claude fixture를 사용한다. 실제 유료 모델의 코드 품질·초안 통합 정확도·청구 금액은 검증하지 않았다. 같은 경로의 병렬 구현 변경은 자동 충돌 해결하지 않는다. 기존 설계는 실행 의미 변경 후 새로 게시·본인 승인해야 한다.

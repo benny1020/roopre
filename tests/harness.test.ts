@@ -233,3 +233,27 @@ test("project-scoped definitions cannot be assigned to another project", () => {
   assert(workflowIssues(w, p).length);
   assert.throws(() => resolveHarness(w, p));
 });
+
+test("new execution defaults to parallel, mode changes invalidate approval and preserve frozen snapshots", () => {
+  const { w, p, f } = fixture();
+  const before = policyBinding(w, f);
+  const frozen = resolveHarness(w, p)!;
+  assert.deepEqual(
+    Object.values(frozen.execution!),
+    stages.map(() => "parallel"),
+  );
+  apply(w, "owner", {
+    type: "save_workflow",
+    projectId: p.id,
+    expectedRevision: p.workflow!.revision,
+    workflow: {
+      ...p.workflow!,
+      revision: p.workflow!.revision + 1,
+      execution: { design: "sequential" },
+    },
+  });
+  assert.notEqual(policyBinding(w, f), before);
+  assert.equal(resolveHarness(w, p)!.execution!.design, "sequential");
+  assert.equal(resolveHarness(w, p)!.execution!.review, "parallel");
+  assert.equal(frozen.execution!.design, "parallel");
+});

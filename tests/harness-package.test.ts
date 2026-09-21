@@ -418,3 +418,20 @@ test("expired candidates can be revalidated from the unchanged canonical definit
   assert.equal(library.get(renewed.token).digest, first.digest);
   assert.notEqual(renewed.token, first.token);
 });
+
+test("stage execution survives portable files, project apply and export", async () => {
+  const { w, p, pack, input } = fixture();
+  pack.profiles[0].execution = { design: "sequential", review: "parallel" };
+  const files = packageFiles(pack);
+  const parsed = await readPackageFiles(async (path) => files[path]);
+  assert.deepEqual(parsed.profiles[0].execution, pack.profiles[0].execution);
+  applyPackage(w, input());
+  assert.deepEqual(p.workflow!.execution, pack.profiles[0].execution);
+  const exported = exportProject(w, p, {
+    id: "test.parallel",
+    version: "1.0.0",
+    name: "Parallel",
+  });
+  assert.deepEqual(exported.profiles[0].execution, pack.profiles[0].execution);
+  assert.equal(resolveHarness(w, p)!.execution!.implementation, "parallel");
+});

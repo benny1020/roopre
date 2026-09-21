@@ -98,6 +98,8 @@ export function applyPackage(
     canonical(p.executionProfile ?? null) === canonical(execution ?? null) &&
     canonical(p.workflow?.instructions) ===
       canonical(profile.stageInstructions) &&
+    canonical(p.workflow?.execution ?? {}) ===
+      canonical(profile.execution ?? {}) &&
     canonical(p.workflow?.assignments) ===
       canonical(
         profile.assignments.map((a) => ({
@@ -142,6 +144,7 @@ export function applyPackage(
   p.workflow = {
     revision: (p.workflow?.revision ?? 0) + 1,
     instructions: structuredClone(profile.stageInstructions),
+    execution: structuredClone(profile.execution),
     assignments: profile.assignments.map((a) => ({
       ...a,
       id: assignments[a.id],
@@ -206,6 +209,7 @@ export function exportProject(
   const policy = w.policies.at(-1)!;
   const installed = p.harness && profileOf(p.harness);
   const profile = {
+    execution: structuredClone(p.workflow.execution),
     id: installed?.id ?? "default",
     name: installed?.name ?? p.name,
     instructions: p.instructions ?? "",

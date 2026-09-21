@@ -11,6 +11,19 @@ const fs = require("node:fs");
   });
   if (response.status !== 403)
     throw Error("Broker network/auth contract failed: " + response.status);
+  if (prompt.includes("PARALLEL_FIXTURE")) {
+    // Correct per-agent model must reach this broker's max-token guard, never upstream.
+    const model = process.argv[process.argv.indexOf("--model") + 1];
+    const isolated = await fetch("http://model-gateway:8080/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": process.env.ANTHROPIC_API_KEY },
+      body: JSON.stringify({ model, max_tokens: 65000 }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (isolated.status !== 400)
+      throw Error("Parallel connection crossed brokers");
+    await new Promise((r) => setTimeout(r, 1500));
+  }
   let gitReadonly = false;
   try {
     fs.appendFileSync("/workspace/.git/config", "\n# forbidden");
@@ -85,7 +98,9 @@ const fs = require("node:fs");
       });
     if (prompt.includes("INVALID_JSON_FIXTURE")) result = "not-json";
   } else {
-    fs.writeFileSync("/workspace/hello.txt", "hello from fixture");
+    if (prompt.includes("RIGHT_ONLY_FIXTURE"))
+      fs.writeFileSync("/workspace/right.txt", "right");
+    else fs.writeFileSync("/workspace/hello.txt", "hello from fixture");
     fs.mkdirSync("/workspace/.roopre-artifacts", { recursive: true });
     fs.writeFileSync(
       "/workspace/.roopre-artifacts/agent-only.json",
@@ -99,6 +114,9 @@ const fs = require("node:fs");
       await new Promise((r) => setTimeout(r, 60000));
     }
   }
+  if (prompt.includes("PARALLEL_FIXTURE") && !review)
+    result +=
+      " budget=" + process.argv[process.argv.indexOf("--max-budget-usd") + 1];
   console.log(
     JSON.stringify({
       type: "result",

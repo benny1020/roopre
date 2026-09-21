@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { stages } from "./harness-stages.ts";
+import { stageExecutionSchema } from "./stage-execution.ts";
 import { checkSchema } from "./runtime.ts";
 const key = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const text = z.string().max(20000);
@@ -51,6 +52,7 @@ export const scopeSchema = z
   .strict();
 export const packageProfileSchema = z
   .object({
+    execution: stageExecutionSchema.optional(),
     id: key,
     name: z.string().min(1).max(80),
     instructions: text,
