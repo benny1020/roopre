@@ -762,6 +762,8 @@ code {
   background: var(--blue-wash);
 }
 .command-results small {
+  display: block;
+  color: var(--muted);
   font-size: 11px;
   margin-top: 3px;
 }

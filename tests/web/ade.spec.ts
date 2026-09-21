@@ -103,6 +103,13 @@ test("keyboard commands trap and restore focus, project search, no background fi
   const search = page.getByRole("combobox", { name: "명령과 작업 검색" });
   await expect(search).toBeFocused();
   expect((await search.boundingBox())!.width).toBeGreaterThan(400);
+  await expect(
+    page
+      .getByRole("dialog", { name: "작업 검색" })
+      .getByRole("option")
+      .first()
+      .locator("small"),
+  ).toHaveCSS("display", "block");
   await search.fill("Commerce");
   await search.press("ArrowDown");
   await search.press("ArrowUp");

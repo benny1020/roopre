@@ -46,3 +46,23 @@ test("binary and renamed paths remain visible without invented lines", () => {
   );
   assert.match(rename.path, /new.ts/);
 });
+
+test("stale running agents and unconfirmed cancellation do not imply active work or idle", () => {
+  const w = adeFixture(),
+    f = w.features[0],
+    r = w.runs.at(-1)!;
+  r.runtime!.agents!.unshift({
+    ...r.runtime!.agents![0],
+    id: "stale",
+    name: "previous attempt agent",
+    attempt: 1,
+    status: "running",
+  });
+  assert.doesNotMatch(workState(w, f).next, /previous attempt agent/);
+  r.status = "cancelled";
+  r.runtime!.terminationConfirmed = false;
+  assert.equal(workState(w, f).label, "종료 확인 중");
+  assert.equal(workState(w, f).attention, true);
+  r.runtime!.terminationConfirmed = true;
+  assert.equal(workState(w, f).phase, 1);
+});

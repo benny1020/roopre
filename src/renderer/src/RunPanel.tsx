@@ -122,9 +122,13 @@ export default function RunPanel({
       activeStatuses.includes(r.status) ||
       r.runtime?.terminationConfirmed === false,
   );
-  const agent =
-    runtime?.agents?.find((a) => a.status === "running") ||
-    runtime?.agents?.at(-1);
+  const attemptAgents =
+    runtime?.agents?.filter((a) => a.attempt === runtime.attempt) || [];
+  const liveAgent =
+    run && activeStatuses.includes(run.status)
+      ? attemptAgents.find((a) => a.status === "running")
+      : undefined;
+  const agent = liveAgent || attemptAgents.at(-1);
   const evidence =
     runtime?.evidence.filter((e) => e.attempt === runtime.attempt) || [];
   const history =
@@ -465,11 +469,9 @@ export default function RunPanel({
                   </header>
                   <div className="inspector-scroll">
                     <div className="actor-label">
-                      {agent?.status === "running"
-                        ? "AGENT · 작업 중"
-                        : "AGENT · 최근 활동"}
+                      {liveAgent ? "AGENT · 작업 중" : "AGENT · 최근 활동"}
                     </div>
-                    <h3>{agent?.name || "실행 준비"}</h3>
+                    <h3>{agent?.name || "현재 시도 · 에이전트 대기"}</h3>
                     <p>
                       {run.reason ||
                         (agent

@@ -51,7 +51,22 @@ export function workState(snapshot: Snapshot, feature: Feature): WorkState {
       gate.status === "in_review" ||
       gate.status === "changes_requested",
   };
+  if (
+    run?.status === "cancelled" &&
+    run.runtime?.terminationConfirmed === false
+  )
+    return {
+      phase: 2,
+      label: "종료 확인 중",
+      next: "실행기에서 작업 종료를 확인할 때까지 기다립니다",
+      actor: "SYSTEM",
+      tone: "attention",
+      attention: true,
+    };
   if (!run || ["completed", "cancelled"].includes(run.status)) return base;
+  const liveAgent = run.runtime?.agents?.find(
+    (a) => a.status === "running" && a.attempt === run.runtime?.attempt,
+  );
   const phase =
     run.runtime?.kind === "planning" || run.status === "blocked"
       ? 1
@@ -67,8 +82,8 @@ export function workState(snapshot: Snapshot, feature: Feature): WorkState {
         run.runtime?.kind === "planning"
           ? `계획 · ${runNames[run.status]}`
           : runNames[run.status],
-      next: run.runtime?.agents?.find((a) => a.status === "running")?.name
-        ? `${run.runtime.agents.find((a) => a.status === "running")!.name} 에이전트 작업 중`
+      next: liveAgent
+        ? `${liveAgent.name} 에이전트 작업 중`
         : run.runtime?.events.at(-1)?.message || "실행기 상태를 기다리는 중",
       actor: ["queued", "preparing", "verifying"].includes(run.status)
         ? "SYSTEM"
