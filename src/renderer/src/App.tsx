@@ -1,7 +1,11 @@
+import InstructionContext from "./workspace/InstructionContext";
+import CommandPalette from "./workspace/CommandPalette";
+import { Tabs, ResizeHandle, Dialog } from "./workspace/Controls";
+import { workState, phases } from "./workspace/presentation";
 import PackageSettings from "./PackageSettings";
 import HarnessPanel from "./HarnessPanel";
 import RuntimeSettings from "./RuntimeSettings";
-import RunPanel, { runNames } from "./RunPanel";
+import RunPanel from "./RunPanel";
 import RunOverview from "./RunOverview";
 import { activeStatuses } from "../../shared/runtime";
 import React, { useEffect, useRef, useState } from "react";
@@ -17,19 +21,14 @@ import {
   CircleDot,
   Clock3,
   FileText,
-  Folder,
-  GitBranch,
   Inbox,
-  ListFilter,
   MessageSquare,
-  Moon,
   PanelLeft,
   Play,
   Plus,
   Search,
   Settings2,
   ShieldCheck,
-  Sun,
   Terminal,
   X,
   AlertCircle,
@@ -47,6 +46,7 @@ import {
   type Thread,
 } from "../../shared/contracts.ts";
 import "./style.css";
+import "./workspace/workspace.css";
 import appIcon from "../../../resources/icon.png";
 import { APP_NAME } from "../../shared/brand";
 
@@ -64,12 +64,6 @@ const readLocal = <T,>(key: string, fallback: T): T => {
 };
 const saveLocal = (key: string, value: unknown) =>
   localStorage.setItem(localKey(key), JSON.stringify(value));
-const labels = {
-  draft: "설계 초안",
-  in_review: "설계 리뷰",
-  changes_requested: "수정 요청",
-  approved: "설계 승인",
-};
 const ago = (date: string) => {
   const m = Math.max(0, Math.floor((Date.now() - Date.parse(date)) / 60000));
   return m < 1
@@ -96,6 +90,7 @@ export default function App() {
   );
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState(false);
+  const settingsScopes = ["harness", "agents", "runtime", "policies"];
   const [notifications, setNotifications] = useState(false);
   const [modal, setModal] = useState<"feature" | "project" | null>(null);
   const [theme, setTheme] = useState(readLocal("theme", "system"));
@@ -214,7 +209,7 @@ export default function App() {
     const key = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setSearch((s) => !s);
+        if (!modal) setSearch((s) => !s);
       }
       if (e.key === "Escape") {
         setModal(null);
@@ -222,13 +217,14 @@ export default function App() {
       }
       if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) {
         e.preventDefault();
+        if (modal || search) return;
         setSelected(null);
         setScope(e.key === "1" ? "inbox" : e.key === "2" ? "all" : "policies");
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, []);
+  }, [modal, search]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);
@@ -284,11 +280,7 @@ export default function App() {
         (scope !== "inbox" ||
           latestDesign(f)?.reviewers.includes(actor) ||
           f.authorId === actor) &&
-        (scope !== "blocked" ||
-          snapshot.gates[f.id].blockers > 0 ||
-          snapshot.runs.some(
-            (r) => r.featureId === f.id && r.status === "blocked",
-          )) &&
+        (scope !== "blocked" || workState(snapshot, f).attention) &&
         (scope !== "queued" ||
           snapshot.runs.some(
             (r) => r.featureId === f.id && r.status === "queued",
@@ -309,7 +301,7 @@ export default function App() {
         <span className="window-space" />
         <span className="app-wordmark">{APP_NAME}</span>
         <span className="titlebar-divider" />
-        <span className="caption">팀의 기준으로, 함께 개발하기</span>
+        <span className="caption">Agentic Development Environment</span>
         <div className="titlebar-right">
           <button
             className="icon-button notification-button"
@@ -340,12 +332,12 @@ export default function App() {
           <div className="team">
             <img className="team-mark" src={appIcon} alt="루프리" />
             <div>
-              <strong>루프리 워크스페이스</strong>
-              <small>로컬 개발 워크스페이스</small>
+              <strong>roopre</strong>
+              <small>Development workspace</small>
             </div>
           </div>
           <button className="search-button" onClick={() => setSearch(true)}>
-            <Search size={15} /> 작업 검색 <kbd>⌘ K</kbd>
+            <Search size={15} /> 명령 · 작업 검색 <kbd>⌘ K</kbd>
           </button>
           <nav aria-label="주요 화면">
             <Nav
@@ -417,7 +409,9 @@ export default function App() {
                           className={f.id === selected ? "selected" : ""}
                           onClick={() => setSelected(f.id)}
                         >
-                          <Circle size={8} />
+                          <i
+                            className={`tree-state ${workState(snapshot, f).tone}`}
+                          />
                           <span>{f.title}</span>
                         </button>
                       ))}
@@ -428,16 +422,10 @@ export default function App() {
           </nav>
           <div className="sidebar-bottom">
             <Nav
-              active={scope === "harness" && !selected}
+              active={settingsScopes.includes(scope) && !selected}
               icon={<Settings2 size={17} />}
-              label="하네스 표준"
+              label="설정"
               onClick={() => navigate("harness")}
-            />
-            <Nav
-              active={scope === "agents" && !selected}
-              icon={<Settings2 size={17} />}
-              label="에이전트 · 개발 흐름"
-              onClick={() => navigate("agents")}
             />
             {window.roopre?.onboarding && (
               <Nav
@@ -449,18 +437,6 @@ export default function App() {
                 }
               />
             )}
-            <Nav
-              active={scope === "runtime" && !selected}
-              icon={<Terminal size={17} />}
-              label="표준 · 연결 · 환경"
-              onClick={() => navigate("runtime")}
-            />
-            <Nav
-              active={scope === "policies" && !selected}
-              icon={<Settings2 size={17} />}
-              label="지침 · 팀 설정"
-              onClick={() => navigate("policies")}
-            />
             {window.roopre ? (
               <div className="profile">
                 <div className="avatar">나</div>
@@ -483,16 +459,28 @@ export default function App() {
           </div>
         </aside>
         <main className="workspace">
-          <div className="dev-strip">
-            <span className="dev-label">
-              {window.roopre ? "로컬 워크스페이스" : "개발 미리보기"}
-            </span>
-            {window.roopre
-              ? "본인 승인 · 격리 실행 · 고정 품질 기준"
-              : "로컬 미리보기 · 실제 실행은 macOS 앱에서"}
-            <span>필수 설계 승인 적용</span>
-            <ShieldCheck size={14} />
-          </div>
+          {settingsScopes.includes(scope) && !feature && (
+            <nav className="settings-navigation" aria-label="설정 항목">
+              <span>
+                <Settings2 size={14} />
+                설정
+              </span>
+              {[
+                ["harness", "하네스 표준"],
+                ["agents", "에이전트 · 개발 흐름"],
+                ["runtime", "표준 · 연결 · 환경"],
+                ["policies", "지침 · 팀 설정"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  aria-current={scope === id ? "page" : undefined}
+                  onClick={() => navigate(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+          )}
           {!connected && snapshot && (
             <div className="offline-banner">
               <WifiOff size={16} />
@@ -539,7 +527,8 @@ export default function App() {
           ) : scope === "queued" && window.roopre ? (
             <RunOverview
               snapshot={snapshot}
-              onSelect={(id) => {
+              onSelect={(id, runId) => {
+                localStorage.setItem(`ade:run:${id}`, runId);
                 saveLocal(`tab:${id}`, "execution");
                 setSelected(id);
               }}
@@ -643,20 +632,20 @@ export default function App() {
               </div>
               {view === "board" ? (
                 <div className="phase-board" aria-label="개발 단계 보드">
-                  {Object.entries(labels).map(([status, label]) => (
-                    <section key={status}>
+                  {phases.map((label, phase) => (
+                    <section key={phase}>
                       <h3>
                         {label}
                         <span>
                           {
                             visible.filter(
-                              (f) => snapshot.gates[f.id].status === status,
+                              (f) => workState(snapshot, f).phase === phase,
                             ).length
                           }
                         </span>
                       </h3>
                       {visible
-                        .filter((f) => snapshot.gates[f.id].status === status)
+                        .filter((f) => workState(snapshot, f).phase === phase)
                         .map((f) => (
                           <button key={f.id} onClick={() => setSelected(f.id)}>
                             <strong>{f.title}</strong>
@@ -685,7 +674,7 @@ export default function App() {
                   <div className="table-head">
                     <span>기능</span>
                     <span>현재 단계</span>
-                    <span>설계 승인</span>
+                    <span>다음 행동</span>
                     <span>최근 변경</span>
                   </div>
                   {visible.map((f) => {
@@ -724,12 +713,18 @@ export default function App() {
                             </small>
                           </div>
                         </div>
-                        <span className={`status ${run ? "queued" : g.status}`}>
-                          {run ? runNames[run.status] : labels[g.status]}
+                        <span
+                          className={`work-state ${workState(snapshot, f).tone}`}
+                        >
+                          <i />
+                          {workState(snapshot, f).label}
                         </span>
-                        <span className="approval-count">
-                          <ShieldCheck size={14} />
-                          {g.approved} / {g.required}
+                        <span
+                          className="list-next"
+                          title={workState(snapshot, f).next}
+                        >
+                          <small>{workState(snapshot, f).actor}</small>
+                          {workState(snapshot, f).next}
                         </span>
                         <span className="muted">
                           {ago(f.updatedAt)}
@@ -828,62 +823,14 @@ export default function App() {
         </div>
       )}
       {search && (
-        <div className="modal-backdrop" onClick={() => setSearch(false)}>
-          <div
-            className="command-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="작업 검색"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <label>
-              <Search size={20} />
-              <input
-                autoFocus
-                placeholder="프로젝트 또는 기능 검색…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <button
-                className="icon-button"
-                onClick={() => setSearch(false)}
-                aria-label="검색 닫기"
-              >
-                <X size={18} />
-              </button>
-            </label>
-            <div>
-              {snapshot?.features
-                .filter((f) =>
-                  `${f.title} ${snapshot.projects.find((p) => p.id === f.projectId)?.name}`
-                    .toLowerCase()
-                    .includes(query.toLowerCase()),
-                )
-                .map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => {
-                      setSelected(f.id);
-                      setSearch(false);
-                      setQuery("");
-                    }}
-                  >
-                    <FileText size={16} />
-                    <span>
-                      {f.title}
-                      <small>
-                        {
-                          snapshot.projects.find((p) => p.id === f.projectId)
-                            ?.name
-                        }
-                      </small>
-                    </span>
-                    <ArrowUpRight size={15} />
-                  </button>
-                ))}
-            </div>
-          </div>
-        </div>
+        <CommandPalette
+          snapshot={snapshot}
+          connected={connected}
+          onClose={() => setSearch(false)}
+          onSelect={setSelected}
+          navigate={navigate}
+          create={setModal}
+        />
       )}
       {modal && snapshot && (
         <CreateDialog
@@ -917,7 +864,11 @@ function Nav({
   onClick: () => void;
 }) {
   return (
-    <button className={`nav-item ${active ? "active" : ""}`} onClick={onClick}>
+    <button
+      className={`nav-item ${active ? "active" : ""}`}
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+    >
       {icon}
       <span>{label}</span>
       {count !== undefined && count > 0 && <small>{count}</small>}
@@ -943,7 +894,7 @@ function FeatureView({
   onBack: () => void;
 }) {
   const [reviewWidth, setReviewWidth] = useState(
-    readLocal(`review-width:${f.id}`, 320),
+    Math.max(280, Math.min(400, readLocal(`review-width:${f.id}`, 320))),
   );
   useEffect(
     () => saveLocal(`review-width:${f.id}`, reviewWidth),
@@ -1043,14 +994,7 @@ function FeatureView({
     !!d?.reviewers.includes(actor);
   const myDecision = d?.decisions.find((x) => x.actorId === actor)?.decision;
   const run = snapshot.runs.filter((r) => r.featureId === f.id).at(-1);
-  const executionStage =
-    run?.runtime && !["cancelled", "blocked"].includes(run.status)
-      ? ["verifying", "reviewing"].includes(run.status)
-        ? 3
-        : run.status === "ready_for_merge"
-          ? 4
-          : 2
-      : 1;
+  const state = workState(snapshot, f);
   const threadItems = f.threads.filter(
     (t) => threadFilter === "all" || t.status !== "resolved",
   );
@@ -1068,13 +1012,16 @@ function FeatureView({
         <ChevronRight size={13} />
         <span>{f.template === "bug" ? "버그 수정" : "신규 기능"}</span>
         <div className="detail-heading-end">
-          <span className={`status ${g.status}`}>{labels[g.status]}</span>
+          <span className={`work-state ${state.tone}`}>
+            <i />
+            {state.label}
+          </span>
         </div>
       </div>
       <div className="feature-title">
         <div>
           <h1>{f.title}</h1>
-          <p>{f.draft.requirements}</p>
+          <p title={f.draft.requirements}>{f.draft.requirements}</p>
         </div>
         <span className="owner">
           <span className="avatar tiny">
@@ -1087,64 +1034,57 @@ function FeatureView({
           }
         </span>
       </div>
-      <div className="phase-track" aria-label="개발 단계">
-        <span className="complete">
-          <Check size={13} />
-          요구사항
-        </span>
-        <ChevronRight size={13} />
-        <span className={executionStage === 1 ? "current" : "complete"}>
-          <CircleDot size={14} />
-          설계 · {labels[g.status]}
-        </span>
-        <ChevronRight size={13} />
-        <span
-          className={
-            executionStage === 2
-              ? "current"
-              : executionStage > 2
-                ? "complete"
-                : ""
+      <div className="work-context">
+        <div className="phase-track" aria-label="개발 단계">
+          {phases.map((label, index) => (
+            <React.Fragment key={label}>
+              {index > 0 && <ChevronRight size={12} />}
+              <span
+                aria-current={state.phase === index ? "step" : undefined}
+                className={state.phase === index ? "current" : ""}
+              >
+                <span className="phase-number">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                {label}
+              </span>
+            </React.Fragment>
+          ))}
+        </div>
+        <button
+          className="next-action"
+          title={state.next}
+          onClick={() =>
+            setTab(state.phase >= 2 || g.eligible ? "execution" : "design")
           }
         >
-          구현{executionStage === 2 && run ? ` · ${runNames[run.status]}` : ""}
-        </span>
-        <ChevronRight size={13} />
-        <span
-          className={
-            executionStage === 3
-              ? "current"
-              : executionStage > 3
-                ? "complete"
-                : ""
-          }
-        >
-          리뷰·테스트
-        </span>
-        <ChevronRight size={13} />
-        <span className={executionStage === 4 ? "current" : ""}>결과 검토</span>
+          <span className="actor-label">{state.actor}</span>
+          <span>{state.next}</span>
+          <ArrowUpRight size={13} />
+        </button>
       </div>
-      <div className="detail-tabs" role="tablist" aria-label="기능 정보">
-        {[
-          ["design", "설계·리뷰"],
-          ["requirements", "요구사항"],
-          ["policy", "적용 지침"],
-          ["execution", "실행·결과"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={tab === id}
-            className={tab === id ? "active" : ""}
-            onClick={() => setTab(id)}
-          >
-            {label}
-            {id === "design" && g.blockers > 0 && (
-              <span className="tab-counter">{g.blockers}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="detail-tabs"
+        label="기능 정보"
+        value={tab}
+        onChange={setTab}
+        items={[
+          {
+            id: "design",
+            label: (
+              <>
+                설계·리뷰{" "}
+                {g.blockers > 0 && (
+                  <span className="tab-counter">{g.blockers}</span>
+                )}
+              </>
+            ),
+          },
+          { id: "requirements", label: "요구사항" },
+          { id: "execution", label: "실행·결과" },
+          { id: "policy", label: "적용 지침" },
+        ]}
+      />
       {tab === "design" ? (
         <div
           className="review-layout"
@@ -1302,19 +1242,18 @@ function FeatureView({
               </footer>
             )}
           </section>
+          <ResizeHandle
+            value={reviewWidth}
+            onChange={setReviewWidth}
+            min={280}
+            max={400}
+            label="리뷰 패널 너비"
+          />
           <aside className="review-panel" aria-label="개발자 리뷰">
             <div className="review-panel-title">
-              <strong>개발자 리뷰</strong>
-              <input
-                className="panel-width"
-                aria-label="리뷰 패널 너비"
-                type="range"
-                min="280"
-                max="400"
-                step="10"
-                value={reviewWidth}
-                onChange={(e) => setReviewWidth(Number(e.target.value))}
-              />
+              <strong>
+                <span className="actor-label">HUMAN</span> 개발자 리뷰
+              </strong>
               <span>
                 {g.approved}/{g.required} 승인
               </span>
@@ -1413,6 +1352,7 @@ function FeatureView({
                   )}
                   <textarea
                     id="review-comment"
+                    aria-label="리뷰 의견"
                     placeholder="확인할 점이나 수정 의견을 남기세요."
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
@@ -1628,6 +1568,7 @@ function FeatureView({
             <pre className="policy-text">{run.effectivePolicy}</pre>
           ) : (
             <>
+              <InstructionContext snapshot={snapshot} feature={f} />
               {[
                 ["전역 지침", snapshot.policies.at(-1)!.global],
                 [
@@ -1658,7 +1599,12 @@ function FeatureView({
           )}
         </div>
       ) : snapshot.mode === "local-owner" ? (
-        <RunPanel snapshot={snapshot} feature={f} send={send} />
+        <RunPanel
+          snapshot={snapshot}
+          feature={f}
+          send={send}
+          connected={connected}
+        />
       ) : (
         <div className="content-page">
           <div className="execution-heading">
@@ -2221,12 +2167,13 @@ function CreateDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
-    <div className="modal-backdrop">
+    <Dialog
+      label={kind === "feature" ? "새 기능" : "새 프로젝트"}
+      onClose={onClose}
+      className="create-dialog-container"
+    >
       <form
         className="create-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={kind === "feature" ? "새 기능" : "새 프로젝트"}
         onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
@@ -2346,6 +2293,6 @@ function CreateDialog({
           </button>
         </footer>
       </form>
-    </div>
+    </Dialog>
   );
 }

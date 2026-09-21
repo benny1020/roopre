@@ -50,6 +50,7 @@ test.describe("fresh installation", () => {
       path: "artifacts/empty-workspace.png",
       fullPage: true,
     });
+    await page.getByRole("button", { name: "설정", exact: true }).click();
     await page
       .getByRole("button", { name: "지침 · 팀 설정", exact: true })
       .click();
@@ -62,6 +63,7 @@ test.describe("fresh installation", () => {
     await expect(
       page.getByRole("button", { name: "프로젝트 기준 저장" }),
     ).toBeDisabled();
+    await page.getByRole("button", { name: "설정", exact: true }).click();
     await page
       .getByRole("button", { name: "표준 · 연결 · 환경", exact: true })
       .click();
@@ -186,6 +188,7 @@ test.beforeEach(async ({ page, store }) => {
 test("temporary database loss preserves the last screen and clears the warning on reconnect", async ({
   page,
 }) => {
+  await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.getByRole("button", { name: /^표준 · 연결/ }).click();
   let calls = 0;
   await page.route("**/__test/snapshot", async (route) => {
@@ -216,7 +219,7 @@ test("theme choice persists and system mode follows OS appearance", async ({
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator(".nav-item.active")).toHaveCSS(
     "background-color",
-    "rgb(32, 36, 43)",
+    "rgb(28, 32, 38)",
   );
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -268,6 +271,7 @@ test("project and feature persist while unapproved execution stays blocked", asy
 test("execution profile edits survive periodic refresh and overview explains capacity", async ({
   page,
 }) => {
+  await page.getByRole("button", { name: "설정", exact: true }).click();
   await page
     .getByRole("button", { name: "표준 · 연결 · 환경", exact: true })
     .click();
@@ -302,7 +306,7 @@ test("execution profile edits survive periodic refresh and overview explains cap
   });
   await page.getByRole("button", { name: /^실행 현황/ }).click();
   await expect(
-    page.getByText("동시에 최대 2개 프로젝트를 실행합니다.", { exact: false }),
+    page.getByText("프로젝트 간 최대 2개 동시 실행", { exact: false }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "아직 실행한 작업이 없습니다" }),
@@ -313,6 +317,7 @@ test("custom agent Markdown, project workflow and instruction provenance survive
   page,
   store,
 }) => {
+  await page.getByRole("button", { name: "설정", exact: true }).click();
   await page
     .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
     .click();
@@ -398,7 +403,9 @@ test("harness standard edits, previews, applies atomically and persists feature 
     requirements: "AC01 verify payment",
     template: "feature",
   });
+  await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.reload();
+  await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.getByRole("button", { name: "하네스 표준", exact: true }).click();
   await page.getByRole("button", { name: "기본 표준으로 시작" }).click();
   await expect(
@@ -497,7 +504,9 @@ test("harness standard edits, previews, applies atomically and persists feature 
     fullPage: true,
     animations: "disabled",
   });
+  await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.reload();
+  await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.getByRole("button", { name: "하네스 표준", exact: true }).click();
   await expect(
     page.getByText("적용된 표준 · 결제팀 개발 표준", { exact: true }),
