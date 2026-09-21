@@ -69,7 +69,7 @@ agent 네트워크는 internal Docker network다. sidecar는 호스트 broker만
 
 `shared/harness.ts`에 정의·배치·지침 합성 계약을 둔다. 에이전트 revision은 누적 보존하고 프로젝트의 workflow가 참조한 최신 정의를 실행 요청 시 복사한다. 적용 모델 연결 버전도 검증한다. 지침·정의·배치 변경은 관련 승인과 실행을 무효화한다. 실행 관리자는 단계 순서와 필수 결과를 검사하며 각각 별도 컨테이너/세션·broker로 실행한다. 읽기 전용 planning은 소스를 수정하지 않고 초안 revision이 일치할 때만 새 초안을 저장한다. `--bare`, 빈 setting sources, 고정 MCP 설정으로 암묵적 저장소 지침·hooks 로딩을 제어한다.
 
-`renderer/src/Onboarding.tsx`는 DB 없는 app shell과 단계별 설정 UI, `HarnessPanel.tsx`는 정의/배치 편집, `RunPanel.tsx`는 개별 에이전트의 실제 입력·tree·결과를 보여준다. Markdown 미리보기는 HTML을 실행하지 않는 텍스트/제목/코드 중심의 제한된 렌더링이다. 첫 구현의 단계 내부 실행은 순차이며 기존 전체 2개/프로젝트당 1개 점유 규칙을 유지한다.
+`renderer/src/Onboarding.tsx`는 DB 없는 app shell과 단계별 설정 UI, `HarnessPanel.tsx`는 정의/배치 편집, `RunPanel.tsx`는 개별 에이전트의 실제 입력·tree·결과를 보여준다. Markdown 미리보기는 HTML을 실행하지 않는 텍스트/제목/코드 중심의 제한된 렌더링이다. 단계 내부는 기본 병렬이며 단계별 순차 실행을 선택할 수 있다. 동시 작업은 단계당 최대 3개이고, 전체 2개 실행/프로젝트당 1개 실행 점유 규칙을 유지한다. 병렬 작업은 동일 입력의 독립 clone·컨테이너·네트워크·broker를 사용한다. 모든 작업이 종료된 후 서로 겹치지 않는 구현 패치만 통합하고 고정 검사를 실행한다. 충돌은 작업 공간을 보존하고 실행을 중단한다. 요구사항/설계의 여러 초안은 별도 통합 실행을 거쳐 사람에게 전달한다. 실행 방식과 승인 이행은 [병렬 실행 설계](design/PARALLEL-STAGES.md)를 따른다.
 
 ## 하네스 패키지 v1
 

@@ -11,6 +11,7 @@ import {
 } from "../../shared/harness";
 import type { ConnectionInfo } from "../../shared/runtime";
 import MarkdownPreview from "./MarkdownPreview";
+import { stageConcurrency } from "../../shared/stage-execution";
 const instructions = {
   requirements: "",
   design: "",
@@ -412,6 +413,25 @@ export default function HarnessPanel({
               <div className="workflow-stage" key={stage}>
                 <h3>{stageNames[stage]}</h3>
                 <label className="field">
+                  실행 방식
+                  <select
+                    aria-label={`${stageNames[stage]} 실행 방식`}
+                    value={flow.execution?.[stage] ?? "parallel"}
+                    onChange={(e) =>
+                      setFlow({
+                        ...flow,
+                        execution: {
+                          ...flow.execution,
+                          [stage]: e.target.value as "parallel" | "sequential",
+                        },
+                      })
+                    }
+                  >
+                    <option value="parallel">병렬 · 기본</option>
+                    <option value="sequential">순차 · 한 명씩 실행</option>
+                  </select>
+                </label>
+                <label className="field">
                   {stageNames[stage]} 단계 지침
                   <textarea
                     aria-label={`${stageNames[stage]} 단계 지침`}
@@ -479,6 +499,9 @@ export default function HarnessPanel({
                       </label>
                       <button
                         aria-label={`${stageNames[stage]} 순서 올리기`}
+                        disabled={
+                          (flow.execution?.[stage] ?? "parallel") === "parallel"
+                        }
                         onClick={() => {
                           const list = [...flow.assignments];
                           const index = list.findIndex((x) => x.id === a.id);
@@ -546,8 +569,10 @@ export default function HarnessPanel({
               </div>
             ))}
             <p className="muted">
-              단계 안에서는 순서대로 실행합니다. 필수 구현자·리뷰어와 프로그램의
-              고정 검사는 유지됩니다. 저장 후 설계를 재승인하세요.
+              단계 안에서는 기본 병렬로 최대 {stageConcurrency}개씩 실행하며,
+              모두 끝나면 다음 단계로 넘어갑니다. 이전 에이전트 결과가 필요한
+              단계는 순차를 선택하세요. 구현 파일이 겹치면 통합을 중단하고
+              결과를 보존합니다. 실행 방식을 저장하면 설계를 재승인해야 합니다.
             </p>
             <div className="button-row">
               <button

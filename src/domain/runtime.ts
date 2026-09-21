@@ -20,6 +20,7 @@ export function policyBinding(w: Workspace, f: Feature) {
         dependencies: f.dependencies,
         harness: p.workflow
           ? {
+              executionSemantics: 2,
               workflow: p.workflow,
               agents: p.workflow.assignments.map(
                 (a) => latestAgents(w).find((d) => d.id === a.agentId) ?? null,

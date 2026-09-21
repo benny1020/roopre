@@ -2,6 +2,11 @@ import { packageInstructions } from "./harness-package.ts";
 import { z } from "zod";
 import type { Workspace, Project } from "./contracts.ts";
 import { stages } from "./harness-stages.ts";
+import {
+  stageExecutionSchema,
+  stageExecution,
+  type StageExecution,
+} from "./stage-execution.ts";
 export { stages } from "./harness-stages.ts";
 export const stageNames: Record<(typeof stages)[number], string> = {
   requirements: "요구사항",
@@ -31,6 +36,7 @@ export const assignmentSchema = z.object({
 });
 export const workflowSchema = z.object({
   revision: z.number().int().positive(),
+  execution: stageExecutionSchema.optional(),
   assignments: z.array(assignmentSchema).min(2).max(30),
   instructions: z.object({
     requirements: z.string().max(10000),
@@ -50,6 +56,7 @@ export type ResolvedAgent = z.infer<typeof assignmentSchema> & {
 export type ResolvedHarness = {
   version: 1;
   workflowRevision: number;
+  execution?: StageExecution;
   agents: ResolvedAgent[];
 };
 export type AgentExecution = {
@@ -72,6 +79,7 @@ export type AgentExecution = {
   instructions: string;
   output?: string;
   error?: string;
+  worktree?: string;
 };
 export function latestAgents(w: Pick<Workspace, "agents">) {
   const map = new Map<string, AgentDefinition>();
@@ -120,6 +128,7 @@ export function resolveHarness(
   return {
     version: 1,
     workflowRevision: p.workflow.revision,
+    execution: stageExecution(p.workflow.execution),
     agents: stages.flatMap((stage) =>
       p
         .workflow!.assignments.filter((a) => a.stage === stage)

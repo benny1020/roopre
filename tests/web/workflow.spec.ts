@@ -344,6 +344,12 @@ test("custom agent Markdown, project workflow and instruction provenance survive
   await expect(
     page.getByText("기본 흐름을 적용했습니다.", { exact: true }),
   ).toBeVisible();
+  await expect(page.getByLabel("검증 실행 방식", { exact: true })).toHaveValue(
+    "parallel",
+  );
+  await page
+    .getByLabel("설계 실행 방식", { exact: true })
+    .selectOption("sequential");
   await page
     .getByRole("button", { name: "검증 에이전트 추가", exact: true })
     .click();
@@ -357,6 +363,16 @@ test("custom agent Markdown, project workflow and instruction provenance survive
     page.getByText("개발 흐름을 저장했습니다.", { exact: true }),
   ).toBeVisible();
   await page.reload();
+  await expect(page.getByLabel("설계 실행 방식", { exact: true })).toHaveValue(
+    "sequential",
+  );
+  await expect(page.getByLabel("검증 실행 방식", { exact: true })).toHaveValue(
+    "parallel",
+  );
+  await page.screenshot({
+    path: "artifacts/parallel-stage-settings.png",
+    fullPage: true,
+  });
   await expect(page.getByLabel("검증 단계 지침", { exact: true })).toHaveValue(
     "모든 이름은 프로젝트 기준과 대조한다.",
   );

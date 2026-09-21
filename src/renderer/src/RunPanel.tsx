@@ -510,7 +510,9 @@ export default function RunPanel({
                   </header>
                   <div className="inspector-scroll">
                     <div className="actor-label">
-                      {liveAgent ? "AGENT · 작업 중" : "AGENT · 최근 활동"}
+                      {liveAgent
+                        ? `AGENT · ${attemptAgents.filter((a) => a.status === "running").length}개 실행 중`
+                        : "AGENT · 최근 활동"}
                     </div>
                     <h3>{agent?.name || "현재 시도 · 에이전트 대기"}</h3>
                     <p>
@@ -554,6 +556,12 @@ export default function RunPanel({
                                 <small>
                                   {stageNames[a.stage]} · v{a.revision} ·{" "}
                                   {a.required ? "필수" : "선택"}
+                                  {" · "}
+                                  {a.status === "running"
+                                    ? "실행 중"
+                                    : a.status === "passed"
+                                      ? "완료"
+                                      : "실패"}
                                 </small>
                               </span>
                             </summary>
@@ -580,6 +588,11 @@ export default function RunPanel({
                             <p>
                               출력 tree <code>{a.outputTree || "대기"}</code>
                             </p>
+                            {a.worktree && (
+                              <p>
+                                작업 공간 <code>{a.worktree}</code>
+                              </p>
+                            )}
                           </details>
                         ))}
                       </section>
