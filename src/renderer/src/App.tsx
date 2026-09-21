@@ -209,7 +209,7 @@ export default function App() {
     const key = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setSearch((s) => !s);
+        if (!modal) setSearch((s) => !s);
       }
       if (e.key === "Escape") {
         setModal(null);
@@ -217,13 +217,14 @@ export default function App() {
       }
       if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) {
         e.preventDefault();
+        if (modal || search) return;
         setSelected(null);
         setScope(e.key === "1" ? "inbox" : e.key === "2" ? "all" : "policies");
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, []);
+  }, [modal, search]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);

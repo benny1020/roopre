@@ -236,3 +236,69 @@ test("review presents real acceptance evidence, overview preserves selected hist
   await axe(page);
   await page.screenshot({ path: "artifacts/ade-commands-dark.png" });
 });
+
+test("global commands cannot stack a second dialog over a draft creation form", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await prepare(page);
+  await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+  const search = page.getByRole("combobox", { name: "명령과 작업 검색" });
+  await search.fill("새 프로젝트");
+  await search.press("Enter");
+  const name = page.getByLabel("프로젝트 이름", { exact: true });
+  await name.fill("Preserved draft");
+  await name.press("Control+k");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(name).toHaveValue("Preserved draft");
+  await expect(name).toBeFocused();
+  await name.press("Meta+k");
+  await name.press("Control+2");
+  await expect(page.getByRole("dialog", { name: "새 프로젝트" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+test("retry review history cannot masquerade as current acceptance evidence", async ({
+  page,
+}) => {
+  const state = adeFixture(),
+    run = state.runs.at(-1)!;
+  run.status = "repairing";
+  const old = JSON.stringify({
+    passed: true,
+    acceptance: [
+      { id: "OLD-AC", passed: true, evidence: "Only old attempt was checked" },
+    ],
+    findings: [],
+  });
+  run.runtime!.agents!.push({
+    ...run.runtime!.agents![0],
+    id: "old-review",
+    name: "과거 리뷰",
+    stage: "review",
+    attempt: 1,
+    output: old,
+  });
+  run.runtime!.review = old;
+  await prepare(page, state);
+  await page.getByRole("tab", { name: "AI 리뷰", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "현재 시도의 AI 리뷰가 아직 없습니다" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("OLD-AC · 충족 의견", { exact: true }),
+  ).toBeHidden();
+  const history = page.locator(".review-history");
+  await history.locator(":scope > summary").click();
+  await history
+    .getByText("시도 1 · 과거 리뷰 v2 · 필수 · passed", { exact: true })
+    .click();
+  await expect(history).toContainText("현재 검증 근거가 아닙니다");
+  await expect(
+    history.getByText("OLD-AC · 충족 의견", { exact: true }),
+  ).toBeVisible();
+  await expect(history).toContainText("입력 tree");
+  await expect(history).toContainText("d".repeat(40));
+});

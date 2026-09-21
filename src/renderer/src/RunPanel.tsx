@@ -129,6 +129,11 @@ export default function RunPanel({
       ? attemptAgents.find((a) => a.status === "running")
       : undefined;
   const agent = liveAgent || attemptAgents.at(-1);
+  const reviewers = attemptAgents.filter((a) => a.stage === "review");
+  const pastReviewers =
+    runtime?.agents?.filter(
+      (a) => a.stage === "review" && a.attempt !== runtime.attempt,
+    ) || [];
   const evidence =
     runtime?.evidence.filter((e) => e.attempt === runtime.attempt) || [];
   const history =
@@ -388,29 +393,65 @@ export default function RunPanel({
                       <strong>AGENT · 독립 리뷰</strong>
                       <span>최종 판단은 검증 근거와 함께</span>
                     </div>
-                    {runtime?.review ? (
+                    {!reviewers.length && (
+                      <Empty title="현재 시도의 AI 리뷰가 아직 없습니다">
+                        구현과 검사가 끝나면 독립 리뷰의 결과와 근거를 확인할 수
+                        있습니다. 이전 시도의 통과 의견은 현재 시도의 검증
+                        근거가 아닙니다.
+                      </Empty>
+                    )}
+                    {reviewers.map((a) => (
+                      <details key={a.id} open>
+                        <summary>
+                          {a.name} v{a.revision} · 시도 {a.attempt} ·{" "}
+                          {a.required ? "필수" : "선택"} ·{" "}
+                          {a.status === "passed"
+                            ? "통과"
+                            : a.status === "failed"
+                              ? "실패"
+                              : "진행 중"}
+                        </summary>
+                        <div className="evidence-binding">
+                          입력 tree <code>{a.inputTree}</code>
+                          <br />
+                          출력 tree <code>{a.outputTree || "기록 대기"}</code>
+                        </div>
+                        <ReviewEvidence
+                          value={a.output || a.error || "출력 대기"}
+                        />
+                      </details>
+                    ))}
+                    {!!pastReviewers.length && (
+                      <details className="review-history">
+                        <summary>
+                          이전 시도 AI 리뷰 {pastReviewers.length}개 · 현재 검증
+                          근거가 아닙니다
+                        </summary>
+                        {pastReviewers.map((a) => (
+                          <details key={a.id}>
+                            <summary>
+                              시도 {a.attempt} · {a.name} v{a.revision} ·{" "}
+                              {a.required ? "필수" : "선택"} · {a.status}
+                            </summary>
+                            <div className="evidence-binding">
+                              입력 tree <code>{a.inputTree}</code>
+                              <br />
+                              출력 tree{" "}
+                              <code>{a.outputTree || "기록 없음"}</code>
+                            </div>
+                            <ReviewEvidence
+                              value={a.output || a.error || "출력 없음"}
+                            />
+                          </details>
+                        ))}
+                      </details>
+                    )}
+                    {runtime?.review && (
                       <details className="review-original">
-                        <summary>전체 리뷰 원본 기록</summary>
+                        <summary>전체 리뷰 원문 · 이전 시도 포함 가능</summary>
                         <pre className="output-text">{runtime.review}</pre>
                       </details>
-                    ) : !runtime?.agents?.some((a) => a.stage === "review") ? (
-                      <Empty title="아직 AI 리뷰가 없습니다">
-                        구현과 검사가 끝나면 독립 리뷰의 결과와 근거를 확인할 수
-                        있습니다.
-                      </Empty>
-                    ) : null}
-                    {runtime?.agents
-                      ?.filter((a) => a.stage === "review")
-                      .map((a) => (
-                        <details key={a.id} open>
-                          <summary>
-                            {a.name} v{a.revision} · {a.status}
-                          </summary>
-                          <ReviewEvidence
-                            value={a.output || a.error || "출력 대기"}
-                          />
-                        </details>
-                      ))}
+                    )}
                   </div>
                 )}
                 {tab === "artifacts" && (
