@@ -1,3 +1,4 @@
+import EventLog from "./workspace/EventLog";
 import ExecutionSetup, {
   type SetupDestination,
 } from "./workspace/ExecutionSetup";
@@ -65,7 +66,13 @@ export default function RunPanel({
   const [inspector, setInspector] = useState(true);
   const [defaultOutput, setOutput] = useState(true);
   const [graphOutput, setGraphOutput] = useState(false);
-  const output = tab === "flow" ? graphOutput : defaultOutput;
+  const [diffOutput, setDiffOutput] = useState(false);
+  const output =
+    tab === "flow"
+      ? graphOutput
+      : tab === "changes"
+        ? diffOutput
+        : defaultOutput;
   const [outputTab, setOutputTab] = useState("events");
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [availableHeight, setAvailableHeight] = useState(600);
@@ -366,10 +373,7 @@ export default function RunPanel({
                       </button>
                     </div>
                     {diff?.runId === run.id ? (
-                      <DiffViewer
-                        key={`${diff.runId}:${diff.at}`}
-                        patch={diff.patch}
-                      />
+                      <DiffViewer key={diff.runId} patch={diff.patch} />
                     ) : (
                       <Empty
                         title={
@@ -766,7 +770,9 @@ export default function RunPanel({
                 onClick={() =>
                   tab === "flow"
                     ? setGraphOutput(!graphOutput)
-                    : setOutput(!defaultOutput)
+                    : tab === "changes"
+                      ? setDiffOutput(!diffOutput)
+                      : setOutput(!defaultOutput)
                 }
                 aria-expanded={output}
               >
@@ -789,32 +795,22 @@ export default function RunPanel({
                 {run.id.slice(0, 8)} · 시도 {runtime?.attempt ?? 1}
               </span>
             </header>
-            {output && (
-              <div className="output-scroll" tabIndex={0}>
-                {outputTab === "events" ? (
-                  runtime?.events.length ? (
-                    <ol className="event-log">
-                      {runtime.events.map((e, i) => (
-                        <li key={i}>
-                          <time>{new Date(e.at).toLocaleTimeString()}</time>
-                          <span>{e.message}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <p className="quiet-empty">
-                      실행기에서 진행 기록을 기다립니다.
-                    </p>
-                  )
-                ) : (
+            {output &&
+              (outputTab === "events" ? (
+                <EventLog key={run.id} events={runtime?.events || []} />
+              ) : (
+                <div
+                  className="output-scroll"
+                  tabIndex={0}
+                  aria-label="에이전트 결과"
+                >
                   <pre className="output-text">
                     {agent?.output ||
                       agent?.error ||
                       "완료된 결과가 아직 없습니다. 실시간 내부 추론은 표시하지 않습니다."}
                   </pre>
-                )}
-              </div>
-            )}
+                </div>
+              ))}
           </section>
         </>
       )}

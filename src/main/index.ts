@@ -1,5 +1,6 @@
+import { readWindowState, rememberWindow } from "./window-state";
 import { installDesktop } from "./desktop";
-import { app, BrowserWindow, session, shell, dialog } from "electron";
+import { app, BrowserWindow, session, shell, dialog, screen } from "electron";
 import { join, dirname } from "node:path";
 import { APP_NAME, APP_ID } from "../shared/brand";
 import { fileURLToPath } from "node:url";
@@ -12,9 +13,17 @@ const iconPath = join(app.getAppPath(), "resources/icon.png");
 
 const here = dirname(fileURLToPath(import.meta.url));
 function createWindow() {
+  const statePath = join(app.getPath("userData"), "window-state.json");
+  const primary = screen.getPrimaryDisplay();
+  const saved = readWindowState(statePath, [
+    primary.workArea,
+    ...screen
+      .getAllDisplays()
+      .filter((d) => d.id !== primary.id)
+      .map((d) => d.workArea),
+  ]);
   const window = new BrowserWindow({
-    width: 1440,
-    height: 940,
+    ...saved.bounds,
     minWidth: 1024,
     minHeight: 700,
     title: APP_NAME,
@@ -29,6 +38,13 @@ function createWindow() {
       sandbox: true,
     },
   });
+  const freeze = rememberWindow(window, statePath);
+  app.on("before-quit", freeze);
+  window.once("closed", () => app.removeListener("before-quit", freeze));
+  if (saved.maximized)
+    window.once("ready-to-show", () => {
+      if (!window.isDestroyed()) window.maximize();
+    });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-attach-webview", (event) =>
     event.preventDefault(),

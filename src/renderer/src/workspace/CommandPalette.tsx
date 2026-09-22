@@ -1,3 +1,4 @@
+import { searchCommands } from "./search";
 import { useId, useState } from "react";
 import {
   ArrowUpRight,
@@ -29,55 +30,55 @@ export default function CommandPalette({
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const id = useId();
-  const commands = [
-    {
-      id: "new-feature",
-      title: "새 기능",
-      meta: "요구사항으로 시작",
-      icon: Plus,
-      action: () => create("feature"),
-      disabled: !connected || !snapshot?.projects.length,
-    },
-    {
-      id: "new-project",
-      title: "새 프로젝트",
-      meta: "저장소와 개발 흐름 연결",
-      icon: Plus,
-      action: () => create("project"),
-      disabled: !connected,
-    },
-    {
-      id: "runs",
-      title: "실행 현황",
-      meta: "모든 프로젝트의 에이전트 작업",
-      icon: Activity,
-      action: () => navigate("queued"),
-    },
-    {
-      id: "settings",
-      title: "설정",
-      meta: "하네스 · 에이전트 · 연결 · 지침",
-      icon: Settings2,
-      action: () => navigate("harness"),
-    },
-    ...(snapshot?.projects.map((p) => ({
-      id: p.id,
-      title: p.name,
-      meta: "프로젝트",
-      icon: Folder,
-      action: () => navigate(p.id),
-    })) || []),
-    ...(snapshot?.features.map((f) => ({
-      id: f.id,
-      title: f.title,
-      meta: snapshot.projects.find((p) => p.id === f.projectId)?.name || "기능",
-      icon: FileText,
-      action: () => onSelect(f.id),
-    })) || []),
-  ].filter(
-    (c) =>
-      `${c.title} ${c.meta}`.toLowerCase().includes(query.toLowerCase()) &&
-      !("disabled" in c && c.disabled),
+  const commands = searchCommands(
+    [
+      {
+        id: "new-feature",
+        title: "새 기능",
+        meta: "요구사항으로 시작",
+        icon: Plus,
+        action: () => create("feature"),
+        disabled: !connected || !snapshot?.projects.length,
+      },
+      {
+        id: "new-project",
+        title: "새 프로젝트",
+        meta: "저장소와 개발 흐름 연결",
+        icon: Plus,
+        action: () => create("project"),
+        disabled: !connected,
+      },
+      {
+        id: "runs",
+        title: "실행 현황",
+        meta: "모든 프로젝트의 에이전트 작업",
+        icon: Activity,
+        action: () => navigate("queued"),
+      },
+      {
+        id: "settings",
+        title: "설정",
+        meta: "하네스 · 에이전트 · 연결 · 지침",
+        icon: Settings2,
+        action: () => navigate("harness"),
+      },
+      ...(snapshot?.projects.map((p) => ({
+        id: `project:${p.id}`,
+        title: p.name,
+        meta: "프로젝트",
+        icon: Folder,
+        action: () => navigate(p.id),
+      })) || []),
+      ...(snapshot?.features.map((f) => ({
+        id: `feature:${f.id}`,
+        title: f.title,
+        meta:
+          snapshot.projects.find((p) => p.id === f.projectId)?.name || "기능",
+        icon: FileText,
+        action: () => onSelect(f.id),
+      })) || []),
+    ].filter((c) => !("disabled" in c && c.disabled)),
+    query,
   );
   const selected = Math.min(index, Math.max(0, commands.length - 1));
   const execute = (i: number) => {
@@ -105,12 +106,15 @@ export default function CommandPalette({
             commands[selected] ? `${id}-${selected}` : undefined
           }
           placeholder="기능, 프로젝트 또는 명령 검색…"
+          maxLength={500}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
             setIndex(0);
           }}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229)
+              return;
             if (["ArrowDown", "ArrowUp"].includes(e.key)) {
               e.preventDefault();
               setIndex(
