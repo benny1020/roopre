@@ -470,29 +470,23 @@ export default function HarnessPanel({
           </section>
         </Dialog>
       )}
-      <section className="runtime-card">
-        <h2>프로젝트 개발 흐름</h2>
-        <label className="field">
-          개발 흐름 프로젝트
-          <select
-            value={projectId}
-            onChange={(e) => selectProject(e.target.value)}
-            disabled={busy || !snapshot.projects.length}
-          >
-            {snapshot.projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {!project && (
-          <p>
-            프로젝트를 먼저 만드세요. 전역 에이전트는 지금 작성할 수 있습니다.
-          </p>
-        )}
-        {project && (
-          <>
+      <section className="runtime-card workflow-settings">
+        <div className="workflow-project-toolbar">
+          <label className="field">
+            개발 흐름 프로젝트
+            <select
+              value={projectId}
+              onChange={(e) => selectProject(e.target.value)}
+              disabled={busy || !snapshot.projects.length}
+            >
+              {snapshot.projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {project && (
             <button
               disabled={locked}
               onClick={() =>
@@ -503,6 +497,15 @@ export default function HarnessPanel({
             >
               기본 흐름 적용
             </button>
+          )}
+        </div>
+        {!project && (
+          <p>
+            프로젝트를 먼저 만드세요. 전역 에이전트는 지금 작성할 수 있습니다.
+          </p>
+        )}
+        {project && (
+          <>
             {activeProject && (
               <p className="error-banner">
                 이 프로젝트의 실행이 종료될 때까지 흐름 편집을 잠급니다. 종료 후
@@ -532,72 +535,78 @@ export default function HarnessPanel({
                 setPreview(false);
               }}
             />
-            <p className="muted">
-              단계 안에서는 기본 병렬로 최대 {stageConcurrency}개씩 실행하며,
-              모두 끝나면 다음 단계로 넘어갑니다. 이전 에이전트 결과가 필요한
-              단계는 순차를 선택하세요. 구현 파일이 겹치면 통합을 중단하고
-              결과를 보존합니다. 실행 방식을 저장하면 설계를 재승인해야 합니다.
-            </p>
-            <p className="muted">
-              {dirty
-                ? "저장하지 않은 초안 · 이 기기에 자동 보관됨"
-                : "저장된 흐름과 동일"}{" "}
-              · 기준 v{flowBase}
-            </p>
-            {flowIssues.length > 0 && (
-              <p className="muted" role="status">
-                저장 전 확인: {flowIssues.join(" ")}
+            <details className="workflow-policy-hint">
+              <summary>병렬 실행과 승인 규칙</summary>{" "}
+              <p className="muted">
+                단계 안에서는 기본 병렬로 최대 {stageConcurrency}개씩 실행하며,
+                모두 끝나면 다음 단계로 넘어갑니다. 이전 에이전트 결과가 필요한
+                단계는 순차를 선택하세요. 구현 파일이 겹치면 통합을 중단하고
+                결과를 보존합니다. 실행 방식을 저장하면 설계를 재승인해야
+                합니다.
               </p>
-            )}
-            <div className="button-row">
-              <button
-                className="primary"
-                disabled={locked || !dirty || flowIssues.length > 0}
-                onClick={() =>
-                  void act(async () => {
-                    const next = { ...flow, revision: flowBase + 1 };
-                    await send({
-                      type: "save_workflow",
-                      projectId,
-                      expectedRevision: flowBase,
-                      workflow: next,
-                    });
-                    setFlow(next);
-                    setFlowBase(next.revision);
-                    setNotice("개발 흐름을 저장했습니다.");
-                  })
-                }
-              >
-                개발 흐름 저장
-              </button>
-              <button
-                onClick={() => {
-                  try {
-                    setComposed(
-                      resolveHarness(snapshot, { ...project, workflow: flow })
-                        ?.agents.map(
-                          (a) => `## ${a.agent.name}\n${a.instructions}`,
-                        )
-                        .join("\n\n") ?? "",
-                    );
-                  } catch (e) {
-                    setError((e as Error).message);
+            </details>
+            <div className="workflow-savebar">
+              <p className="muted">
+                {dirty
+                  ? "저장하지 않은 초안 · 이 기기에 자동 보관됨"
+                  : "저장된 흐름과 동일"}{" "}
+                · 기준 v{flowBase}
+              </p>
+              {flowIssues.length > 0 && (
+                <p className="muted" role="status">
+                  저장 전 확인: {flowIssues.join(" ")}
+                </p>
+              )}
+              <div className="button-row">
+                <button
+                  className="primary"
+                  disabled={locked || !dirty || flowIssues.length > 0}
+                  onClick={() =>
+                    void act(async () => {
+                      const next = { ...flow, revision: flowBase + 1 };
+                      await send({
+                        type: "save_workflow",
+                        projectId,
+                        expectedRevision: flowBase,
+                        workflow: next,
+                      });
+                      setFlow(next);
+                      setFlowBase(next.revision);
+                      setNotice("개발 흐름을 저장했습니다.");
+                    })
                   }
-                }}
-              >
-                적용 지침 확인
-              </button>
-              <button
-                onClick={() => {
-                  if (dirty) setDiscard(true);
-                  else {
-                    localStorage.removeItem(draftKey(projectId));
-                    selectProject(projectId);
-                  }
-                }}
-              >
-                최신 저장본 불러오기
-              </button>
+                >
+                  개발 흐름 저장
+                </button>
+                <button
+                  onClick={() => {
+                    try {
+                      setComposed(
+                        resolveHarness(snapshot, { ...project, workflow: flow })
+                          ?.agents.map(
+                            (a) => `## ${a.agent.name}\n${a.instructions}`,
+                          )
+                          .join("\n\n") ?? "",
+                      );
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  }}
+                >
+                  적용 지침 확인
+                </button>
+                <button
+                  onClick={() => {
+                    if (dirty) setDiscard(true);
+                    else {
+                      localStorage.removeItem(draftKey(projectId));
+                      selectProject(projectId);
+                    }
+                  }}
+                >
+                  최신 저장본 불러오기
+                </button>
+              </div>
             </div>
           </>
         )}

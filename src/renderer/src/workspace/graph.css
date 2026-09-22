@@ -229,7 +229,7 @@
 .graph-picker textarea {
   min-height: 130px;
 }
-@media (max-width: 1450px) {
+@media (max-width: 1249px) {
   .graph-editor {
     grid-template-columns: 1fr;
   }
@@ -245,7 +245,7 @@
 
 .graph-plane {
   height: 100%;
-  min-width: 1050px;
+  min-width: 780px;
 }
 .graph-inspector fieldset {
   border: 0;
@@ -276,7 +276,7 @@
   font-weight: 600;
   margin-bottom: 12px;
 }
-@media (max-width: 1450px) {
+@media (max-width: 1249px) {
   .graph-inspector fieldset {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -301,4 +301,192 @@
   color: var(--blue);
   margin-left: 4px;
   font-weight: 500;
+}
+
+/* Keep graph labels at their native size; large flows scroll instead of shrinking. */
+.graph-plane {
+  min-width: 780px;
+  min-height: 100%;
+}
+.graph-canvas {
+  overflow: auto;
+}
+.graph-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.flow-stage-node {
+  position: relative;
+}
+.flow-stage-node:has(.stage-add) > strong {
+  padding-right: 20px;
+}
+.flow-stage-node .stage-add {
+  position: absolute;
+  top: 8px;
+  right: 7px;
+  width: 26px;
+  height: 26px;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+}
+.flow-stage-node .stage-add:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--text);
+}
+.execution-graph-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  flex: 1;
+  min-height: 0;
+}
+.execution-graph-layout > .workflow-graph {
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  min-height: 260px;
+}
+.execution-graph-layout .graph-toolbar > span {
+  display: none;
+}
+.execution-graph-layout .graph-toolbar {
+  justify-content: flex-end;
+}
+.execution-graph-layout .graph-canvas {
+  flex: 1;
+  height: auto;
+  min-height: 200px;
+}
+.graph-run-detail {
+  padding: 16px;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  min-width: 0;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.graph-detail-heading {
+  margin-bottom: 12px;
+}
+.graph-detail-heading > span {
+  font-size: 11px;
+}
+.graph-detail-heading h3 {
+  margin: 5px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.graph-agent-meta {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.graph-run-detail details {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.graph-run-detail summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.graph-run-detail .evidence-binding {
+  padding: 4px 0;
+}
+.graph-run-detail pre {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.graph-detail-footer {
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.graph-stage-agents {
+  display: grid;
+  gap: 4px;
+}
+.graph-stage-agents button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  font-size: 12px;
+}
+.graph-stage-agents button span {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+@media (min-width: 1250px) {
+  .execution-surface.is-flow {
+    overflow: hidden;
+  }
+}
+@media (max-width: 1249px) {
+  .execution-graph-layout {
+    grid-template-columns: 1fr;
+    min-height: min-content;
+  }
+  .execution-graph-layout > .workflow-graph {
+    min-height: 300px;
+  }
+  .execution-graph-layout .graph-canvas {
+    height: 230px;
+    flex: none;
+  }
+  .graph-run-detail {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
+
+.harness-panel .page-heading {
+  padding-bottom: 16px;
+}
+.workflow-settings {
+  margin-top: 0;
+}
+.workflow-project-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.workflow-project-toolbar > .field {
+  flex: 1;
+  margin: 0;
+}
+.workflow-project-toolbar > button {
+  flex-shrink: 0;
+  margin-bottom: 1px;
+}
+.workflow-savebar {
+  position: sticky;
+  bottom: -24px;
+  z-index: 5;
+  padding: 12px 0;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.workflow-savebar > p {
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+.workflow-policy-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 12px 0;
+  line-height: 1.7;
+}
+.workflow-settings .graph-draft-bar {
+  margin: 12px 0;
+}
+.workflow-settings .graph-editor {
+  margin-top: 12px;
 }

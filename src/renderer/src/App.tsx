@@ -999,7 +999,9 @@ function FeatureView({
     (t) => threadFilter === "all" || t.status !== "resolved",
   );
   return (
-    <div className="feature-detail">
+    <div
+      className={`feature-detail ${tab === "execution" ? "is-execution" : ""}`}
+    >
       <div className="detail-heading">
         <button
           className="icon-button"
@@ -1604,6 +1606,7 @@ function FeatureView({
           feature={f}
           send={send}
           connected={connected}
+          onDesign={() => setTab("design")}
         />
       ) : (
         <div className="content-page">

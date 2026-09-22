@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   stageNames,
   stages,
@@ -75,6 +75,24 @@ export default function WorkflowEditor({
     [flow.assignments, agents],
   );
   const candidates = agents.filter((a) => compatible(a, stage));
+  const openPicker = useCallback(
+    (target: Stage) => {
+      if (locked || flow.assignments.length >= 30) return;
+      setSelected(target);
+      setQuery("");
+      setPicker(target);
+    },
+    [locked, flow.assignments.length],
+  );
+  const matches = picker
+    ? agents.filter(
+        (a) =>
+          compatible(a, picker) &&
+          `${a.name} ${a.description}`
+            .toLowerCase()
+            .includes(query.toLowerCase()),
+      )
+    : [];
   return (
     <>
       <div className="graph-draft-bar">
@@ -103,6 +121,8 @@ export default function WorkflowEditor({
           modes={flow.execution}
           editable={!locked}
           onMove={move}
+          onAdd={openPicker}
+          addDisabled={locked || flow.assignments.length >= 30}
         />
         <aside className="graph-inspector" aria-label="선택한 흐름 설정">
           <h3>
@@ -254,10 +274,7 @@ export default function WorkflowEditor({
                   />
                 </label>
                 <button
-                  onClick={() => {
-                    setQuery("");
-                    setPicker(stage);
-                  }}
+                  onClick={() => openPicker(stage)}
                   disabled={flow.assignments.length >= 30}
                 >
                   {stageNames[stage]} 에이전트 추가
@@ -294,40 +311,40 @@ export default function WorkflowEditor({
             />
           </label>
           <div className="graph-picker-list">
-            {agents
-              .filter(
-                (a) =>
-                  compatible(a, picker) &&
-                  `${a.name} ${a.description}`
-                    .toLowerCase()
-                    .includes(query.toLowerCase()),
-              )
-              .map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => {
-                    const id = crypto.randomUUID();
-                    update({
-                      ...flow,
-                      assignments: [
-                        ...flow.assignments,
-                        { id, agentId: a.id, stage: picker, required: true },
-                      ],
-                    });
-                    setSelected(id);
-                    setPicker(undefined);
-                    setNotice(
-                      "에이전트를 초안에 배치했습니다. 개발 흐름을 저장해 적용하세요.",
-                    );
-                  }}
-                >
-                  {a.name}
-                  <small>
-                    v{a.revision} · {a.projectId ? "프로젝트" : "전역"}
-                  </small>
-                </button>
-              ))}
+            {matches.map((a) => (
+              <button
+                key={a.id}
+                disabled={locked || flow.assignments.length >= 30}
+                onClick={() => {
+                  if (locked || flow.assignments.length >= 30) return;
+                  const id = crypto.randomUUID();
+                  update({
+                    ...flow,
+                    assignments: [
+                      ...flow.assignments,
+                      { id, agentId: a.id, stage: picker, required: true },
+                    ],
+                  });
+                  setSelected(id);
+                  setPicker(undefined);
+                  setNotice(
+                    "에이전트를 초안에 배치했습니다. 개발 흐름을 저장해 적용하세요.",
+                  );
+                }}
+              >
+                {a.name}
+                <small>
+                  v{a.revision} · {a.projectId ? "프로젝트" : "전역"}
+                </small>
+              </button>
+            ))}
           </div>
+          {!matches.length && query.trim() && (
+            <p role="status">
+              “{query}”에 맞는 에이전트가 없습니다. 다른 이름으로 검색하거나 새
+              역할을 만드세요.
+            </p>
+          )}
           {!agents.some((a) => compatible(a, picker)) && (
             <p>
               이 단계에 배치할 에이전트가 없습니다. 새 역할을 만들거나
@@ -337,6 +354,7 @@ export default function WorkflowEditor({
           <div className="button-row">
             <button
               className="primary"
+              disabled={locked || flow.assignments.length >= 30}
               onClick={() => {
                 onCreate(picker);
                 setPicker(undefined);
