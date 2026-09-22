@@ -344,14 +344,34 @@ test("custom agent Markdown, project workflow and instruction provenance survive
   await expect(
     page.getByText("기본 흐름을 적용했습니다.", { exact: true }),
   ).toBeVisible();
+  await page
+    .getByTestId("rf__node-verification")
+    .locator("strong")
+    .first()
+    .click();
   await expect(page.getByLabel("검증 실행 방식", { exact: true })).toHaveValue(
     "parallel",
   );
+  await page.getByTestId("rf__node-design").locator("strong").first().click();
   await page
     .getByLabel("설계 실행 방식", { exact: true })
     .selectOption("sequential");
   await page
+    .getByTestId("rf__node-verification")
+    .locator("strong")
+    .first()
+    .click();
+  await page
     .getByRole("button", { name: "검증 에이전트 추가", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "검증 에이전트 추가" })
+    .getByRole("button", { name: /컨벤션/ })
+    .click();
+  await page
+    .getByTestId("rf__node-verification")
+    .locator("strong")
+    .first()
     .click();
   await page
     .getByLabel("검증 단계 지침", { exact: true })
@@ -363,9 +383,15 @@ test("custom agent Markdown, project workflow and instruction provenance survive
     page.getByText("개발 흐름을 저장했습니다.", { exact: true }),
   ).toBeVisible();
   await page.reload();
+  await page.getByTestId("rf__node-design").locator("strong").first().click();
   await expect(page.getByLabel("설계 실행 방식", { exact: true })).toHaveValue(
     "sequential",
   );
+  await page
+    .getByTestId("rf__node-verification")
+    .locator("strong")
+    .first()
+    .click();
   await expect(page.getByLabel("검증 실행 방식", { exact: true })).toHaveValue(
     "parallel",
   );
