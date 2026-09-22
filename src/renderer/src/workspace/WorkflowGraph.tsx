@@ -36,11 +36,13 @@ const stateIcons = {
 function StageNode({ data }: NodeProps) {
   return (
     <div
-      className={`flow-stage-node ${data.selected ? "is-selected" : ""}`}
+      className={`flow-stage-node ${data.selected ? "is-selected" : ""} ${data.running ? "is-running" : ""}`}
       style={{ height: Number(data.height) }}
     >
       <Handle type="target" position={Position.Left} isConnectable={false} />
-      <strong>{String(data.name)}</strong>
+      <strong>
+        {String(data.name)} {data.running ? <small>진행 중</small> : null}
+      </strong>
       <span>{String(data.detail)}</span>
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
@@ -71,6 +73,7 @@ export default function WorkflowGraph({
   onMove,
   label,
   stageDetails,
+  activeStage,
 }: {
   items: GraphItem[];
   selected: string;
@@ -80,6 +83,7 @@ export default function WorkflowGraph({
   onMove?: (id: string, stage: Stage) => void;
   label: string;
   stageDetails?: Partial<Record<Stage, string>>;
+  activeStage?: Stage;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const layoutKey = JSON.stringify({
@@ -89,6 +93,7 @@ export default function WorkflowGraph({
     editable,
     collapsed,
     stageDetails,
+    activeStage,
   });
   const layout = useMemo(() => {
     const height = collapsed
@@ -113,6 +118,7 @@ export default function WorkflowGraph({
           draggable: false,
           data: {
             name: stageNames[stage],
+            running: activeStage === stage,
             detail:
               stageDetails?.[stage] ??
               `${modes?.[stage] === "sequential" ? "순차" : "병렬"} · ${list.length}개${running ? ` · 실행 ${running}` : ""}`,

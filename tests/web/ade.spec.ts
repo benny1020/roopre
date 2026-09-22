@@ -558,3 +558,81 @@ test("active project locks workflow changes while graph remains inspectable", as
     page.getByRole("complementary", { name: "선택한 흐름 설정" }),
   ).toContainText("선택한 단계 · 리뷰");
 });
+
+test("fixed-check execution has a visible active stage and direct navigation", async ({
+  page,
+}) => {
+  await prepare(page);
+  await page.getByRole("tab", { name: "흐름", exact: true }).click();
+  await expect(
+    page.getByTestId("rf__node-verification").locator(".flow-stage-node"),
+  ).toHaveClass(/is-running/);
+  await expect(page.locator(".flow-agent-node.state-running")).toHaveCount(0);
+  await page.getByRole("button", { name: "현재 작업 선택" }).click();
+  await expect(
+    page.getByRole("region", { name: "선택한 실행 근거" }).getByRole("heading"),
+  ).toHaveText("검증");
+});
+
+test("cancelled stage creation never leaks into library duplication", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  state.agents = [
+    {
+      id: "00000000-0000-4000-8000-000000000030",
+      revision: 1,
+      name: "독립 검토 역할",
+      description: "",
+      capability: "read-only",
+      markdown: "# 근거\n직접 확인한다.",
+      archived: false,
+    },
+  ];
+  await prepare(page, state);
+  await page.evaluate(() => {
+    (globalThis as any).roopre.command = async () => ({});
+  });
+  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await page
+    .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+    .click();
+  for (const close of ["button", "escape", "backdrop"]) {
+    await page.getByTestId("rf__node-review").locator("strong").first().click();
+    await page
+      .getByRole("button", { name: "리뷰 에이전트 추가", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "새 역할 만들기 · Markdown" })
+      .click();
+    if (close === "button")
+      await page.getByRole("button", { name: "편집 닫기" }).click();
+    else if (close === "escape") await page.keyboard.press("Escape");
+    else
+      await page.locator(".modal-backdrop").click({ position: { x: 5, y: 5 } });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const library = page.locator(".agent-library-section");
+    if ((await library.getAttribute("open")) === null)
+      await library.locator(":scope > summary").click();
+    await page.getByRole("button", { name: "복제", exact: true }).click();
+    await page
+      .getByRole("button", { name: "에이전트 저장", exact: true })
+      .click();
+    await expect(
+      page.getByText("에이전트 버전을 저장했습니다.", { exact: true }),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(
+              (globalThis as any).localStorage.getItem(
+                "roopre:flow-draft:team-local:commerce",
+              ),
+            ).flow.assignments.length,
+        ),
+      )
+      .toBe(0);
+  }
+});

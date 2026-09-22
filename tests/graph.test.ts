@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { executionGraph } from "../src/shared/execution-graph.ts";
+import {
+  executionGraph,
+  activeGraphStage,
+} from "../src/shared/execution-graph.ts";
 import { adeFixture } from "./fixtures/ade.ts";
 import { refineAgent } from "../src/main/connections/refine-agent.ts";
 const connectionId = "00000000-0000-4000-8000-000000000001";
@@ -132,4 +135,16 @@ test("AI refinement rejects invalid, truncated, oversized and provider-error res
     }),
   );
   assert.equal(called, false);
+});
+
+test("system-only verification highlights the stage without inventing a running agent", () => {
+  const run = adeFixture().runs.at(-1)!;
+  assert.equal(activeGraphStage(run, true), "verification");
+  assert.equal(
+    executionGraph(run, true).some((i) => i.state === "running"),
+    false,
+  );
+  assert.equal(activeGraphStage(run, false), undefined);
+  run.runtime!.cancelRequested = true;
+  assert.equal(activeGraphStage(run, true), undefined);
 });

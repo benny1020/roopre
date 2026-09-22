@@ -94,6 +94,7 @@ export default function HarnessPanel({
   const dirty = content(flow) !== content(project?.workflow);
   const flowIssues = project ? workflowIssues(snapshot, project, flow) : [];
   const [discard, setDiscard] = useState(false);
+  const [resetDefault, setResetDefault] = useState(false);
   const editingProjects = snapshot.projects.filter((p) =>
     p.workflow?.assignments.some((a) => a.agentId === editing?.id),
   );
@@ -171,6 +172,50 @@ export default function HarnessPanel({
     markdown: "# 역할\n\n# 검토 기준\n",
     archived: false,
   });
+  const applyDefault = () =>
+    act(async () => {
+      if (locked) return;
+      const definitions = stages.map((stage) => ({
+        ...fresh(),
+        name: `${stageNames[stage]} 에이전트`,
+        projectId,
+        capability:
+          stage === "implementation"
+            ? ("implementation" as const)
+            : ("read-only" as const),
+        description: `${stageNames[stage]} 단계의 기본 역할`,
+        markdown:
+          stage === "implementation"
+            ? "승인된 설계 범위에서 구현한다. 필수 검사와 승인 규칙을 변경하지 않는다."
+            : "요구사항·설계·지침과 실제 저장소 근거를 대조한다. 확인하지 못한 항목은 통과로 보고하지 않는다.",
+      }));
+      for (const agent of definitions)
+        await send({
+          type: "save_agent",
+          expectedRevision: 0,
+          agent,
+        });
+      const next: Workflow = {
+        revision: flowBase + 1,
+        instructions: { ...instructions },
+        assignments: definitions.map((a, i) => ({
+          id: crypto.randomUUID(),
+          agentId: a.id,
+          stage: stages[i],
+          required: true,
+        })),
+      };
+      await send({
+        type: "save_workflow",
+        projectId,
+        expectedRevision: flowBase,
+        workflow: next,
+      });
+      setFlow(next);
+      setFlowBase(next.revision);
+      setNotice("기본 흐름을 적용했습니다.");
+      setResetDefault(false);
+    });
   return (
     <div className="content-page harness-panel">
       <div className="page-heading">
@@ -200,7 +245,10 @@ export default function HarnessPanel({
         <Dialog
           label="에이전트 편집"
           onClose={() => {
-            if (!busy) setEditing(undefined);
+            if (!busy) {
+              setEditing(undefined);
+              setPendingStage(undefined);
+            }
           }}
           className="command-dialog graph-picker"
         >
@@ -405,7 +453,14 @@ export default function HarnessPanel({
               >
                 에이전트 저장
               </button>
-              <button onClick={() => setEditing(undefined)}>편집 닫기</button>
+              <button
+                onClick={() => {
+                  setEditing(undefined);
+                  setPendingStage(undefined);
+                }}
+              >
+                편집 닫기
+              </button>
             </div>
           </section>
         </Dialog>
@@ -436,47 +491,9 @@ export default function HarnessPanel({
             <button
               disabled={locked}
               onClick={() =>
-                void act(async () => {
-                  const definitions = stages.map((stage) => ({
-                    ...fresh(),
-                    name: `${stageNames[stage]} 에이전트`,
-                    projectId,
-                    capability:
-                      stage === "implementation"
-                        ? ("implementation" as const)
-                        : ("read-only" as const),
-                    description: `${stageNames[stage]} 단계의 기본 역할`,
-                    markdown:
-                      stage === "implementation"
-                        ? "승인된 설계 범위에서 구현한다. 필수 검사와 승인 규칙을 변경하지 않는다."
-                        : "요구사항·설계·지침과 실제 저장소 근거를 대조한다. 확인하지 못한 항목은 통과로 보고하지 않는다.",
-                  }));
-                  for (const agent of definitions)
-                    await send({
-                      type: "save_agent",
-                      expectedRevision: 0,
-                      agent,
-                    });
-                  const next: Workflow = {
-                    revision: flowBase + 1,
-                    instructions: { ...instructions },
-                    assignments: definitions.map((a, i) => ({
-                      id: crypto.randomUUID(),
-                      agentId: a.id,
-                      stage: stages[i],
-                      required: true,
-                    })),
-                  };
-                  await send({
-                    type: "save_workflow",
-                    projectId,
-                    expectedRevision: flowBase,
-                    workflow: next,
-                  });
-                  setFlow(next);
-                  setFlowBase(next.revision);
-                  setNotice("기본 흐름을 적용했습니다.");
-                })
+                flow.assignments.length
+                  ? setResetDefault(true)
+                  : void applyDefault()
               }
             >
               기본 흐름 적용
@@ -580,6 +597,29 @@ export default function HarnessPanel({
           </>
         )}
       </section>
+      {resetDefault && (
+        <Dialog
+          label="기본 흐름으로 교체"
+          onClose={() => {
+            if (!busy) setResetDefault(false);
+          }}
+          className="command-dialog graph-picker"
+        >
+          <h2>현재 흐름을 기본 역할 5개로 교체할까요?</h2>
+          <p>
+            현재 배치와 단계 지침을 바꾸고 관련 설계의 승인을 해제합니다. 기존
+            에이전트 정의와 실행 기록은 유지됩니다.
+          </p>
+          <div className="button-row">
+            <button disabled={busy} onClick={() => setResetDefault(false)}>
+              계속 편집
+            </button>
+            <button disabled={locked} onClick={() => void applyDefault()}>
+              기본 흐름으로 교체
+            </button>
+          </div>
+        </Dialog>
+      )}
       {discard && (
         <Dialog
           label="편집 초안 버리기"
@@ -630,6 +670,7 @@ export default function HarnessPanel({
                 <button
                   disabled={busy}
                   onClick={() => {
+                    setPendingStage(undefined);
                     setEditing({ ...a });
                     setPreview(false);
                   }}
@@ -639,6 +680,7 @@ export default function HarnessPanel({
                 <button
                   disabled={busy}
                   onClick={() => {
+                    setPendingStage(undefined);
                     setEditing({
                       ...a,
                       id: crypto.randomUUID(),

@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import type { Run } from "../../../shared/contracts";
-import { executionGraph } from "../../../shared/execution-graph";
+import {
+  executionGraph,
+  activeGraphStage,
+} from "../../../shared/execution-graph";
 import { stages, stageNames } from "../../../shared/harness";
 import WorkflowGraph from "./WorkflowGraph";
 import MarkdownPreview from "../MarkdownPreview";
@@ -12,9 +15,10 @@ export default function ExecutionGraph({
   connected: boolean;
 }) {
   const items = useMemo(() => executionGraph(run, connected), [run, connected]);
+  const activeStage = activeGraphStage(run, connected);
   const current = items.find((i) => i.state === "running");
   const [selected, setSelected] = useState(
-    current?.id ?? items[0]?.id ?? "implementation",
+    current?.id ?? activeStage ?? items[0]?.id ?? "implementation",
   );
   const item = items.find((i) => i.id === selected),
     execution = item?.execution;
@@ -49,8 +53,11 @@ export default function ExecutionGraph({
           · 시도 {run.runtime?.attempt ?? 1}
         </span>
         <button
-          disabled={!current}
-          onClick={() => current && setSelected(current.id)}
+          disabled={!current && !activeStage}
+          onClick={() => {
+            const target = current?.id ?? activeStage;
+            if (target) setSelected(target);
+          }}
         >
           현재 작업 선택
         </button>
@@ -70,6 +77,7 @@ export default function ExecutionGraph({
           Object.fromEntries(stages.map((s) => [s, "sequential"]))
         }
         stageDetails={details}
+        activeStage={activeStage}
       />
       <section className="graph-run-detail" aria-label="선택한 실행 근거">
         <h3>

@@ -65,3 +65,22 @@ export function executionGraph(
     })),
   ];
 }
+
+export function activeGraphStage(run: Run, connected: boolean) {
+  if (
+    !connected ||
+    !activeStatuses.includes(run.status) ||
+    run.runtime?.cancelRequested
+  )
+    return undefined;
+  const agent = executionGraph(run, connected).find(
+    (item) => item.state === "running",
+  );
+  if (agent) return agent.stage;
+  if (run.runtime?.kind === "planning") return undefined;
+  if (run.status === "verifying") return "verification" as const;
+  if (run.status === "reviewing") return "review" as const;
+  if (run.status === "implementing" || run.status === "repairing")
+    return "implementation" as const;
+  return undefined;
+}
