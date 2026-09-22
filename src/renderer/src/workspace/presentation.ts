@@ -52,13 +52,14 @@ export function workState(snapshot: Snapshot, feature: Feature): WorkState {
       gate.status === "changes_requested",
   };
   if (
-    run?.status === "cancelled" &&
+    run &&
+    !activeStatuses.includes(run.status) &&
     run.runtime?.terminationConfirmed === false
   )
     return {
       phase: 2,
       label: "종료 확인 중",
-      next: "실행기에서 작업 종료를 확인할 때까지 기다립니다",
+      next: "Docker 연결 복구 후 종료를 다시 확인합니다. 작업은 자동 재실행하지 않습니다",
       actor: "SYSTEM",
       tone: "attention",
       attention: true,

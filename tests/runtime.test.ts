@@ -547,13 +547,19 @@ test("scheduler skips an occupied project's queue so another project can use the
   otherRun.id = "run-cccccccc-dddd";
   otherRun.featureId = otherFeature.id;
   w.runs.push(otherRun);
-  const store = { read: async () => w } as unknown as Store;
+  const store = {
+    read: async () => w,
+    mutate: async (fn: (w: Workspace) => void) => fn(w),
+  } as unknown as Store;
   const runner = new RunnerManager(
     store,
     {} as ConnectionVault,
     "/unused",
     "/unused",
   );
+  runner.cleanup = async () => {
+    throw Error("Prior container remains unavailable");
+  };
   const selected: string[] = [];
   runner.execute = async (id) => {
     selected.push(id);
@@ -598,4 +604,149 @@ test("a new product workspace has no sample projects or reviewers and reopening 
     await store.pool.query("DELETE FROM workspaces WHERE id=$1", [store.key]);
     await store.close();
   }
+});
+
+function scheduledFixture() {
+  const { w, f, review } = fixture();
+  apply(w, "jun", review, {
+    authentication: "macos-owner",
+    binding: approvalBinding(w, f),
+  });
+  apply(w, "jun", {
+    type: "queue_run",
+    featureId: f.id,
+    designId: review.designId,
+  });
+  return { w, run: w.runs[0] };
+}
+
+test("shutdown fences a scheduler read already in flight", async () => {
+  const { w } = scheduledFixture();
+  let release!: (value: Workspace) => void;
+  const read = new Promise<Workspace>((resolve) => {
+    release = resolve;
+  });
+  const store = { read: () => read } as unknown as Store;
+  const runner = new RunnerManager(
+    store,
+    {} as ConnectionVault,
+    "/unused",
+    "/unused",
+  );
+  const started: string[] = [];
+  runner.execute = async (id) => {
+    started.push(id);
+  };
+  const tick = (runner as unknown as { tick: () => Promise<void> }).tick();
+  const stopping = runner.stop();
+  release(w);
+  await Promise.all([tick, stopping]);
+  assert.deepEqual(started, [], "No execution may begin after shutdown starts");
+});
+
+test("a recovered database reconciles abandoned execution without restarting the app", async () => {
+  const { w, run } = scheduledFixture();
+  run.status = "implementing";
+  run.runtime!.terminationConfirmed = false;
+  run.runtime!.worktree = "/preserved-checkout";
+  let offline = true;
+  const store = {
+    read: async () => {
+      if (offline) throw Error("DB unavailable");
+      return w;
+    },
+    mutate: async (fn: (w: Workspace) => void) => fn(w),
+  } as unknown as Store;
+  const runner = new RunnerManager(
+    store,
+    {} as ConnectionVault,
+    "/unused",
+    "/unused",
+  );
+  const cleaned: string[] = [];
+  runner.cleanup = async (id) => {
+    cleaned.push(id);
+  };
+  const tick = () =>
+    (runner as unknown as { tick: () => Promise<void> }).tick();
+  await tick();
+  assert.equal(run.status, "implementing");
+  offline = false;
+  await tick();
+  assert.deepEqual(cleaned, [run.id]);
+  assert.equal(run.status, "interrupted");
+  assert.equal(run.runtime!.terminationConfirmed, true);
+  assert.equal(run.runtime!.worktree, "/preserved-checkout");
+  await runner.stop();
+});
+
+test("startup keeps cancellation and evidence while unavailable Docker does not hide the workspace", async () => {
+  const { w, run } = scheduledFixture();
+  run.status = "cancelled";
+  run.reason = "사용자가 취소했습니다.";
+  run.runtime!.terminationConfirmed = false;
+  const root = await mkdtemp(join(tmpdir(), "roopre-recovery-unit-"));
+  const store = {
+    read: async () => w,
+    mutate: async (fn: (w: Workspace) => void) => fn(w),
+  } as unknown as Store;
+  const runner = new RunnerManager(
+    store,
+    {} as ConnectionVault,
+    root,
+    "/unused",
+  );
+  runner.cleanup = async () => {
+    throw Error("Docker unavailable");
+  };
+  try {
+    await runner.init();
+    assert.equal(run.status, "cancelled");
+    assert.equal(run.runtime!.terminationConfirmed, false);
+    await runner.stop();
+    const recovered = new RunnerManager(
+      store,
+      {} as ConnectionVault,
+      root,
+      "/unused",
+    );
+    recovered.cleanup = async () => {};
+    try {
+      await recovered.init();
+      assert.equal(run.status, "cancelled");
+      assert.equal(run.runtime!.terminationConfirmed, true);
+      assert.equal(run.reason, "사용자가 취소했습니다.");
+    } finally {
+      await recovered.stop();
+    }
+  } finally {
+    await runner.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("cleanup failure preserves cancellation and releases its slot only after confirmed cleanup", async () => {
+  const { w, run } = scheduledFixture();
+  const store = {
+    read: async () => w,
+    mutate: async (fn: (w: Workspace) => void) => fn(w),
+  } as unknown as Store;
+  const vault = {
+    get: () => ({ info: { version: 1, testStatus: "passed" } }),
+  } as unknown as ConnectionVault;
+  const runner = new RunnerManager(store, vault, "/unused", "/unused");
+  runner.cleanup = async () => {
+    run.status = "cancelled";
+    run.reason = "사용자가 취소했습니다.";
+    throw Error("Docker unavailable");
+  };
+  await runner.execute(run.id, new AbortController());
+  assert.equal(run.status, "cancelled");
+  assert.equal(run.runtime!.terminationConfirmed, false);
+  runner.cleanup = async () => {};
+  await (runner as unknown as { tick: () => Promise<void> }).tick();
+  assert.equal(run.status, "cancelled");
+  assert.equal(run.reason, "사용자가 취소했습니다.");
+  assert.equal(run.runtime!.terminationConfirmed, true);
+  await runner.stop();
 });

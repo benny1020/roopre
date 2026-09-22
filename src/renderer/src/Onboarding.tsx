@@ -625,6 +625,8 @@ function Onboarding({
                   snapshot={snapshot}
                   send={api.command}
                   onSaved={refresh}
+                  initialProjectId={projectId}
+                  onProjectChange={setProjectId}
                 />
               ) : (
                 <p>환경 준비와 프로젝트 등록을 먼저 완료하세요.</p>

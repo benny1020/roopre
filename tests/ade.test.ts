@@ -11,6 +11,8 @@ test("ADE state distinguishes planning completion, verification and handoff with
   assert.equal(workState(w, f).actor, "SYSTEM");
   r.runtime!.kind = "planning";
   r.status = "completed";
+  assert.equal(workState(w, f).label, "종료 확인 중");
+  r.runtime!.terminationConfirmed = true;
   assert.equal(workState(w, f).phase, 1);
   assert.equal(workState(w, f).actor, "HUMAN");
   r.runtime!.kind = undefined;
@@ -59,10 +61,19 @@ test("stale running agents and unconfirmed cancellation do not imply active work
     status: "running",
   });
   assert.doesNotMatch(workState(w, f).next, /previous attempt agent/);
+  for (const status of [
+    "cancelled",
+    "interrupted",
+    "failed",
+    "blocked",
+  ] as const) {
+    r.status = status;
+    r.runtime!.terminationConfirmed = false;
+    assert.equal(workState(w, f).label, "종료 확인 중");
+    assert.equal(workState(w, f).actor, "SYSTEM");
+    assert.equal(workState(w, f).attention, true);
+  }
   r.status = "cancelled";
-  r.runtime!.terminationConfirmed = false;
-  assert.equal(workState(w, f).label, "종료 확인 중");
-  assert.equal(workState(w, f).attention, true);
   r.runtime!.terminationConfirmed = true;
   assert.equal(workState(w, f).phase, 1);
 });

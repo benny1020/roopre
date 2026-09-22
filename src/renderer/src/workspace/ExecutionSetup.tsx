@@ -54,7 +54,7 @@ export default function ExecutionSetup({
   const rows = [
     {
       name: "프로젝트 AI 연결",
-      done: connectionCurrent && connection?.testStatus !== "failed",
+      done: connectionCurrent && connection?.testStatus === "passed",
       detail:
         error ||
         (connections === undefined
@@ -69,7 +69,11 @@ export default function ExecutionSetup({
                   ? "연결 버전이 바뀌었습니다. 실행 프로필을 다시 저장하세요."
                   : `${connection.name} · ${connection.model} · ${connection.testStatus === "passed" ? "마지막 연결 검사 통과" : connection.testStatus === "failed" ? "마지막 연결 검사 실패 · 설정에서 재확인하세요" : "연결 검사 전"}`),
       action:
-        connection && !connectionCurrent ? "연결 버전 갱신" : "AI 연결 설정",
+        connection && !connectionCurrent
+          ? "연결 버전 갱신"
+          : connection && connection.testStatus !== "passed"
+            ? "AI 연결 검사"
+            : "AI 연결 설정",
       run: () =>
         onSetup(connection && !connectionCurrent ? "profile" : "connection"),
     },
