@@ -56,9 +56,18 @@ test(
       await mkdir("artifacts", { recursive: true });
       await page.screenshot({ path: "artifacts/onboarding-dark.png" });
       const rememberedBounds = await application.evaluate(
-        ({ BrowserWindow }) => {
+        ({ BrowserWindow, screen }) => {
           const window = BrowserWindow.getAllWindows()[0];
-          window.setBounds({ x: 120, y: 80, width: 1150, height: 750 });
+          const area = screen.getPrimaryDisplay().workArea;
+          // Use a reachable rectangle on both CI's small display and a laptop.
+          // Off-screen coordinates are intentionally corrected on restoration.
+          const width = Math.min(1150, area.width);
+          window.setBounds({
+            x: area.x + Math.floor((area.width - width) / 2),
+            y: area.y,
+            width,
+            height: 700,
+          });
           return window.getNormalBounds();
         },
       );

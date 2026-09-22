@@ -1142,3 +1142,169 @@ test("live logs follow output until the reader scrolls away, preserve anchors ac
   ).toBeVisible();
   await axe(page);
 });
+
+for (const [screen, label] of [
+  ["하네스 표준", "표준 대상 프로젝트"],
+  ["에이전트 · 개발 흐름", "개발 흐름 프로젝트"],
+  ["표준 · 연결 · 환경", "프로젝트"],
+  ["지침 · 팀 설정", "설정할 프로젝트"],
+]) {
+  test(`same-screen history restores project forms and operation targets: ${screen}`, async ({
+    page,
+  }) => {
+    const snapshot = adeFixture();
+    const profile = snapshot.runs.at(-1)!.runtime!.profile;
+    snapshot.runs = [];
+    snapshot.features[0].projectId = snapshot.projects[1].id;
+    const stages = [
+      "requirements",
+      "design",
+      "implementation",
+      "verification",
+      "review",
+    ] as const;
+    snapshot.agents = stages.map((stage, i) => ({
+      id: `00000000-0000-4000-8000-00000000001${i}`,
+      revision: 1,
+      name: `${stage} role`,
+      description: "",
+      archived: false,
+      capability: stage === "implementation" ? "implementation" : "read-only",
+      markdown: "# Evidence\nCheck the result.",
+    }));
+    for (const project of snapshot.projects) {
+      project.instructions = `${project.id} policy`;
+      project.executionProfile = {
+        ...profile,
+        repositoryPath: `/workspace/${project.id}`,
+        baseBranch: project.id,
+      };
+      project.workflow = {
+        revision: 1,
+        instructions: {
+          requirements: "",
+          design: "",
+          implementation: "",
+          verification: `${project.id} checks`,
+          review: "",
+        },
+        assignments: stages.map((stage, i) => ({
+          id: `00000000-0000-4000-8000-00000000002${i}`,
+          stage,
+          agentId: snapshot.agents![i].id,
+          required: true,
+        })),
+      };
+    }
+    await prepare(page, snapshot);
+    await page.evaluate((connectionId) => {
+      const w = globalThis as any;
+      w.__settingsOperations = [];
+      w.roopre.connections = async () => [
+        { id: connectionId, name: "Fixture", model: "fixture", hasKey: true },
+      ];
+      w.roopre.configureProject = async (
+        projectId: string,
+        profile: unknown,
+      ) => {
+        w.__settingsOperations.push({ projectId, profile });
+      };
+      w.roopre.command = async (command: unknown) => {
+        w.__settingsOperations.push(command);
+        return {};
+      };
+      w.roopre.harnessCandidate = async (input: unknown) => {
+        w.__settingsOperations.push(input);
+        return null;
+      };
+    }, profile.connectionId);
+    await page.getByRole("button", { name: "설정", exact: true }).click();
+    await page.getByRole("button", { name: screen, exact: true }).click();
+    const select = page.getByRole("combobox", { name: label, exact: true });
+    await expect(select).toHaveValue("platform");
+    if (screen === "에이전트 · 개발 흐름") {
+      await page
+        .getByTestId("rf__node-verification")
+        .locator("strong")
+        .first()
+        .click();
+      await page.getByLabel("검증 단계 지침").fill("platform unsaved checks");
+    }
+    await select.selectOption("portal");
+    await expect(select).toHaveValue("portal");
+    if (screen === "에이전트 · 개발 흐름") {
+      await page
+        .getByTestId("rf__node-verification")
+        .locator("strong")
+        .first()
+        .click();
+      await page.getByLabel("검증 단계 지침").fill("portal unsaved checks");
+    }
+    for (const [direction, projectId] of [
+      ["이전 작업으로", "platform"],
+      ["다음 작업으로", "portal"],
+    ]) {
+      await page.getByRole("button", { name: direction, exact: true }).click();
+      await expect(select).toHaveValue(projectId);
+      if (screen === "표준 · 연결 · 환경") {
+        await expect(
+          page.getByLabel("기준 브랜치", { exact: true }),
+        ).toHaveValue(projectId);
+        await page
+          .getByRole("button", { name: "실행 프로필 저장", exact: true })
+          .click();
+      } else if (screen === "지침 · 팀 설정") {
+        await expect(
+          page.getByRole("textbox", { name: "프로젝트 지침", exact: true }),
+        ).toHaveValue(`${projectId} policy`);
+        await page
+          .getByRole("button", { name: "프로젝트 기준 저장", exact: true })
+          .click();
+      } else if (screen === "에이전트 · 개발 흐름") {
+        await page
+          .getByTestId("rf__node-verification")
+          .locator("strong")
+          .first()
+          .click();
+        await expect(page.getByLabel("검증 단계 지침")).toHaveValue(
+          `${projectId} unsaved checks`,
+        );
+        await page
+          .getByRole("button", { name: "개발 흐름 저장", exact: true })
+          .click();
+      } else {
+        await page
+          .getByRole("button", { name: "현재 설정 불러오기", exact: true })
+          .click();
+      }
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => (globalThis as any).__settingsOperations.at(-1)?.projectId,
+          ),
+        )
+        .toBe(projectId);
+    }
+    const operations = await page.evaluate(
+      () => (globalThis as any).__settingsOperations,
+    );
+    expect(operations.map((op: any) => op.projectId)).toEqual([
+      "platform",
+      "portal",
+    ]);
+    if (screen === "표준 · 연결 · 환경")
+      expect(operations.map((op: any) => op.profile.repositoryPath)).toEqual([
+        "/workspace/platform",
+        "/workspace/portal",
+      ]);
+    if (screen === "지침 · 팀 설정")
+      expect(operations.map((op: any) => op.instructions)).toEqual([
+        "platform policy",
+        "portal policy",
+      ]);
+    if (screen === "에이전트 · 개발 흐름")
+      expect(
+        operations.map((op: any) => op.workflow.instructions.verification),
+      ).toEqual(["platform unsaved checks", "portal unsaved checks"]);
+  });
+}

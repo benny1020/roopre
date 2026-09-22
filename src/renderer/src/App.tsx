@@ -92,6 +92,7 @@ export default function App() {
     readLocal("selected", null),
   );
   const [query, setQuery] = useState("");
+  const [navigationRestore, setNavigationRestore] = useState(0);
   const [search, setSearch] = useState(false);
   const settingsScopes = ["harness", "agents", "runtime", "policies"];
   const [settingsContext, setSettingsContext] = useState<
@@ -288,6 +289,9 @@ export default function App() {
   const navigation = useNavigationHistory(
     { scope, selected, query, settingsContext, runtimeSection },
     (location) => {
+      // Settings own their drafts. Re-enter a history location with fresh
+      // initial context without resetting forms on ordinary project changes.
+      setNavigationRestore((value) => value + 1);
       setScope(location.scope);
       setSelected(location.selected);
       setQuery(location.query);
@@ -638,6 +642,7 @@ export default function App() {
             />
           ) : scope === "harness" ? (
             <PackageSettings
+              key={navigationRestore}
               snapshot={snapshot}
               send={send}
               refresh={refresh}
@@ -646,6 +651,7 @@ export default function App() {
             />
           ) : scope === "agents" ? (
             <HarnessPanel
+              key={navigationRestore}
               snapshot={snapshot}
               send={send}
               onSaved={refresh}
@@ -654,6 +660,7 @@ export default function App() {
             />
           ) : scope === "runtime" ? (
             <RuntimeSettings
+              key={navigationRestore}
               snapshot={snapshot}
               onSaved={refresh}
               initialProjectId={settingsContext?.projectId}
@@ -662,6 +669,7 @@ export default function App() {
             />
           ) : scope === "policies" ? (
             <PolicyView
+              key={navigationRestore}
               snapshot={snapshot}
               actor={actor}
               send={send}
