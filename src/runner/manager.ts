@@ -34,7 +34,10 @@ const occupiesSlot = (r: Run) =>
   (activeStatuses.includes(r.status) && r.status !== "queued");
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
-  private busy = false;
+  private stopping = false;
+  private tickTask?: Promise<void>;
+  private recoveryAfter = new Map<string, number>();
+  private recoveryJobs = new Map<string, Promise<void>>();
   private active = new Map<string, AbortController>();
   private jobs = new Map<string, Promise<void>>();
   constructor(
@@ -44,24 +47,12 @@ export class RunnerManager {
     private resources: string,
   ) {}
   async init() {
+    this.stopping = false;
+    this.recoveryAfter.clear();
+    if (this.timer) clearInterval(this.timer);
     await mkdir(this.root, { recursive: true, mode: 0o700 });
-    const w = await this.store.read("owner");
-    for (const run of w.runs.filter(
-      (r) =>
-        r.runtime &&
-        ((activeStatuses.includes(r.status) && r.status !== "queued") ||
-          r.runtime.terminationConfirmed === false),
-    )) {
-      await this.cleanup(run.id);
-      await this.update(run.id, (r) => {
-        r.runtime!.terminationConfirmed = true;
-      });
-      await this.update(run.id, (r) => {
-        r.status = "interrupted";
-        r.reason =
-          "이전 실행이 중단됐습니다. 근거를 보존했습니다. 재시도로 새 작업 공간에서 시작하세요.";
-      });
-    }
+    await this.reconcile(await this.store.read("owner"));
+    if (this.stopping) return;
     this.timer = setInterval(() => void this.tick(), 1000);
     void this.tick();
   }
@@ -89,7 +80,7 @@ export class RunnerManager {
         !/No such (object|container)/i.test(result.output)
       )
         throw Error(
-          "이전 컨테이너 종료를 확인하지 못했습니다. Docker 상태를 복구한 뒤 앱을 다시 시작하세요.",
+          "이전 컨테이너 종료를 확인하지 못했습니다. Docker 연결이 복구되면 자동으로 다시 확인합니다.",
         );
     }
   }
@@ -145,19 +136,81 @@ export class RunnerManager {
       r.reason = message;
     });
   }
-  private async tick() {
-    if (this.busy) return;
-    this.busy = true;
+  // A dead main process or failed DB write can leave a run occupying capacity.
+  // Reconcile only work not owned by this manager, and never resume it implicitly.
+  private async recover(id: string) {
+    let terminated = false;
     try {
-      const w = await this.store.read("owner");
+      await this.cleanup(id);
+      terminated = true;
+    } catch {
+      /* Keep capacity reserved until Docker confirms cleanup. */
+    }
+    await this.update(id, (r) => {
+      r.runtime!.terminationConfirmed = terminated;
+      if (activeStatuses.includes(r.status) && r.status !== "queued") {
+        r.status = "interrupted";
+        r.reason =
+          "이전 실행이 중단됐습니다. 변경과 근거를 보존했습니다. 종료 확인 후 직접 재시도하세요.";
+      }
+      for (const agent of r.runtime!.agents ?? []) {
+        if (agent.status === "running") {
+          agent.status = "failed";
+          agent.error = "실행이 중단되어 결과를 확인하지 못했습니다.";
+          agent.endedAt = new Date().toISOString();
+        }
+      }
+    });
+    return terminated;
+  }
+  private reconcile(w: Workspace): Promise<unknown> {
+    for (const run of w.runs.filter(
+      (r) => r.runtime && occupiesSlot(r) && !this.active.has(r.id),
+    )) {
+      if (this.stopping) break;
+      if (this.recoveryJobs.has(run.id)) continue;
+      if ((this.recoveryAfter.get(run.id) ?? 0) > Date.now()) continue;
+      let recovered = false;
+      const job = this.recover(run.id)
+        .then((terminated) => {
+          recovered = terminated;
+        })
+        .catch(() => {
+          // Failed DB writes must be retried after connectivity returns.
+        })
+        .finally(() => {
+          this.recoveryJobs.delete(run.id);
+          if (recovered) this.recoveryAfter.delete(run.id);
+          else this.recoveryAfter.set(run.id, Date.now() + 10000);
+        });
+      this.recoveryJobs.set(run.id, job);
+    }
+    return Promise.allSettled([...this.recoveryJobs.values()]);
+  }
+  private tick(): Promise<void> {
+    if (this.stopping) return Promise.resolve();
+    if (this.tickTask) return this.tickTask;
+    this.tickTask = this.schedule().finally(() => {
+      this.tickTask = undefined;
+    });
+    return this.tickTask;
+  }
+  private async schedule() {
+    try {
+      let w = await this.store.read("owner");
+      if (this.stopping) return;
       for (const [id, abort] of this.active) {
-        const r = w.runs.find((r) => r.id === id)!;
         try {
           await this.valid(id);
         } catch {
           abort.abort();
         }
       }
+      // Slow Docker cleanup must not block active authorization/cancellation checks.
+      void this.reconcile(w);
+      if (this.stopping) return;
+      w = await this.store.read("owner");
+      if (this.stopping) return;
       const occupied = w.runs.filter(
         (r) => this.active.has(r.id) || occupiesSlot(r),
       );
@@ -187,9 +240,9 @@ export class RunnerManager {
         this.jobs.set(run.id, job);
       }
     } catch {
-      /* Reconnect on next tick; running jobs check validity before every phase. */
-    } finally {
-      this.busy = false;
+      // DB outage: terminate work whose authorization can no longer be checked.
+      // The next successful tick reconciles any terminal write that was lost.
+      for (const abort of this.active.values()) abort.abort();
     }
   }
   private async valid(id: string) {
@@ -1298,9 +1351,12 @@ export class RunnerManager {
         });
       } catch {
         await this.update(id, (r) => {
-          r.status = "blocked";
-          r.reason =
-            "컨테이너 종료 확인이 필요합니다. Docker를 복구하고 앱을 다시 시작하세요.";
+          if (!["cancelled", "blocked"].includes(r.status)) {
+            if (!["failed", "interrupted"].includes(r.status))
+              r.status = "interrupted";
+            r.reason =
+              "컨테이너 종료 확인이 필요합니다. Docker 연결이 복구되면 자동으로 다시 확인합니다. 변경과 근거는 보존했습니다.";
+          }
           r.runtime!.terminationConfirmed = false;
         }).catch(() => {});
       }
@@ -1376,8 +1432,13 @@ export class RunnerManager {
     return git(r.runtime.worktree, "diff", r.runtime.profile.baseCommit, "--");
   }
   async stop() {
+    this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     for (const c of this.active.values()) c.abort();
-    await Promise.allSettled([...this.jobs.values()]);
+    await this.tickTask;
+    await Promise.allSettled([
+      ...this.jobs.values(),
+      ...this.recoveryJobs.values(),
+    ]);
   }
 }

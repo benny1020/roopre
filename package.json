@@ -42,7 +42,9 @@
     "harness:validate": "tsx config/scripts/harness.ts validate",
     "harness:lock": "tsx config/scripts/harness.ts lock",
     "harness:schema": "tsx config/scripts/harness.ts schema",
-    "test:dogfood": "pnpm build && tsx --test tests/dogfood.integration.ts"
+    "test:dogfood": "pnpm build && tsx --test tests/dogfood.integration.ts",
+    "test:resilience": "tsx --test tests/resilience.integration.ts",
+    "test:onboarding": "pnpm build && tsx --test tests/onboarding.integration.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",

@@ -249,9 +249,19 @@ export default function RunPanel({
             )}
           {tab === "flow" &&
             current &&
-            ["failed", "interrupted"].includes(current.status) && (
+            ["failed", "interrupted"].includes(current.status) &&
+            current.runtime?.kind !== "planning" && (
               <button
-                disabled={!connected || busy}
+                disabled={
+                  !connected ||
+                  busy ||
+                  current.runtime?.terminationConfirmed !== true
+                }
+                title={
+                  current.runtime?.terminationConfirmed !== true
+                    ? "이전 컨테이너 종료 확인 후 재시도할 수 있습니다."
+                    : "보존한 변경으로 새 실행을 준비합니다."
+                }
                 onClick={() =>
                   void act(() => window.roopre!.runAction(current.id, "retry"))
                 }
@@ -678,19 +688,29 @@ export default function RunPanel({
                     {current && (
                       <section className="run-actions">
                         <h4>실행 제어 · 최신 작업</h4>
-                        {["failed", "interrupted"].includes(current.status) && (
-                          <button
-                            disabled={!connected || busy}
-                            onClick={() =>
-                              void act(() =>
-                                window.roopre!.runAction(current.id, "retry"),
-                              )
-                            }
-                          >
-                            <RefreshCw size={13} />
-                            변경을 이어서 재시도
-                          </button>
-                        )}
+                        {["failed", "interrupted"].includes(current.status) &&
+                          current.runtime?.kind !== "planning" && (
+                            <button
+                              disabled={
+                                !connected ||
+                                busy ||
+                                current.runtime?.terminationConfirmed !== true
+                              }
+                              title={
+                                current.runtime?.terminationConfirmed !== true
+                                  ? "이전 컨테이너 종료 확인 후 재시도할 수 있습니다."
+                                  : "보존한 변경으로 새 실행을 준비합니다."
+                              }
+                              onClick={() =>
+                                void act(() =>
+                                  window.roopre!.runAction(current.id, "retry"),
+                                )
+                              }
+                            >
+                              <RefreshCw size={13} />
+                              변경을 이어서 재시도
+                            </button>
+                          )}
                         {(![
                           "cancelled",
                           "ready_for_merge",

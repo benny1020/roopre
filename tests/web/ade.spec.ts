@@ -902,3 +902,45 @@ test("setup connection metadata can recover from failure and identifies a stale 
     }),
   ).toBeFocused();
 });
+
+test("interrupted work explains cleanup and enables retry only after termination is confirmed", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  const run = state.runs.at(-1)!;
+  run.status = "interrupted";
+  run.runtime!.terminationConfirmed = false;
+  for (const agent of run.runtime!.agents ?? [])
+    if (agent.status === "running") {
+      agent.status = "failed";
+      agent.error = "실행 중단";
+    }
+  await prepare(page, state);
+  await page.getByRole("tab", { name: "흐름", exact: true }).click();
+  await expect(
+    page.getByText("종료 확인 중", { exact: true }).first(),
+  ).toBeVisible();
+  const retry = page.getByRole("button", {
+    name: "최신 변경 재시도",
+    exact: true,
+  });
+  await expect(retry).toBeDisabled();
+  await expect(retry).toHaveAttribute(
+    "title",
+    "이전 컨테이너 종료 확인 후 재시도할 수 있습니다.",
+  );
+  await axe(page);
+  await page.screenshot({ path: "artifacts/recovery-pending.png" });
+  run.runtime!.terminationConfirmed = true;
+  await page.evaluate((state) => {
+    (globalThis as any).roopre.snapshot = async () => state;
+  }, state);
+  await expect(retry).toBeEnabled();
+  await expect(page.getByText("종료 확인 중", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: "artifacts/recovery-ready.png" });
+  run.runtime!.kind = "planning";
+  await page.evaluate((state) => {
+    (globalThis as any).roopre.snapshot = async () => state;
+  }, state);
+  await expect(retry).toHaveCount(0);
+});
