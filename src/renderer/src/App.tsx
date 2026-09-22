@@ -1,3 +1,4 @@
+import type { SetupDestination } from "./workspace/ExecutionSetup";
 import InstructionContext from "./workspace/InstructionContext";
 import CommandPalette from "./workspace/CommandPalette";
 import { Tabs, ResizeHandle, Dialog } from "./workspace/Controls";
@@ -91,6 +92,18 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState(false);
   const settingsScopes = ["harness", "agents", "runtime", "policies"];
+  const [settingsContext, setSettingsContext] = useState<
+    { projectId: string; featureId?: string } | undefined
+  >(() => readLocal("settings-context", undefined));
+  const [runtimeSection, setRuntimeSection] = useState<
+    "connection" | "profile"
+  >("connection");
+  useEffect(
+    () => saveLocal("settings-context", settingsContext),
+    [settingsContext],
+  );
+  const changeSettingsProject = (projectId: string) =>
+    setSettingsContext((value) => ({ ...value, projectId }));
   const [notifications, setNotifications] = useState(false);
   const [modal, setModal] = useState<"feature" | "project" | null>(null);
   const [theme, setTheme] = useState(readLocal("theme", "system"));
@@ -206,26 +219,6 @@ export default function App() {
     return () => media.removeEventListener("change", apply);
   }, [theme]);
   useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        if (!modal) setSearch((s) => !s);
-      }
-      if (e.key === "Escape") {
-        setModal(null);
-        setSearch(false);
-      }
-      if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) {
-        e.preventDefault();
-        if (modal || search) return;
-        setSelected(null);
-        setScope(e.key === "1" ? "inbox" : e.key === "2" ? "all" : "policies");
-      }
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [modal, search]);
-  useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(timer);
@@ -291,10 +284,42 @@ export default function App() {
             .includes(query.toLowerCase())),
     ) || [];
   const navigate = (next: string) => {
+    if (settingsScopes.includes(next)) {
+      const projectId = feature?.projectId ?? project?.id;
+      if (projectId) setSettingsContext({ projectId, featureId: feature?.id });
+    } else setSettingsContext(undefined);
     setScope(next);
     setSelected(null);
     setQuery("");
   };
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        if (!modal) setSearch((s) => !s);
+      }
+      if (e.key === "Escape") {
+        setModal(null);
+        setSearch(false);
+      }
+      if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) {
+        e.preventDefault();
+        if (modal || search) return;
+        navigate(e.key === "1" ? "inbox" : e.key === "2" ? "all" : "policies");
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [modal, search, navigate]);
+  const openSetup = (destination: SetupDestination) => {
+    if (destination === "connection" || destination === "profile") {
+      setRuntimeSection(destination);
+      navigate("runtime");
+    } else navigate(destination);
+  };
+  const returnFeature = snapshot?.features.find(
+    (f) => f.id === settingsContext?.featureId,
+  );
   return (
     <div className="app">
       <header className="titlebar">
@@ -479,6 +504,19 @@ export default function App() {
                   {label}
                 </button>
               ))}
+              {returnFeature && (
+                <button
+                  className="settings-return"
+                  title={`저장한 설정만 적용됩니다. ${returnFeature.title} 작업으로 돌아가기`}
+                  onClick={() => {
+                    setScope(returnFeature.projectId);
+                    setSelected(returnFeature.id);
+                    setSettingsContext(undefined);
+                  }}
+                >
+                  <ArrowLeft size={13} /> 작업으로 돌아가기
+                </button>
+              )}
             </nav>
           )}
           {!connected && snapshot && (
@@ -523,6 +561,7 @@ export default function App() {
               send={send}
               act={act}
               onBack={() => setSelected(null)}
+              onSetup={openSetup}
             />
           ) : scope === "queued" && window.roopre ? (
             <RunOverview
@@ -538,11 +577,25 @@ export default function App() {
               snapshot={snapshot}
               send={send}
               refresh={refresh}
+              initialProjectId={settingsContext?.projectId}
+              onProjectChange={changeSettingsProject}
             />
           ) : scope === "agents" ? (
-            <HarnessPanel snapshot={snapshot} send={send} onSaved={refresh} />
+            <HarnessPanel
+              snapshot={snapshot}
+              send={send}
+              onSaved={refresh}
+              initialProjectId={settingsContext?.projectId}
+              onProjectChange={changeSettingsProject}
+            />
           ) : scope === "runtime" ? (
-            <RuntimeSettings snapshot={snapshot} onSaved={refresh} />
+            <RuntimeSettings
+              snapshot={snapshot}
+              onSaved={refresh}
+              initialProjectId={settingsContext?.projectId}
+              onProjectChange={changeSettingsProject}
+              focusSection={runtimeSection}
+            />
           ) : scope === "policies" ? (
             <PolicyView
               snapshot={snapshot}
@@ -550,6 +603,8 @@ export default function App() {
               send={send}
               act={act}
               connected={connected}
+              initialProjectId={settingsContext?.projectId}
+              onProjectChange={changeSettingsProject}
             />
           ) : !snapshot.projects.length ? (
             <div className="content-page">
@@ -884,6 +939,7 @@ function FeatureView({
   send,
   act,
   onBack,
+  onSetup,
 }: {
   snapshot: Snapshot;
   feature: Feature;
@@ -892,6 +948,7 @@ function FeatureView({
   send: Send;
   act: (fn: () => Promise<any>, success?: string) => Promise<void>;
   onBack: () => void;
+  onSetup: (destination: SetupDestination) => void;
 }) {
   const [reviewWidth, setReviewWidth] = useState(
     Math.max(280, Math.min(400, readLocal(`review-width:${f.id}`, 320))),
@@ -1607,6 +1664,7 @@ function FeatureView({
           send={send}
           connected={connected}
           onDesign={() => setTab("design")}
+          onSetup={onSetup}
         />
       ) : (
         <div className="content-page">
@@ -1922,12 +1980,16 @@ function ThreadCard({
 
 function PolicyView({
   snapshot,
+  initialProjectId,
+  onProjectChange,
   actor,
   send,
   act,
   connected,
 }: {
   snapshot: Snapshot;
+  initialProjectId?: string;
+  onProjectChange?: (id: string) => void;
   actor: string;
   send: Send;
   act: (fn: () => Promise<any>, success?: string) => Promise<void>;
@@ -1937,7 +1999,11 @@ function PolicyView({
   const [draft, setDraft] = useState(p);
   const [busy, setBusy] = useState(false);
   const admin = snapshot.people.find((p) => p.id === actor)?.role === "admin";
-  const [projectId, setProjectId] = useState(snapshot.projects[0]?.id ?? "");
+  const [projectId, setProjectId] = useState(
+    initialProjectId && snapshot.projects.some((p) => p.id === initialProjectId)
+      ? initialProjectId
+      : (snapshot.projects[0]?.id ?? ""),
+  );
   const project = snapshot.projects.find((p) => p.id === projectId);
   const [instructions, setInstructions] = useState(project?.instructions || "");
   const [checks, setChecks] = useState(
@@ -2054,7 +2120,10 @@ function PolicyView({
             aria-label="설정할 프로젝트"
             disabled={!project}
             value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              onProjectChange?.(e.target.value);
+            }}
           >
             {snapshot.projects.map((p) => (
               <option key={p.id} value={p.id}>

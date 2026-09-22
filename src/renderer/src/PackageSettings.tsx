@@ -13,15 +13,23 @@ import type { ConnectionInfo } from "../../shared/runtime";
 import MarkdownPreview from "./MarkdownPreview";
 export default function PackageSettings({
   snapshot,
+  initialProjectId,
+  onProjectChange,
   send,
   refresh,
 }: {
   snapshot: Snapshot;
+  initialProjectId?: string;
+  onProjectChange?: (id: string) => void;
   send: (c: Command) => Promise<unknown>;
   refresh: () => Promise<unknown>;
 }) {
   const api = window.roopre;
-  const [projectId, setProjectId] = useState(snapshot.projects[0]?.id ?? "");
+  const [projectId, setProjectId] = useState(
+    initialProjectId && snapshot.projects.some((p) => p.id === initialProjectId)
+      ? initialProjectId
+      : (snapshot.projects[0]?.id ?? ""),
+  );
   const project = snapshot.projects.find((p) => p.id === projectId);
   const [candidate, setCandidate] = useState<PackageCandidate>();
   const [draft, setDraft] = useState("");
@@ -150,6 +158,7 @@ export default function PackageSettings({
                 value={projectId}
                 onChange={(e) => {
                   setProjectId(e.target.value);
+                  onProjectChange?.(e.target.value);
                   setBaseline(snapshot.revision);
                 }}
               >

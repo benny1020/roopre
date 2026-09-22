@@ -29,10 +29,11 @@ async function prepare(page: Page, state = adeFixture()) {
           w.__revealed.push(args);
         },
       };
-      localStorage.setItem(
-        "owner:selected",
-        JSON.stringify(state.features[0].id),
-      );
+      if (localStorage.getItem("owner:selected") === null)
+        localStorage.setItem(
+          "owner:selected",
+          JSON.stringify(state.features[0].id),
+        );
       localStorage.setItem(
         `owner:tab:${state.features[0].id}`,
         JSON.stringify("execution"),
@@ -752,4 +753,152 @@ test("dense workflows keep readable nodes and recover all agents through scroll"
     .getByRole("button", { name: "에이전트 펼치기", exact: true })
     .click();
   await expect(last).toHaveCount(1);
+});
+
+test("execution setup keeps the feature project across settings and returns to the task", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  const project = state.projects[1];
+  state.features[0].projectId = project.id;
+  state.features[0].title = "두 번째 프로젝트의 기능";
+  await prepare(page, state);
+  const setup = page.getByRole("region", { name: "실행 준비" });
+  await expect(setup).toContainText(`${project.name}의 설정`);
+  await expect(setup).toContainText("API key와 endpoint를 앱에 등록하세요.");
+  await expect(
+    page.getByRole("button", {
+      name: "요구사항·설계 에이전트 실행",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await axe(page);
+  await page.screenshot({ path: "artifacts/setup-dark.png" });
+  await page
+    .getByRole("button", { name: "실행 프로필 설정", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "프로젝트", exact: true }),
+  ).toHaveValue(project.id);
+  await expect(
+    page.getByRole("region", {
+      name: "프로젝트 실행 프로필 설정",
+      exact: true,
+    }),
+  ).toBeFocused();
+  await page
+    .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "개발 흐름 프로젝트", exact: true }),
+  ).toHaveValue(project.id);
+  // A deliberate project change carries across settings tabs, not back to project[0].
+  const changedProject = state.projects[2];
+  await page
+    .getByRole("combobox", { name: "개발 흐름 프로젝트", exact: true })
+    .selectOption(changedProject.id);
+  await page
+    .getByRole("button", { name: "표준 · 연결 · 환경", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "프로젝트", exact: true }),
+  ).toHaveValue(changedProject.id);
+  await page.reload();
+  await expect(
+    page.getByRole("combobox", { name: "프로젝트", exact: true }),
+  ).toHaveValue(changedProject.id);
+  await page
+    .getByRole("button", { name: "작업으로 돌아가기", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "두 번째 프로젝트의 기능", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "실행·결과", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page
+    .getByRole("button", { name: "개발 흐름 설정", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "개발 흐름 프로젝트", exact: true }),
+  ).toHaveValue(project.id);
+  await page
+    .getByRole("button", { name: "작업으로 돌아가기", exact: true })
+    .click();
+  // Keyboard navigation must preserve the latest feature, including after returning.
+  await page.keyboard.press("Control+3");
+  await expect(
+    page.getByRole("combobox", { name: "설정할 프로젝트", exact: true }),
+  ).toHaveValue(project.id);
+  await page
+    .getByRole("button", { name: "작업으로 돌아가기", exact: true })
+    .click();
+  await expect(setup).toBeVisible();
+  await page.keyboard.press("Meta+3");
+  await expect(
+    page.getByRole("combobox", { name: "설정할 프로젝트", exact: true }),
+  ).toHaveValue(project.id);
+  await page
+    .getByRole("button", { name: "작업으로 돌아가기", exact: true })
+    .click();
+  await expect(setup).toBeVisible();
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.getByLabel("화면 테마").selectOption("light");
+  await axe(page);
+  await page.screenshot({ path: "artifacts/setup-light-compact.png" });
+  expect(
+    await page.evaluate(
+      () =>
+        (globalThis as any).document.documentElement.scrollWidth <=
+        (globalThis as any).innerWidth,
+    ),
+  ).toBe(true);
+});
+
+test("setup connection metadata can recover from failure and identifies a stale profile", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  const profile = state.runs.at(-1)!.runtime!.profile;
+  state.projects[0].executionProfile = profile;
+  state.runs = [];
+  await prepare(page, state);
+  await page.evaluate(() => {
+    (globalThis as any).roopre.connections = async () => {
+      throw Error("metadata unavailable");
+    };
+  });
+  await page
+    .getByRole("button", { name: "AI 연결 상태 다시 확인", exact: true })
+    .click();
+  await expect(page.getByRole("region", { name: "실행 준비" })).toContainText(
+    "연결 목록을 확인하지 못했습니다",
+  );
+  await page.evaluate((profile) => {
+    (globalThis as any).roopre.connections = async () => [
+      {
+        id: profile.connectionId,
+        version: profile.connectionVersion + 1,
+        name: "새 연결 버전",
+        model: "test-model",
+        hasKey: true,
+      },
+    ];
+  }, profile);
+  await page
+    .getByRole("button", { name: "AI 연결 상태 다시 확인", exact: true })
+    .click();
+  await expect(page.getByRole("region", { name: "실행 준비" })).toContainText(
+    "연결 버전이 바뀌었습니다",
+  );
+  await page
+    .getByRole("button", { name: "연결 버전 갱신", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", {
+      name: "프로젝트 실행 프로필 설정",
+      exact: true,
+    }),
+  ).toBeFocused();
 });
