@@ -536,6 +536,18 @@ test("AI refinement preserves input on failure and applies only a reviewed propo
   );
   await axe(page);
   await page.screenshot({ path: "artifacts/graph-agent-refinement.png" });
+  await dialog
+    .getByRole("button", { name: "에이전트 저장", exact: true })
+    .click();
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "No mutation in ADE display fixture",
+  );
+  await expect(dialog.getByLabel("에이전트 이름", { exact: true })).toHaveValue(
+    "접근성 검토",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "에이전트 저장", exact: true }),
+  ).toBeEnabled();
 });
 
 test("active project locks workflow changes while graph remains inspectable", async ({

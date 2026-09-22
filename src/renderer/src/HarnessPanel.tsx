@@ -235,7 +235,7 @@ export default function HarnessPanel({
           에이전트 만들기
         </button>
       </div>
-      {error && (
+      {error && !editing && !resetDefault && (
         <p className="error-banner" role="alert">
           {error}
         </p>
@@ -257,6 +257,11 @@ export default function HarnessPanel({
             aria-label="에이전트 편집"
           >
             <h2>{editing.name || "새 에이전트"}</h2>
+            {error && (
+              <p className="error-banner" role="alert">
+                {error}
+              </p>
+            )}
             <AgentRefinement
               key={editing.id}
               stage={
@@ -606,6 +611,11 @@ export default function HarnessPanel({
           className="command-dialog graph-picker"
         >
           <h2>현재 흐름을 기본 역할 5개로 교체할까요?</h2>
+          {error && (
+            <p className="error-banner" role="alert">
+              {error}
+            </p>
+          )}
           <p>
             현재 배치와 단계 지침을 바꾸고 관련 설계의 승인을 해제합니다. 기존
             에이전트 정의와 실행 기록은 유지됩니다.
