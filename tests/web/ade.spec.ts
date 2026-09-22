@@ -944,3 +944,201 @@ test("interrupted work explains cleanup and enables retry only after termination
   }, state);
   await expect(retry).toHaveCount(0);
 });
+
+test("workspace history restores filters and feature context without hijacking input or dialogs", async ({
+  page,
+}) => {
+  const snapshot = adeFixture();
+  await prepare(page, snapshot);
+  await page.getByRole("button", { name: "전체 작업", exact: true }).click();
+  await page.getByPlaceholder("기능 검색").fill("remember this filter");
+  await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+  const search = page.getByRole("combobox", { name: "명령과 작업 검색" });
+  await search.fill(snapshot.features[1].title);
+  await search.press("Enter");
+  await expect(
+    page.getByRole("heading", {
+      name: snapshot.features[1].title,
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "이전 작업으로", exact: true })
+    .click();
+  await expect(page.getByPlaceholder("기능 검색")).toHaveValue(
+    "remember this filter",
+  );
+  await page.getByPlaceholder("기능 검색").press("Control+BracketLeft");
+  await expect(page.getByPlaceholder("기능 검색")).toBeVisible();
+  await page
+    .getByRole("button", { name: "다음 작업으로", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: snapshot.features[1].title,
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.keyboard.press("Control+BracketLeft");
+  await expect(page.getByPlaceholder("기능 검색")).toHaveValue(
+    "remember this filter",
+  );
+  await page.getByRole("button", { name: /^실행 현황/ }).click();
+  await expect(
+    page.getByRole("button", { name: "다음 작업으로", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+  await expect(
+    page.getByRole("button", { name: "이전 작업으로", exact: true }),
+  ).toBeDisabled();
+  await page.keyboard.press("Control+BracketLeft");
+  await expect(page.getByRole("dialog", { name: "작업 검색" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await axe(page);
+});
+
+test("Korean IME composition never executes the selected command", async ({
+  page,
+}) => {
+  await prepare(page);
+  await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+  const search = page.getByRole("combobox", { name: "명령과 작업 검색" });
+  await search.fill("  새 프로젝트  ");
+  await search.evaluate((input) =>
+    input.dispatchEvent(
+      new (globalThis as any).KeyboardEvent("keydown", {
+        key: "Enter",
+        isComposing: true,
+        bubbles: true,
+      }),
+    ),
+  );
+  await expect(page.getByRole("dialog", { name: "작업 검색" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "새 프로젝트" })).toHaveCount(
+    0,
+  );
+  await search.press("Enter");
+  await expect(page.getByRole("dialog", { name: "새 프로젝트" })).toBeVisible();
+});
+
+test("diff refresh preserves file identity; file search, hunk navigation and wrapping stay usable", async ({
+  page,
+}) => {
+  await prepare(page);
+  await page.getByRole("tab", { name: "변경", exact: true }).click();
+  await page.getByRole("button", { name: "변경 내용 보기" }).click();
+  await page.evaluate(
+    (patch) => (globalThis as any).__diffResolvers["ade-run-current"](patch),
+    patch,
+  );
+  await page.getByRole("button", { name: /tests\/payment.test.ts/ }).click();
+  await page.getByRole("button", { name: "변경 내용 보기" }).click();
+  await expect(
+    page.getByRole("button", { name: "실행 출력", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  const updated = `diff --git a/new.ts b/new.ts\n--- /dev/null\n+++ b/new.ts\n@@ -0,0 +1 @@\n+new\n${patch}\n@@ -100,1 +100,1 @@\n-old\n+${"long line ".repeat(100)}`;
+  await page.evaluate(
+    (patch) => (globalThis as any).__diffResolvers["ade-run-current"](patch),
+    updated,
+  );
+  await expect(
+    page.getByRole("button", { name: /tests\/payment.test.ts/ }),
+  ).toHaveAttribute("aria-current", "true");
+  await page.getByRole("textbox", { name: "변경 파일 검색" }).fill(" tests/ ");
+  await expect(
+    page.getByRole("navigation", { name: "변경 파일" }).getByRole("button"),
+  ).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "다음 변경 구간", exact: true })
+    .click();
+  await expect(
+    page.getByText("1 / 2 변경 구간", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "다음 변경 구간", exact: true })
+    .click();
+  await expect(
+    page.getByText("2 / 2 변경 구간", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "diff 줄 바꿈" }).click();
+  await expect(page.locator(".diff-scroll")).toHaveClass(/wrapped/);
+  await page
+    .getByRole("button", { name: "이전 변경 구간", exact: true })
+    .click();
+  await expect(
+    page.getByText("1 / 2 변경 구간", { exact: true }),
+  ).toBeVisible();
+  await axe(page);
+  await page.screenshot({ path: "artifacts/orca-diff-dark.png" });
+  await page.getByLabel("화면 테마").selectOption("light");
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await axe(page);
+  await page.screenshot({ path: "artifacts/orca-diff-compact.png" });
+  await page
+    .getByRole("textbox", { name: "변경 파일 검색" })
+    .fill("missing-file");
+  await expect(
+    page.getByRole("heading", { name: "검색 결과가 없습니다" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "다음 변경 구간", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("live logs follow output until the reader scrolls away, preserve anchors across trimming and resume explicitly", async ({
+  page,
+}) => {
+  const snapshot = adeFixture();
+  const run = snapshot.runs.at(-1)!;
+  run.runtime!.events = Array.from({ length: 80 }, (_, i) => ({
+    at: new Date(1_700_000_000_000 + i * 1000).toISOString(),
+    message: `Operation ${i}`,
+  }));
+  await prepare(page, snapshot);
+  const log = page.getByLabel("진행 기록 로그", { exact: true });
+  await expect(log).toBeVisible();
+  const atBottom = () =>
+    log.evaluate((e) => e.scrollHeight - e.clientHeight - e.scrollTop < 3);
+  await expect.poll(atBottom).toBe(true);
+  await log.evaluate((e) => {
+    e.scrollTop = 320;
+  });
+  await expect(
+    page.getByText("이전 기록 읽는 중", { exact: true }),
+  ).toBeVisible();
+  const firstVisible = () =>
+    log.evaluate((e) => {
+      const top = e.getBoundingClientRect().top;
+      return (Array.from(e.querySelectorAll("[data-event]")) as any[]).find(
+        (row) => row.getBoundingClientRect().bottom > top,
+      )?.dataset.event;
+    });
+  const anchor = await firstVisible();
+  run.runtime!.events = [
+    ...run.runtime!.events.slice(5),
+    { at: new Date(1_700_000_100_000).toISOString(), message: "New output" },
+  ];
+  snapshot.revision++;
+  await page.evaluate((snapshot) => {
+    (globalThis as any).roopre.snapshot = async () => snapshot;
+  }, snapshot);
+  await expect(
+    page.getByRole("button", { name: "최신 기록으로 이동" }),
+  ).toHaveText(/새 기록/);
+  await expect.poll(firstVisible).toBe(anchor);
+  await page.screenshot({ path: "artifacts/orca-log-paused.png" });
+  run.runtime!.events = run.runtime!.events.slice(-4);
+  snapshot.revision++;
+  await page.evaluate((snapshot) => {
+    (globalThis as any).roopre.snapshot = async () => snapshot;
+  }, snapshot);
+  await expect(
+    page.getByText("이전 기록 일부가 보존 범위를 벗어났습니다"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "최신 기록으로 이동" }).click();
+  await expect.poll(atBottom).toBe(true);
+  await expect(
+    page.getByText("최신 기록 따라가는 중", { exact: true }),
+  ).toBeVisible();
+  await axe(page);
+});

@@ -1,3 +1,4 @@
+import { useNavigationHistory } from "./workspace/useNavigationHistory";
 import type { SetupDestination } from "./workspace/ExecutionSetup";
 import InstructionContext from "./workspace/InstructionContext";
 import CommandPalette from "./workspace/CommandPalette";
@@ -12,6 +13,7 @@ import { activeStatuses } from "../../shared/runtime";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
+  ArrowRight,
   ArrowUpRight,
   Bell,
   Check,
@@ -283,6 +285,33 @@ export default function App() {
             .toLowerCase()
             .includes(query.toLowerCase())),
     ) || [];
+  const navigation = useNavigationHistory(
+    { scope, selected, query, settingsContext, runtimeSection },
+    (location) => {
+      setScope(location.scope);
+      setSelected(location.selected);
+      setQuery(location.query);
+      setSettingsContext(location.settingsContext);
+      setRuntimeSection(location.runtimeSection);
+    },
+    (location) => {
+      if (!snapshot) return false;
+      if (location.selected)
+        return snapshot.features.some((f) => f.id === location.selected);
+      if (
+        location.settingsContext &&
+        !snapshot.projects.some(
+          (p) => p.id === location.settingsContext?.projectId,
+        )
+      )
+        return false;
+      return (
+        ["inbox", "all", "blocked", "queued", ...settingsScopes].includes(
+          location.scope,
+        ) || snapshot.projects.some((p) => p.id === location.scope)
+      );
+    },
+  );
   const navigate = (next: string) => {
     if (settingsScopes.includes(next)) {
       const projectId = feature?.projectId ?? project?.id;
@@ -294,6 +323,21 @@ export default function App() {
   };
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (e.isComposing || e.defaultPrevented) return;
+      if ((e.metaKey || e.ctrlKey) && ["[", "]"].includes(e.key)) {
+        const target = e.target as HTMLElement;
+        if (
+          modal ||
+          search ||
+          target.closest(
+            'input, textarea, select, [contenteditable="true"], [role="dialog"]',
+          )
+        )
+          return;
+        e.preventDefault();
+        navigation.move(e.key === "[" ? -1 : 1);
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         if (!modal) setSearch((s) => !s);
@@ -310,7 +354,7 @@ export default function App() {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [modal, search, navigate]);
+  }, [modal, search, navigate, navigation]);
   const openSetup = (destination: SetupDestination) => {
     if (destination === "connection" || destination === "profile") {
       setRuntimeSection(destination);
@@ -327,6 +371,26 @@ export default function App() {
         <span className="app-wordmark">{APP_NAME}</span>
         <span className="titlebar-divider" />
         <span className="caption">Agentic Development Environment</span>
+        <nav className="workspace-history" aria-label="작업 이동 기록">
+          <button
+            className="icon-button"
+            aria-label="이전 작업으로"
+            title="이전 작업으로 (⌘[ / Ctrl+[)"
+            disabled={!navigation.canBack || modal !== null || search}
+            onClick={() => navigation.move(-1)}
+          >
+            <ArrowLeft size={15} />
+          </button>
+          <button
+            className="icon-button"
+            aria-label="다음 작업으로"
+            title="다음 작업으로 (⌘] / Ctrl+])"
+            disabled={!navigation.canForward || modal !== null || search}
+            onClick={() => navigation.move(1)}
+          >
+            <ArrowRight size={15} />
+          </button>
+        </nav>
         <div className="titlebar-right">
           <button
             className="icon-button notification-button"

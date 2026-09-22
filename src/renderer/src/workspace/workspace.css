@@ -1024,3 +1024,62 @@ code {
     justify-self: start;
   }
 }
+
+.workspace-history {
+  display: flex;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+.diff-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 10px;
+  color: var(--muted);
+}
+.diff-filter input {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 7px;
+  font-size: 11px;
+}
+.diff-tools,
+.log-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.diff-tools > span,
+.log-controls > span {
+  flex: 1;
+  color: var(--muted);
+  font-size: 11px;
+}
+.diff-scroll.wrapped .diff-code {
+  table-layout: fixed;
+}
+.diff-scroll.wrapped pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diff-code .current-hunk {
+  box-shadow: inset 3px 0 var(--blue);
+  color: var(--text);
+}
+.event-log-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.log-controls button {
+  font-size: 11px;
+  padding: 3px 6px;
+}
+.event-log-pane .output-scroll {
+  overflow-anchor: none;
+}

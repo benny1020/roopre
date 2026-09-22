@@ -55,10 +55,32 @@ test(
       assert(!JSON.stringify(status).includes("never-a-real-secret"));
       await mkdir("artifacts", { recursive: true });
       await page.screenshot({ path: "artifacts/onboarding-dark.png" });
+      const rememberedBounds = await application.evaluate(
+        ({ BrowserWindow }) => {
+          const window = BrowserWindow.getAllWindows()[0];
+          window.setBounds({ x: 120, y: 80, width: 1150, height: 750 });
+          return window.getNormalBounds();
+        },
+      );
       await application.close();
       application = undefined;
+      const windowState = JSON.parse(
+        await readFile(join(root, "roopre", "window-state.json"), "utf8"),
+      );
+      assert.deepEqual(
+        windowState.bounds,
+        rememberedBounds,
+        "Close flushes the pending window preference write",
+      );
       application = await launch();
       page = await application.firstWindow();
+      assert.deepEqual(
+        await application.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0].getNormalBounds(),
+        ),
+        rememberedBounds,
+        "Window geometry survives an actual app restart",
+      );
       await page
         .getByRole("heading", { name: "환경 준비", exact: true })
         .waitFor();
