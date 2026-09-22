@@ -41,7 +41,8 @@
     "pr:merge": "pnpm build:native && tsx config/scripts/pr-workflow.ts merge",
     "harness:validate": "tsx config/scripts/harness.ts validate",
     "harness:lock": "tsx config/scripts/harness.ts lock",
-    "harness:schema": "tsx config/scripts/harness.ts schema"
+    "harness:schema": "tsx config/scripts/harness.ts schema",
+    "test:dogfood": "pnpm build && tsx --test tests/dogfood.integration.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",

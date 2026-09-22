@@ -914,3 +914,29 @@ code {
   min-height: 38px;
   height: 38px;
 }
+
+/* Execution owns its detailed process view; keep the feature context compact. */
+.feature-detail.is-execution .feature-title {
+  padding-top: 4px;
+  padding-bottom: 6px;
+}
+.feature-detail.is-execution .feature-title p {
+  display: none;
+}
+.feature-detail.is-execution .work-context {
+  padding-bottom: 8px;
+}
+.feature-detail.is-execution .phase-track {
+  display: none;
+}
+.run-attempt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.run-attempt strong {
+  color: var(--amber);
+  font-weight: 500;
+}
+.work-empty .primary {
+  margin-top: 14px;
+}

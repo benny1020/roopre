@@ -27,11 +27,13 @@ export default function RunPanel({
   feature,
   send,
   connected = true,
+  onDesign,
 }: {
   snapshot: Snapshot;
   feature: Feature;
   send: (c: Command) => Promise<unknown>;
   connected?: boolean;
+  onDesign: () => void;
 }) {
   const runs = snapshot.runs
     .filter((r) => r.featureId === feature.id)
@@ -163,6 +165,12 @@ export default function RunPanel({
             ))}
           </select>
         </label>
+        {run && (
+          <span className="run-attempt">
+            시도 {runtime?.attempt ?? 1}
+            {run.id !== current?.id && <strong> · 이전 실행</strong>}
+          </span>
+        )}
         <div className="button-row">
           <button
             className="secondary"
@@ -239,20 +247,17 @@ export default function RunPanel({
                 최신 변경 재시도
               </button>
             )}
-          <button
-            className="icon-button"
-            aria-label="에이전트 패널"
-            disabled={tab === "flow"}
-            title={
-              tab === "flow"
-                ? "흐름 화면에서는 노드를 선택해 실행 근거를 확인하세요"
-                : "에이전트 패널 표시"
-            }
-            aria-pressed={inspector}
-            onClick={() => setInspector(!inspector)}
-          >
-            <PanelRight size={16} />
-          </button>
+          {tab !== "flow" && (
+            <button
+              className="icon-button"
+              aria-label="에이전트 패널"
+              title="에이전트 패널 표시"
+              aria-pressed={inspector}
+              onClick={() => setInspector(!inspector)}
+            >
+              <PanelRight size={16} />
+            </button>
+          )}
         </div>
       </div>
       {error && (
@@ -268,12 +273,16 @@ export default function RunPanel({
               <li key={r}>{r}</li>
             ))}
           </ul>
+          <button onClick={onDesign}>설계 검토로 이동</button>
         </details>
       )}
       {!run ? (
         <Empty title="설계에서 시작해, 검증된 변경까지">
           요구사항과 설계를 작성하고 본인 승인을 받으세요. 실행을 시작하면 변경
           파일, 검사 결과와 에이전트 활동이 여기에 표시됩니다.
+          <button className="primary" onClick={onDesign}>
+            설계 작성·검토로 이동
+          </button>
         </Empty>
       ) : (
         <>
@@ -282,19 +291,6 @@ export default function RunPanel({
             style={{ "--inspector-width": `${width}px` } as React.CSSProperties}
           >
             <section className="execution-center" aria-label="실행 작업 공간">
-              <div className="run-context">
-                <span
-                  className={`work-state ${["failed", "interrupted"].includes(run.status) ? "danger" : activeStatuses.includes(run.status) ? "active" : "quiet"}`}
-                >
-                  <i />
-                  {runNames[run.status]}
-                </span>
-                <code title={run.id}>{run.id.slice(0, 8)}</code>
-                <span>시도 {runtime?.attempt ?? 1}</span>
-                {selected && run.id !== current?.id && (
-                  <strong>이전 실행</strong>
-                )}
-              </div>
               <Tabs
                 label="실행 결과"
                 value={tab}
@@ -314,12 +310,15 @@ export default function RunPanel({
                   { id: "artifacts", label: "산출물" },
                 ]}
               />
-              <div className="execution-surface">
+              <div
+                className={`execution-surface ${tab === "flow" ? "is-flow" : ""}`}
+              >
                 {tab === "flow" && (
                   <ExecutionGraph
                     key={`${run.id}:${runtime?.attempt ?? 1}`}
                     run={run}
                     connected={connected}
+                    onNavigate={setTab}
                   />
                 )}
                 {tab === "changes" && (

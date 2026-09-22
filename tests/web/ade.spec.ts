@@ -332,7 +332,15 @@ test("execution graph preserves inspection selection and shows current attempt o
   const graph = page.getByRole("region", { name: "실행 흐름 그래프" });
   await expect(graph.getByText("2 실행 · 0/2 완료")).toBeVisible();
   await expect(graph.getByText("과거 에이전트")).toHaveCount(0);
+  await page.setViewportSize({ width: 1440, height: 940 });
+  const inspector = page.getByRole("region", { name: "선택한 실행 근거" });
+  const inspectorBox = (await inspector.boundingBox())!;
+  const graphBox = (await graph.boundingBox())!;
+  expect(inspectorBox.x).toBeGreaterThan(graphBox.x);
+  expect(Math.abs(inspectorBox.y - graphBox.y)).toBeLessThan(2);
+  expect(inspectorBox.y + inspectorBox.height).toBeLessThanOrEqual(940);
   await page.getByTestId("rf__node-design").focus();
+  await expect(page.getByTestId("rf__node-design")).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(
     page.getByRole("region", { name: "선택한 실행 근거" }).getByRole("heading"),
@@ -441,11 +449,21 @@ test("graph editing supports stage moves, undo, draft recovery and accessible co
   await expect(page.getByLabel("검증 단계 지침")).toHaveValue(
     "이 초안은 새로고침 후에도 유지됩니다.",
   );
-  await page
-    .getByRole("button", { name: "검증 에이전트 추가", exact: true })
-    .click();
+  const addFromGraph = page.getByRole("button", {
+    name: "검증에 에이전트 추가",
+    exact: true,
+  });
+  await addFromGraph.focus();
+  await page.keyboard.press("Space");
   const dialog = page.getByRole("dialog", { name: "검증 에이전트 추가" });
   await expect(dialog.getByLabel("기존 에이전트 검색")).toBeFocused();
+  await dialog.getByLabel("기존 에이전트 검색").fill("없는역할123");
+  await expect(dialog.getByRole("status")).toContainText(
+    "맞는 에이전트가 없습니다",
+  );
+  await page.keyboard.press("Escape");
+  await expect(addFromGraph).toBeFocused();
+  await page.keyboard.press("Enter");
   await dialog.getByLabel("기존 에이전트 검색").fill("review");
   await dialog.getByRole("button", { name: /review 역할/ }).click();
   await expect(page.getByLabel("에이전트 담당 단계")).toHaveValue(
@@ -567,6 +585,9 @@ test("active project locks workflow changes while graph remains inspectable", as
   await page.getByTestId("rf__node-review").locator("strong").first().click();
   await expect(page.getByLabel("리뷰 실행 방식")).toBeDisabled();
   await expect(
+    page.getByRole("button", { name: "리뷰에 에이전트 추가", exact: true }),
+  ).toBeDisabled();
+  await expect(
     page.getByRole("complementary", { name: "선택한 흐름 설정" }),
   ).toContainText("선택한 단계 · 리뷰");
 });
@@ -584,6 +605,14 @@ test("fixed-check execution has a visible active stage and direct navigation", a
   await expect(
     page.getByRole("region", { name: "선택한 실행 근거" }).getByRole("heading"),
   ).toHaveText("검증");
+  await page
+    .getByRole("button", { name: "검증 결과 보기", exact: true })
+    .click();
+  await expect(page.getByRole("tab", { name: /^검증/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByText("현재 시도 2 · 결과 1개")).toBeVisible();
 });
 
 test("cancelled stage creation never leaks into library duplication", async ({
@@ -647,4 +676,80 @@ test("cancelled stage creation never leaks into library duplication", async ({
       )
       .toBe(0);
   }
+});
+
+test("dense workflows keep readable nodes and recover all agents through scroll", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  const agentId = "00000000-0000-4000-8000-000000000099";
+  state.agents = [
+    {
+      id: agentId,
+      revision: 1,
+      name: "검증 에이전트",
+      description: "",
+      capability: "read-only",
+      markdown: "실제 근거 확인",
+      archived: false,
+    },
+  ];
+  state.projects[0].workflow = {
+    revision: 1,
+    instructions: {
+      requirements: "",
+      design: "",
+      implementation: "",
+      verification: "",
+      review: "",
+    },
+    assignments: Array.from({ length: 12 }, (_, i) => ({
+      id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+      agentId,
+      stage: "verification",
+      required: true,
+    })),
+  };
+  await prepare(page, state);
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await page
+    .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+    .click();
+  const last = page.getByTestId(
+    "rf__node-00000000-0000-4000-8000-000000000011",
+  );
+  const label = last.locator("strong");
+  await expect(label).toHaveCSS("font-size", "14px");
+  await expect
+    .poll(async () => (await last.boundingBox())!.height)
+    .toBeGreaterThanOrEqual(58);
+  const canvas = page.locator(".graph-canvas");
+  await canvas.hover();
+  await page.mouse.wheel(0, 1200);
+  await expect
+    .poll(() => canvas.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(100);
+  await last.click();
+  await expect(page.getByLabel("에이전트 담당 단계")).toHaveValue(
+    "verification",
+  );
+  expect(
+    await page.locator(".graph-canvas").evaluate((el) => el.scrollTop),
+  ).toBeGreaterThan(100);
+  await expect
+    .poll(
+      async () =>
+        (await page.getByTestId("rf__node-verification").boundingBox())!.width,
+    )
+    .toBeLessThan(180);
+  await page
+    .getByRole("button", { name: "에이전트 접기", exact: true })
+    .click();
+  await expect(last).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "에이전트 펼치기", exact: true })
+    .click();
+  await expect(last).toHaveCount(1);
 });

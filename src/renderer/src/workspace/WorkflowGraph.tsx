@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import {
   ReactFlow,
   Background,
@@ -10,7 +10,7 @@ import {
   type NodeProps,
   type Edge,
 } from "@xyflow/react";
-import { Check, Circle, LoaderCircle, AlertCircle } from "lucide-react";
+import { Check, Circle, LoaderCircle, AlertCircle, Plus } from "lucide-react";
 import { stages, stageNames } from "../../../shared/harness";
 import "@xyflow/react/dist/style.css";
 import "./graph.css";
@@ -22,8 +22,7 @@ export type GraphItem = {
   detail: string;
   state: "idle" | "running" | "passed" | "failed" | "unknown";
 };
-const column = 222,
-  left = 24,
+const left = 16,
   top = 56,
   row = 72;
 const stateIcons = {
@@ -44,6 +43,21 @@ function StageNode({ data }: NodeProps) {
         {String(data.name)} {data.running ? <small>진행 중</small> : null}
       </strong>
       <span>{String(data.detail)}</span>
+      {data.onAdd ? (
+        <button
+          className="stage-add nodrag nopan"
+          type="button"
+          aria-label={`${String(data.name)}에 에이전트 추가`}
+          title={`${String(data.name)}에 에이전트 추가`}
+          disabled={Boolean(data.addDisabled)}
+          onClick={(e) => {
+            e.stopPropagation();
+            (data.onAdd as () => void)();
+          }}
+        >
+          <Plus size={14} aria-hidden="true" />
+        </button>
+      ) : null}
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   );
@@ -74,6 +88,9 @@ export default function WorkflowGraph({
   label,
   stageDetails,
   activeStage,
+  onAdd,
+  addDisabled,
+  toolbarActions,
 }: {
   items: GraphItem[];
   selected: string;
@@ -84,8 +101,32 @@ export default function WorkflowGraph({
   label: string;
   stageDetails?: Partial<Record<Stage, string>>;
   activeStage?: Stage;
+  onAdd?: (stage: Stage) => void;
+  addDisabled?: boolean;
+  toolbarActions?: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const canvas = useRef<HTMLDivElement>(null);
+  const [canvasWidth, setCanvasWidth] = useState(1100);
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) =>
+      setCanvasWidth(entry.contentRect.width),
+    );
+    if (canvas.current) observer.observe(canvas.current);
+    return () => observer.disconnect();
+  }, []);
+  const column = Math.max(150, Math.min(222, (canvasWidth - 32) / 5));
+  const height = collapsed
+    ? 72
+    : Math.max(
+        150,
+        76 +
+          Math.max(
+            0,
+            ...stages.map((s) => items.filter((a) => a.stage === s).length),
+          ) *
+            row,
+      );
   const layoutKey = JSON.stringify({
     items,
     selected,
@@ -94,19 +135,10 @@ export default function WorkflowGraph({
     collapsed,
     stageDetails,
     activeStage,
+    column,
+    addDisabled,
   });
   const layout = useMemo(() => {
-    const height = collapsed
-      ? 72
-      : Math.max(
-          150,
-          76 +
-            Math.max(
-              0,
-              ...stages.map((s) => items.filter((a) => a.stage === s).length),
-            ) *
-              row,
-        );
     return stages.flatMap((stage, i): Node[] => {
       const list = items.filter((a) => a.stage === stage);
       const running = list.filter((a) => a.state === "running").length;
@@ -118,6 +150,8 @@ export default function WorkflowGraph({
           draggable: false,
           data: {
             name: stageNames[stage],
+            onAdd: onAdd ? () => onAdd(stage) : undefined,
+            addDisabled,
             running: activeStage === stage,
             detail:
               stageDetails?.[stage] ??
@@ -126,7 +160,7 @@ export default function WorkflowGraph({
             selected: selected === stage,
           },
           ariaLabel: `${stageNames[stage]} 단계`,
-          style: { width: 202, height },
+          style: { width: column - 12, height },
         },
         ...(!collapsed
           ? list.map((item, j): Node => ({
@@ -136,14 +170,23 @@ export default function WorkflowGraph({
               draggable: editable,
               data: { item, selected: selected === item.id },
               ariaLabel: `${item.name} · ${item.detail}`,
-              style: { width: 182 },
+              style: { width: column - 32 },
             }))
           : []),
       ];
     });
-  }, [layoutKey]);
+  }, [layoutKey, onAdd]);
   const [nodes, setNodes] = useState(layout);
-  useEffect(() => setNodes(layout), [layout]);
+  // Retain measured dimensions across layout/data updates. Resetting them makes
+  // React Flow temporarily hide focused nodes while it measures them again.
+  useEffect(() => {
+    setNodes((previous) =>
+      layout.map((node) => ({
+        ...previous.find((old) => old.id === node.id),
+        ...node,
+      })),
+    );
+  }, [layout]);
   const edges: Edge[] = stages.slice(1).map((stage, i) => ({
     id: `edge-${stage}`,
     source: stages[i],
@@ -161,7 +204,13 @@ export default function WorkflowGraph({
         const node = (e.target as HTMLElement).closest<HTMLElement>(
           ".react-flow__node",
         );
-        if (!node) return;
+        if (
+          !node ||
+          (e.target as HTMLElement).closest(
+            "button, input, select, textarea, a",
+          )
+        )
+          return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           e.stopPropagation();
@@ -179,18 +228,23 @@ export default function WorkflowGraph({
             ? "에이전트를 끌어 단계 이동 · 선택해서 편집"
             : "노드를 선택해 확인 · 실행 위치는 유지"}
         </span>
-        <button onClick={() => setCollapsed((v) => !v)}>
-          {collapsed ? "에이전트 펼치기" : "에이전트 접기"}
-        </button>
+        <div className="graph-toolbar-actions">
+          {toolbarActions}
+          <button
+            onClick={() => setCollapsed((v) => !v)}
+            aria-expanded={!collapsed}
+          >
+            {collapsed ? "에이전트 펼치기" : "에이전트 접기"}
+          </button>
+        </div>
       </div>
-      <div className="graph-canvas">
-        <div className="graph-plane">
+      <div className="graph-canvas" ref={canvas}>
+        <div className="graph-plane" style={{ height: height + 40 }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
-            fitView
-            fitViewOptions={{ padding: 0.08 }}
+            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
             minZoom={0.35}
             maxZoom={1.5}
             nodesConnectable={false}
@@ -198,6 +252,7 @@ export default function WorkflowGraph({
             deleteKeyCode={null}
             nodesDraggable={editable}
             panOnScroll={false}
+            preventScrolling={false}
             zoomOnScroll={false}
             selectionOnDrag={false}
             onNodesChange={(changes) =>
@@ -205,10 +260,17 @@ export default function WorkflowGraph({
             }
             onNodeClick={(_e, n) => onSelect(n.id)}
             onNodeDragStop={(_e, n) => {
-              const index = Math.floor((n.position.x + 91 - left) / column);
+              const index = Math.floor(
+                (n.position.x + (column - 32) / 2 - left) / column,
+              );
               if (index >= 0 && index < stages.length && n.position.y >= 20)
                 onMove?.(n.id, stages[index]);
-              setNodes(layout);
+              setNodes((previous) =>
+                layout.map((node) => ({
+                  ...previous.find((old) => old.id === node.id),
+                  ...node,
+                })),
+              );
             }}
             ariaLabelConfig={{
               "controls.zoomIn.ariaLabel": "확대",
@@ -234,7 +296,7 @@ export default function WorkflowGraph({
           <i className="legend-running" />
           실행 중
         </span>
-        <span>설계 승인 후 구현 · 단계 안은 기본 병렬</span>
+        <span>설계 승인 후 구현</span>
       </div>
     </section>
   );
