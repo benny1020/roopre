@@ -725,7 +725,12 @@ test("dense workflows keep readable nodes and recover all agents through scroll"
   await expect
     .poll(async () => (await last.boundingBox())!.height)
     .toBeGreaterThanOrEqual(58);
-  await last.scrollIntoViewIfNeeded();
+  const canvas = page.locator(".graph-canvas");
+  await canvas.hover();
+  await page.mouse.wheel(0, 1200);
+  await expect
+    .poll(() => canvas.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(100);
   await last.click();
   await expect(page.getByLabel("에이전트 담당 단계")).toHaveValue(
     "verification",

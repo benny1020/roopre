@@ -223,3 +223,5 @@ Visual inspection included 1440×940 and 1024×700, both themes, diff, design re
 - 실제 실행 화면과 편집 화면을 1440×940/1024×700, 다크/라이트에서 확인했다. 핵심 스크린샷은 `artifacts/graph-*` 및 `artifacts/dogfood-native-workflow.png`, 로그는 `artifacts/dogfood-*`다.
 
 **실제 AI를 통한 자기 개발 완료와는 구분한다.** 사용자 Mac은 잠겨 있고 저장된 AI 연결이 0개여서 사용자 창의 직접 조작·과금 모델 구현은 수행하지 못했다. 연결 등록과 잠금 해제를 요청했다. 격리 앱에서도 승인 없는 구현 버튼 비활성, 실행 0건을 확인했으며 본인 인증이나 승인을 합성하지 않았다. 실제 모델·본인 승인·새 Mac 설치·Developer ID/공증·App Store 제출은 여전히 미검증이다.
+
+전담 리뷰는 첫 head에서 React Flow가 실제 wheel 입력을 가로채 긴 그래프가 스크롤되지 않는 P2를 재현했다. `preventScrolling=false`로 그래프 바깥 스크롤 컨테이너에 입력을 전달하고, 프로그램식 `scrollIntoView`에 의존하던 검사를 실제 마우스 wheel로 바꿨다. 실제 wheel 회귀를 포함한 전체 브라우저 20개 재검사가 통과했다. 최종 head의 독립 재리뷰와 CI는 별도로 확인한다.

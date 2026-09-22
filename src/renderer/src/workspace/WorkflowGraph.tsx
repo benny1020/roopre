@@ -252,6 +252,7 @@ export default function WorkflowGraph({
             deleteKeyCode={null}
             nodesDraggable={editable}
             panOnScroll={false}
+            preventScrolling={false}
             zoomOnScroll={false}
             selectionOnDrag={false}
             onNodesChange={(changes) =>
