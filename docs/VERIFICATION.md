@@ -245,6 +245,6 @@ Visual inspection included 1440×940 and 1024×700, both themes, diff, design re
 
 [통합 결과 보고서](QUALITY-AUDIT.md), [변경 설계](design/RUNTIME-RESILIENCE.md). 종료 중 실행 시작 경쟁, DB 단절 후 남은 상태, Docker 불가 시 작업 화면 접근, 취소 상태 보존을 보완했다. 종료 확인 전 재시도를 막고 실제 연결 검사 전 완료 표시를 없앴으며 온보딩의 프로젝트 문맥을 유지한다.
 
-`pnpm check` 단위/DB 89개, `pnpm test:web` 23개, 기존 `pnpm test:runner` Docker 통합 3개 통과. 새 `pnpm test:resilience`는 실제 프로세스 SIGKILL/DB TCP 연결 단절·재접속/3개 프로젝트 용량·취소/체크포인트 재시도를 검증한다. 개발 중 10회 반복이 모두 통과했으며 최종 소스에서 다시 확인했다. 약 209초 반복을 수시간 운영이라고 보고하지 않는다.
+`pnpm check` 단위/DB 91개, `pnpm test:web` 23개, 기존 `pnpm test:runner` Docker 통합 3개 통과. 새 `pnpm test:resilience`는 실제 프로세스 SIGKILL/DB TCP 연결 단절·재접속/3개 프로젝트 용량·취소/체크포인트 재시도를 검증한다. 개발 중 10회 반복이 모두 통과했으며 최종 소스에서 다시 확인했다. 약 209초 반복을 수시간 운영이라고 보고하지 않는다.
 
 새 전용 DB와 빈 앱 프로필로 실제 온보딩을 수행하고 기존 Electron 시작/self-use 검사와 함께 3개 통과했다. 모델은 호출하지 않았다. 실제 유료 모델 개발·사용자 본인 인증·장시간 sleep/wake는 미검증이며 사용자 연결과 인증이 필요하다. 배포 검증은 사용자 요청에 따라 이번 작업에서 제외했다.

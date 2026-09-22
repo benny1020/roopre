@@ -750,3 +750,108 @@ test("cleanup failure preserves cancellation and releases its slot only after co
   assert.equal(run.runtime!.terminationConfirmed, true);
   await runner.stop();
 });
+
+test("an execution manager can resume scheduling after environment migration rollback", async () => {
+  const { w, run } = scheduledFixture();
+  const root = await mkdtemp(join(tmpdir(), "roopre-reinit-unit-"));
+  const store = {
+    read: async () => w,
+    mutate: async (fn: (w: Workspace) => void) => fn(w),
+  } as unknown as Store;
+  const runner = new RunnerManager(
+    store,
+    {} as ConnectionVault,
+    root,
+    "/unused",
+  );
+  const started: string[] = [];
+  runner.execute = async (id) => {
+    started.push(id);
+    run.status = "cancelled";
+    run.runtime!.terminationConfirmed = true;
+  };
+  try {
+    await runner.stop();
+    await runner.init();
+    await (runner as unknown as { tick: () => Promise<void> }).tick();
+    assert.deepEqual(started, [run.id]);
+  } finally {
+    await runner.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("slow orphan cleanup does not block cancellation and shutdown waits for cleanup", async () => {
+  const { w, run } = scheduledFixture();
+  run.status = "implementing";
+  run.runtime!.terminationConfirmed = false;
+  const orphan = structuredClone(run);
+  orphan.id = `run-${randomUUID()}`;
+  orphan.status = "interrupted";
+  w.runs.push(orphan);
+  const store = {
+    read: async () => w,
+    mutate: async (fn: (w: Workspace) => void) => fn(w),
+  } as unknown as Store;
+  const vault = {
+    get: () => ({ info: { version: 1, testStatus: "passed" } }),
+  } as unknown as ConnectionVault;
+  const runner = new RunnerManager(store, vault, "/unused", "/unused");
+  const internals = runner as unknown as {
+    tick: () => Promise<void>;
+    active: Map<string, AbortController>;
+  };
+  const controller = new AbortController();
+  internals.active.set(run.id, controller);
+  let release!: () => void;
+  const cleanup = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let calls = 0;
+  runner.cleanup = async () => {
+    calls++;
+    await cleanup;
+  };
+  const boundedTick = async () => {
+    let timeout!: ReturnType<typeof setTimeout>;
+    try {
+      await Promise.race([
+        internals.tick(),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(Error("Cleanup blocked scheduler")),
+            1000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+  try {
+    await boundedTick();
+    assert.equal(calls, 1);
+    assert.equal(controller.signal.aborted, false);
+    assert.equal(orphan.runtime!.terminationConfirmed, false);
+    run.status = "cancelled";
+    await boundedTick();
+    assert.equal(
+      controller.signal.aborted,
+      true,
+      "Cancellation observed before cleanup resolves",
+    );
+    assert.equal(calls, 1, "Only one recovery per run can be in flight");
+    let stopped = false;
+    const stop = runner.stop().then(() => {
+      stopped = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(stopped, false, "Shutdown retains recovery ownership");
+    release();
+    await stop;
+    assert.equal(orphan.runtime!.terminationConfirmed, true);
+  } finally {
+    release();
+    await runner.stop();
+  }
+});

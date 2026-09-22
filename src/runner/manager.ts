@@ -37,6 +37,7 @@ export class RunnerManager {
   private stopping = false;
   private tickTask?: Promise<void>;
   private recoveryAfter = new Map<string, number>();
+  private recoveryJobs = new Map<string, Promise<void>>();
   private active = new Map<string, AbortController>();
   private jobs = new Map<string, Promise<void>>();
   constructor(
@@ -46,8 +47,12 @@ export class RunnerManager {
     private resources: string,
   ) {}
   async init() {
+    this.stopping = false;
+    this.recoveryAfter.clear();
+    if (this.timer) clearInterval(this.timer);
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     await this.reconcile(await this.store.read("owner"));
+    if (this.stopping) return;
     this.timer = setInterval(() => void this.tick(), 1000);
     void this.tick();
   }
@@ -133,37 +138,54 @@ export class RunnerManager {
   }
   // A dead main process or failed DB write can leave a run occupying capacity.
   // Reconcile only work not owned by this manager, and never resume it implicitly.
-  private async reconcile(w: Workspace) {
+  private async recover(id: string) {
+    let terminated = false;
+    try {
+      await this.cleanup(id);
+      terminated = true;
+    } catch {
+      /* Keep capacity reserved until Docker confirms cleanup. */
+    }
+    await this.update(id, (r) => {
+      r.runtime!.terminationConfirmed = terminated;
+      if (activeStatuses.includes(r.status) && r.status !== "queued") {
+        r.status = "interrupted";
+        r.reason =
+          "이전 실행이 중단됐습니다. 변경과 근거를 보존했습니다. 종료 확인 후 직접 재시도하세요.";
+      }
+      for (const agent of r.runtime!.agents ?? []) {
+        if (agent.status === "running") {
+          agent.status = "failed";
+          agent.error = "실행이 중단되어 결과를 확인하지 못했습니다.";
+          agent.endedAt = new Date().toISOString();
+        }
+      }
+    });
+    return terminated;
+  }
+  private reconcile(w: Workspace): Promise<unknown> {
     for (const run of w.runs.filter(
       (r) => r.runtime && occupiesSlot(r) && !this.active.has(r.id),
     )) {
-      if (this.stopping) return;
+      if (this.stopping) break;
+      if (this.recoveryJobs.has(run.id)) continue;
       if ((this.recoveryAfter.get(run.id) ?? 0) > Date.now()) continue;
-      this.recoveryAfter.set(run.id, Date.now() + 10000);
-      let terminated = false;
-      try {
-        await this.cleanup(run.id);
-        terminated = true;
-      } catch {
-        /* Keep capacity reserved until Docker confirms cleanup. */
-      }
-      await this.update(run.id, (r) => {
-        r.runtime!.terminationConfirmed = terminated;
-        if (activeStatuses.includes(r.status) && r.status !== "queued") {
-          r.status = "interrupted";
-          r.reason =
-            "이전 실행이 중단됐습니다. 변경과 근거를 보존했습니다. 종료 확인 후 직접 재시도하세요.";
-        }
-        for (const agent of r.runtime!.agents ?? []) {
-          if (agent.status === "running") {
-            agent.status = "failed";
-            agent.error = "실행이 중단되어 결과를 확인하지 못했습니다.";
-            agent.endedAt = new Date().toISOString();
-          }
-        }
-      });
-      if (terminated) this.recoveryAfter.delete(run.id);
+      let recovered = false;
+      const job = this.recover(run.id)
+        .then((terminated) => {
+          recovered = terminated;
+        })
+        .catch(() => {
+          // Failed DB writes must be retried after connectivity returns.
+        })
+        .finally(() => {
+          this.recoveryJobs.delete(run.id);
+          if (recovered) this.recoveryAfter.delete(run.id);
+          else this.recoveryAfter.set(run.id, Date.now() + 10000);
+        });
+      this.recoveryJobs.set(run.id, job);
     }
+    return Promise.allSettled([...this.recoveryJobs.values()]);
   }
   private tick(): Promise<void> {
     if (this.stopping) return Promise.resolve();
@@ -184,7 +206,8 @@ export class RunnerManager {
           abort.abort();
         }
       }
-      await this.reconcile(w);
+      // Slow Docker cleanup must not block active authorization/cancellation checks.
+      void this.reconcile(w);
       if (this.stopping) return;
       w = await this.store.read("owner");
       if (this.stopping) return;
@@ -1413,6 +1436,9 @@ export class RunnerManager {
     if (this.timer) clearInterval(this.timer);
     for (const c of this.active.values()) c.abort();
     await this.tickTask;
-    await Promise.allSettled([...this.jobs.values()]);
+    await Promise.allSettled([
+      ...this.jobs.values(),
+      ...this.recoveryJobs.values(),
+    ]);
   }
 }
