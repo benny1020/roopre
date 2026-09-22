@@ -8,6 +8,7 @@ async function request(operation: string, payload?: unknown) {
 }
 const api: DesktopAPI = {
   name: APP_NAME,
+  refineAgent: (input) => request("refineAgent", input),
   harnessCandidate: (input) => request("harnessCandidate", input),
   harnessApply: (input) => request("harnessApply", input),
   harnessExport: (token) => request("harnessExport", token),

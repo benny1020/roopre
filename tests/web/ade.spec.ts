@@ -45,6 +45,7 @@ async function prepare(page: Page, state = adeFixture()) {
   await expect(
     page.getByRole("heading", { name: state.features[0].title, exact: true }),
   ).toBeVisible();
+  if (state.runs.length) await page.getByRole("tab", { name: /^검증/ }).click();
 }
 async function axe(page: Page) {
   const result = await new AxeBuilder({ page })
@@ -301,4 +302,349 @@ test("retry review history cannot masquerade as current acceptance evidence", as
   ).toBeVisible();
   await expect(history).toContainText("입력 tree");
   await expect(history).toContainText("d".repeat(40));
+});
+
+test("execution graph preserves inspection selection and shows current attempt only", async ({
+  page,
+}) => {
+  const state = adeFixture(),
+    run = state.runs.at(-1)!;
+  run.status = "implementing";
+  const first = run.runtime!.agents![0];
+  first.status = "running";
+  run.runtime!.agents!.push(
+    {
+      ...first,
+      id: "parallel-second",
+      name: "API 구현 에이전트",
+      status: "running",
+    },
+    {
+      ...first,
+      id: "historical-running",
+      name: "과거 에이전트",
+      attempt: 1,
+      status: "running",
+    },
+  );
+  await prepare(page, state);
+  await page.getByRole("tab", { name: "흐름", exact: true }).click();
+  const graph = page.getByRole("region", { name: "실행 흐름 그래프" });
+  await expect(graph.getByText("2 실행 · 0/2 완료")).toBeVisible();
+  await expect(graph.getByText("과거 에이전트")).toHaveCount(0);
+  await page.getByTestId("rf__node-design").focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("region", { name: "선택한 실행 근거" }).getByRole("heading"),
+  ).toHaveText("설계");
+  await expect(graph.locator(".state-running")).toHaveCount(2);
+  await page.getByRole("button", { name: "현재 작업 선택" }).click();
+  await expect(
+    page.getByRole("region", { name: "선택한 실행 근거" }),
+  ).toContainText("실제로 적용한 지침");
+  await axe(page);
+  await page.screenshot({ path: "artifacts/graph-execution-dark.png" });
+  await page.getByLabel("화면 테마").selectOption("light");
+  await axe(page);
+  await page.screenshot({ path: "artifacts/graph-execution-light.png" });
+  await page.getByLabel("실행 선택").selectOption("ade-run-previous");
+  await expect(graph.locator(".state-running")).toHaveCount(0);
+});
+
+test("graph editing supports stage moves, undo, draft recovery and accessible compact layout", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  const project = state.projects[0];
+  const stages = [
+    "requirements",
+    "design",
+    "implementation",
+    "verification",
+    "review",
+  ] as const;
+  state.agents = stages.map((stage, i) => ({
+    id: `00000000-0000-4000-8000-00000000001${i}`,
+    revision: 1,
+    name: `${stage} 역할`,
+    description: "테스트 역할",
+    capability: stage === "implementation" ? "implementation" : "read-only",
+    markdown: "# 검토 기준\n검사 근거 기록",
+    archived: false,
+  }));
+  project.workflow = {
+    revision: 1,
+    instructions: {
+      requirements: "",
+      design: "",
+      implementation: "",
+      verification: "",
+      review: "",
+    },
+    assignments: stages.map((stage, i) => ({
+      id: `00000000-0000-4000-8000-00000000002${i}`,
+      stage,
+      agentId: state.agents![i].id,
+      required: true,
+    })),
+  };
+  await prepare(page, state);
+  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await page
+    .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+    .click();
+  await page.setViewportSize({ width: 1440, height: 940 });
+  const source = page.getByTestId(
+    "rf__node-00000000-0000-4000-8000-000000000023",
+  );
+  const target = page.getByTestId("rf__node-review");
+  await source.scrollIntoViewIfNeeded();
+  const from = (await source.boundingBox())!,
+    to = (await target.boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width / 2, to.y + 100, { steps: 12 });
+  await page.mouse.up();
+  await expect(page.getByRole("status")).toContainText("리뷰 단계로 이동");
+  await page.getByRole("button", { name: "되돌리기", exact: true }).click();
+  await source.click();
+  await page.getByLabel("에이전트 담당 단계").selectOption("review");
+  await expect(page.getByRole("status")).toContainText("리뷰 단계로 이동");
+  await expect(
+    page
+      .getByLabel("에이전트 담당 단계")
+      .locator('option[value="implementation"]'),
+  ).toHaveJSProperty("disabled", true);
+  await page.getByRole("button", { name: "되돌리기", exact: true }).click();
+  await expect(page.getByLabel("에이전트 담당 단계")).toHaveValue(
+    "verification",
+  );
+  await page
+    .getByTestId("rf__node-verification")
+    .locator("strong")
+    .first()
+    .click();
+  await page
+    .getByLabel("검증 단계 지침")
+    .fill("이 초안은 새로고침 후에도 유지됩니다.");
+  await page.reload();
+  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await page
+    .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+    .click();
+  await page
+    .getByTestId("rf__node-verification")
+    .locator("strong")
+    .first()
+    .click();
+  await expect(page.getByLabel("검증 단계 지침")).toHaveValue(
+    "이 초안은 새로고침 후에도 유지됩니다.",
+  );
+  await page
+    .getByRole("button", { name: "검증 에이전트 추가", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "검증 에이전트 추가" });
+  await expect(dialog.getByLabel("기존 에이전트 검색")).toBeFocused();
+  await dialog.getByLabel("기존 에이전트 검색").fill("review");
+  await dialog.getByRole("button", { name: /review 역할/ }).click();
+  await expect(page.getByLabel("에이전트 담당 단계")).toHaveValue(
+    "verification",
+  );
+  await page.setViewportSize({ width: 1440, height: 940 });
+  await axe(page);
+  await page.screenshot({
+    path: "artifacts/graph-editor-dark.png",
+    fullPage: true,
+  });
+  await page.getByLabel("화면 테마").selectOption("light");
+  await axe(page);
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.screenshot({
+    path: "artifacts/graph-editor-compact.png",
+    fullPage: true,
+  });
+  expect(
+    await page.evaluate(
+      () =>
+        (globalThis as any).document.documentElement.scrollWidth <=
+        (globalThis as any).innerWidth,
+    ),
+  ).toBe(true);
+});
+
+test("AI refinement preserves input on failure and applies only a reviewed proposal", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  await prepare(page, state);
+  await page.evaluate(() => {
+    const api = (globalThis as any).roopre;
+    api.connections = async () => [
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        name: "검증용 연결",
+        model: "fixture",
+        hasKey: true,
+      },
+    ];
+    let attempt = 0;
+    api.refineAgent = async () => {
+      if (++attempt === 1) throw Error("검증용 연결 실패");
+      return {
+        name: "접근성 검토",
+        description: "키보드와 대비 검증",
+        markdown: "# 역할\n근거를 기록한다.",
+      };
+    };
+  });
+  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await page
+    .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "에이전트 만들기", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "에이전트 편집" });
+  await dialog.getByText("간단히 적고 AI로 구체화", { exact: true }).click();
+  await dialog
+    .getByLabel("원하는 역할")
+    .fill("접근성이랑 키보드 사용성 확인해줘");
+  await dialog
+    .getByRole("button", { name: "AI로 구체화", exact: true })
+    .click();
+  await expect(dialog.getByRole("alert")).toHaveText("검증용 연결 실패");
+  await expect(dialog.getByLabel("원하는 역할")).toHaveValue(
+    "접근성이랑 키보드 사용성 확인해줘",
+  );
+  await dialog
+    .getByRole("button", { name: "AI로 구체화", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("region", { name: "AI 에이전트 제안" }),
+  ).toContainText("접근성 검토");
+  await expect(dialog.getByLabel("에이전트 이름", { exact: true })).toHaveValue(
+    "",
+  );
+  await dialog.getByRole("button", { name: "제안을 편집기에 적용" }).click();
+  await expect(dialog.getByLabel("에이전트 이름", { exact: true })).toHaveValue(
+    "접근성 검토",
+  );
+  await expect(dialog.getByLabel("Markdown 지침", { exact: true })).toHaveValue(
+    "# 역할\n근거를 기록한다.",
+  );
+  await axe(page);
+  await page.screenshot({ path: "artifacts/graph-agent-refinement.png" });
+  await dialog
+    .getByRole("button", { name: "에이전트 저장", exact: true })
+    .click();
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "No mutation in ADE display fixture",
+  );
+  await expect(dialog.getByLabel("에이전트 이름", { exact: true })).toHaveValue(
+    "접근성 검토",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "에이전트 저장", exact: true }),
+  ).toBeEnabled();
+});
+
+test("active project locks workflow changes while graph remains inspectable", async ({
+  page,
+}) => {
+  await prepare(page);
+  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await page
+    .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "개발 흐름 저장", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "기본 흐름 적용", exact: true }),
+  ).toBeDisabled();
+  await page.getByTestId("rf__node-review").locator("strong").first().click();
+  await expect(page.getByLabel("리뷰 실행 방식")).toBeDisabled();
+  await expect(
+    page.getByRole("complementary", { name: "선택한 흐름 설정" }),
+  ).toContainText("선택한 단계 · 리뷰");
+});
+
+test("fixed-check execution has a visible active stage and direct navigation", async ({
+  page,
+}) => {
+  await prepare(page);
+  await page.getByRole("tab", { name: "흐름", exact: true }).click();
+  await expect(
+    page.getByTestId("rf__node-verification").locator(".flow-stage-node"),
+  ).toHaveClass(/is-running/);
+  await expect(page.locator(".flow-agent-node.state-running")).toHaveCount(0);
+  await page.getByRole("button", { name: "현재 작업 선택" }).click();
+  await expect(
+    page.getByRole("region", { name: "선택한 실행 근거" }).getByRole("heading"),
+  ).toHaveText("검증");
+});
+
+test("cancelled stage creation never leaks into library duplication", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  state.agents = [
+    {
+      id: "00000000-0000-4000-8000-000000000030",
+      revision: 1,
+      name: "독립 검토 역할",
+      description: "",
+      capability: "read-only",
+      markdown: "# 근거\n직접 확인한다.",
+      archived: false,
+    },
+  ];
+  await prepare(page, state);
+  await page.evaluate(() => {
+    (globalThis as any).roopre.command = async () => ({});
+  });
+  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await page
+    .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+    .click();
+  for (const close of ["button", "escape", "backdrop"]) {
+    await page.getByTestId("rf__node-review").locator("strong").first().click();
+    await page
+      .getByRole("button", { name: "리뷰 에이전트 추가", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "새 역할 만들기 · Markdown" })
+      .click();
+    if (close === "button")
+      await page.getByRole("button", { name: "편집 닫기" }).click();
+    else if (close === "escape") await page.keyboard.press("Escape");
+    else
+      await page.locator(".modal-backdrop").click({ position: { x: 5, y: 5 } });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const library = page.locator(".agent-library-section");
+    if ((await library.getAttribute("open")) === null)
+      await library.locator(":scope > summary").click();
+    await page.getByRole("button", { name: "복제", exact: true }).click();
+    await page
+      .getByRole("button", { name: "에이전트 저장", exact: true })
+      .click();
+    await expect(
+      page.getByText("에이전트 버전을 저장했습니다.", { exact: true }),
+    ).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(
+              (globalThis as any).localStorage.getItem(
+                "roopre:flow-draft:team-local:commerce",
+              ),
+            ).flow.assignments.length,
+        ),
+      )
+      .toBe(0);
+  }
 });

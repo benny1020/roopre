@@ -1,3 +1,4 @@
+import type { RefinementInput, RefinementOutput } from "./agent-refinement";
 import type { PackageCandidate } from "./harness-package";
 import type { BootstrapStatus, OnboardingProgress } from "./onboarding";
 import type { Command, Snapshot } from "./contracts";
@@ -8,6 +9,7 @@ import type {
 } from "./runtime";
 export interface DesktopAPI {
   name: string;
+  refineAgent: (input: RefinementInput) => Promise<RefinementOutput>;
   harnessCandidate: (
     input:
       | { kind: "default" | "folder" }

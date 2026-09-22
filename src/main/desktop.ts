@@ -1,3 +1,4 @@
+import { refineAgent } from "./connections/refine-agent.ts";
 import { HarnessLibrary, harnessApplyRequestId } from "./harness/library.ts";
 import {
   importPackageFolder,
@@ -35,6 +36,7 @@ export async function installDesktop() {
   let store: Store | undefined;
   let runner: RunnerManager | undefined;
   let closing = false;
+  let refining = false;
   let migrationCleanup: Promise<void> | undefined;
   const resources = join(app.getAppPath(), "resources");
   const helper = app.isPackaged
@@ -144,6 +146,16 @@ export async function installDesktop() {
         )
           throw Error("시작 가이드에서 환경을 먼저 준비하세요.");
         switch (operation) {
+          case "refineAgent":
+            if (refining)
+              throw Error("진행 중인 AI 초안 요청이 끝날 때까지 기다리세요.");
+            refining = true;
+            try {
+              value = await refineAgent(vault, payload);
+            } finally {
+              refining = false;
+            }
+            break;
           case "harnessCandidate": {
             const input = z
               .discriminatedUnion("kind", [

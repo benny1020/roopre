@@ -1,3 +1,4 @@
+import ExecutionGraph from "./workspace/ExecutionGraph";
 import ReviewEvidence from "./workspace/ReviewEvidence";
 import { stageNames } from "../../shared/harness";
 import { useEffect, useRef, useState } from "react";
@@ -45,9 +46,11 @@ export default function RunPanel({
   const gate = snapshot.gates[feature.id];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState("checks");
+  const [tab, setTab] = useState("flow");
   const [inspector, setInspector] = useState(true);
-  const [output, setOutput] = useState(true);
+  const [defaultOutput, setOutput] = useState(true);
+  const [graphOutput, setGraphOutput] = useState(false);
+  const output = tab === "flow" ? graphOutput : defaultOutput;
   const [outputTab, setOutputTab] = useState("events");
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [availableHeight, setAvailableHeight] = useState(600);
@@ -205,9 +208,46 @@ export default function RunPanel({
             <Play size={13} />
             개발 시작
           </button>
+          {tab === "flow" &&
+            current &&
+            (!["cancelled", "ready_for_merge", "completed"].includes(
+              current.status,
+            ) ||
+              current.runtime?.terminationConfirmed === false) && (
+              <button
+                disabled={!connected || busy}
+                onClick={() =>
+                  void act(() =>
+                    send({ type: "cancel_run", runId: current.id }),
+                  )
+                }
+              >
+                <Square size={12} />
+                최신 실행 취소
+              </button>
+            )}
+          {tab === "flow" &&
+            current &&
+            ["failed", "interrupted"].includes(current.status) && (
+              <button
+                disabled={!connected || busy}
+                onClick={() =>
+                  void act(() => window.roopre!.runAction(current.id, "retry"))
+                }
+              >
+                <RefreshCw size={12} />
+                최신 변경 재시도
+              </button>
+            )}
           <button
             className="icon-button"
             aria-label="에이전트 패널"
+            disabled={tab === "flow"}
+            title={
+              tab === "flow"
+                ? "흐름 화면에서는 노드를 선택해 실행 근거를 확인하세요"
+                : "에이전트 패널 표시"
+            }
             aria-pressed={inspector}
             onClick={() => setInspector(!inspector)}
           >
@@ -238,7 +278,7 @@ export default function RunPanel({
       ) : (
         <>
           <div
-            className={`execution-split ${inspector ? "with-inspector" : ""}`}
+            className={`execution-split ${inspector && tab !== "flow" ? "with-inspector" : ""}`}
             style={{ "--inspector-width": `${width}px` } as React.CSSProperties}
           >
             <section className="execution-center" aria-label="실행 작업 공간">
@@ -260,6 +300,7 @@ export default function RunPanel({
                 value={tab}
                 onChange={setTab}
                 items={[
+                  { id: "flow", label: "흐름" },
                   { id: "changes", label: <>변경</> },
                   {
                     id: "checks",
@@ -274,6 +315,13 @@ export default function RunPanel({
                 ]}
               />
               <div className="execution-surface">
+                {tab === "flow" && (
+                  <ExecutionGraph
+                    key={`${run.id}:${runtime?.attempt ?? 1}`}
+                    run={run}
+                    connected={connected}
+                  />
+                )}
                 {tab === "changes" && (
                   <>
                     <div className="surface-toolbar">
@@ -493,7 +541,7 @@ export default function RunPanel({
                 )}
               </div>
             </section>
-            {inspector && (
+            {inspector && tab !== "flow" && (
               <>
                 <ResizeHandle
                   value={width}
@@ -684,7 +732,11 @@ export default function RunPanel({
             <header>
               <button
                 className="soft"
-                onClick={() => setOutput(!output)}
+                onClick={() =>
+                  tab === "flow"
+                    ? setGraphOutput(!graphOutput)
+                    : setOutput(!defaultOutput)
+                }
                 aria-expanded={output}
               >
                 <Terminal size={14} />

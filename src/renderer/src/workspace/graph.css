@@ -1,0 +1,304 @@
+.workflow-graph {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  min-width: 0;
+}
+.graph-toolbar,
+.graph-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.graph-toolbar {
+  border-bottom: 1px solid var(--line);
+}
+.graph-toolbar button {
+  width: auto;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.graph-canvas {
+  height: 300px;
+  overflow-x: auto;
+  background: var(--bg);
+}
+.graph-legend {
+  justify-content: flex-start;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.graph-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.graph-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--text);
+}
+.graph-legend .legend-running {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+.flow-stage-node {
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text);
+}
+.flow-stage-node > strong {
+  font-size: 14px;
+}
+.flow-stage-node > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.flow-agent-node {
+  box-sizing: border-box;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  height: 58px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: 5px;
+  color: var(--text);
+}
+.flow-agent-node div {
+  min-width: 0;
+  flex: 1;
+}
+.flow-agent-node strong,
+.flow-agent-node span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-agent-node strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.flow-agent-node span {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.flow-agent-node.state-running {
+  border-left: 3px solid var(--blue);
+}
+.flow-agent-node.state-running svg {
+  color: var(--blue);
+}
+.flow-agent-node.state-failed {
+  border-left: 3px solid var(--red);
+}
+.flow-agent-node.state-failed svg {
+  color: var(--red);
+}
+.flow-agent-node.is-selected,
+.flow-stage-node.is-selected {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.workflow-graph .react-flow__node:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 4px;
+}
+.workflow-graph .react-flow__controls-button {
+  background: var(--surface);
+  color: var(--text);
+  fill: currentColor;
+  border-color: var(--line);
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 5px;
+}
+.workflow-graph .react-flow__edge-path {
+  stroke: var(--muted);
+}
+.workflow-graph .react-flow__edge-text {
+  fill: var(--text);
+  font-size: 11px;
+}
+.workflow-graph .react-flow__edge-textbg {
+  fill: var(--surface);
+}
+.workflow-graph .react-flow__attribution {
+  background: var(--surface);
+}
+.workflow-graph .react-flow__attribution a {
+  color: var(--muted);
+}
+.graph-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 16px;
+  margin: 16px 0;
+  align-items: start;
+}
+.graph-inspector {
+  min-width: 0;
+  border-left: 1px solid var(--line);
+  padding-left: 16px;
+}
+.graph-inspector h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+.graph-inspector .field {
+  margin-bottom: 12px;
+}
+.graph-inspector textarea {
+  min-height: 120px;
+}
+.graph-assignment {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.graph-assignment button {
+  width: auto;
+  text-align: left;
+}
+.graph-assignment small {
+  color: var(--muted);
+}
+.graph-draft-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.graph-draft-bar p {
+  margin: 0;
+  font-size: 12px;
+}
+.graph-run-detail {
+  padding: 16px 4px;
+}
+.graph-run-detail pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow: auto;
+}
+.graph-picker {
+  padding: 20px;
+  max-height: 80vh;
+  overflow: auto;
+}
+.graph-picker h2 {
+  font-size: 17px;
+  margin: 0 0 16px;
+}
+.graph-picker-list {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  max-height: 260px;
+  overflow: auto;
+}
+.graph-picker-list button {
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.graph-picker-list small {
+  color: var(--muted);
+}
+.graph-picker textarea {
+  min-height: 130px;
+}
+@media (max-width: 1450px) {
+  .graph-editor {
+    grid-template-columns: 1fr;
+  }
+  .graph-inspector {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 16px 0 0;
+  }
+  .graph-canvas {
+    height: 300px;
+  }
+}
+
+.graph-plane {
+  height: 100%;
+  min-width: 1050px;
+}
+.graph-inspector fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.flow-agent-node strong {
+  font-size: 14px;
+}
+.flow-agent-node span,
+.flow-stage-node > span {
+  font-size: 12px;
+}
+.graph-inspector fieldset:disabled {
+  opacity: 0.65;
+}
+.agent-library-section > summary {
+  padding: 12px 0;
+  font-weight: 600;
+}
+.agent-refinement {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+.agent-refinement > summary {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+@media (max-width: 1450px) {
+  .graph-inspector fieldset {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .graph-inspector .field {
+    margin: 0;
+  }
+  .graph-inspector .button-row,
+  .graph-inspector .muted {
+    grid-column: 1/-1;
+  }
+}
+.workflow-graph {
+  flex-shrink: 0;
+}
+.flow-stage-node.is-running {
+  border-top: 2px solid var(--blue);
+}
+.flow-stage-node > strong > small {
+  font-size: 11px;
+  color: var(--blue);
+  margin-left: 4px;
+  font-weight: 500;
+}
