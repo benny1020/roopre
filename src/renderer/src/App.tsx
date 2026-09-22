@@ -219,26 +219,6 @@ export default function App() {
     return () => media.removeEventListener("change", apply);
   }, [theme]);
   useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        if (!modal) setSearch((s) => !s);
-      }
-      if (e.key === "Escape") {
-        setModal(null);
-        setSearch(false);
-      }
-      if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) {
-        e.preventDefault();
-        if (modal || search) return;
-        setSelected(null);
-        setScope(e.key === "1" ? "inbox" : e.key === "2" ? "all" : "policies");
-      }
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [modal, search]);
-  useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(timer);
@@ -312,6 +292,25 @@ export default function App() {
     setSelected(null);
     setQuery("");
   };
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        if (!modal) setSearch((s) => !s);
+      }
+      if (e.key === "Escape") {
+        setModal(null);
+        setSearch(false);
+      }
+      if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) {
+        e.preventDefault();
+        if (modal || search) return;
+        navigate(e.key === "1" ? "inbox" : e.key === "2" ? "all" : "policies");
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [modal, search, navigate]);
   const openSetup = (destination: SetupDestination) => {
     if (destination === "connection" || destination === "profile") {
       setRuntimeSection(destination);

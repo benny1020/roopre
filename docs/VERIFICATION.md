@@ -238,3 +238,5 @@ Visual inspection included 1440×940 and 1024×700, both themes, diff, design re
 - 시각 확인: `artifacts/setup-dark.png`, `artifacts/setup-light-compact.png`, `artifacts/dogfood-native-workflow.png`. 실행 준비 목록의 버튼 배치, 문맥 유지, 1024px 세로 스크롤과 그래프 편집 화면을 확인했다. 로그는 `artifacts/setup-*.log`.
 
 실제 사용자 Mac 창의 수동 사용과 유료 모델 자기 개발은 잠금/등록 연결 없음으로 미검증이다. 설정 안내는 마지막 저장 상태를 보여주며 실시간 제공자 정상 여부나 본인 승인을 대체하지 않는다. App Store 제출·서명/공증·다른 Mac 설치를 완료했다고 주장하지 않는다.
+
+독립 PR 리뷰에서 ⌘3/Ctrl+3 단축키가 프로젝트 문맥 전달을 우회하는 P2를 재현했다. 버튼과 같은 내비게이션 함수를 사용하고 최신 기능 선택을 참조하도록 수정했다. 양쪽 단축키의 두 번째 프로젝트 선택과 원래 기능 복귀 회귀를 추가해 전체 22개 브라우저 검사를 다시 수행했다. 최종 head의 전담 재리뷰와 CI는 별도로 확인한다.

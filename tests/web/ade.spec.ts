@@ -826,6 +826,23 @@ test("execution setup keeps the feature project across settings and returns to t
   await page
     .getByRole("button", { name: "작업으로 돌아가기", exact: true })
     .click();
+  // Keyboard navigation must preserve the latest feature, including after returning.
+  await page.keyboard.press("Control+3");
+  await expect(
+    page.getByRole("combobox", { name: "설정할 프로젝트", exact: true }),
+  ).toHaveValue(project.id);
+  await page
+    .getByRole("button", { name: "작업으로 돌아가기", exact: true })
+    .click();
+  await expect(setup).toBeVisible();
+  await page.keyboard.press("Meta+3");
+  await expect(
+    page.getByRole("combobox", { name: "설정할 프로젝트", exact: true }),
+  ).toHaveValue(project.id);
+  await page
+    .getByRole("button", { name: "작업으로 돌아가기", exact: true })
+    .click();
+  await expect(setup).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 700 });
   await page.getByLabel("화면 테마").selectOption("light");
   await axe(page);
