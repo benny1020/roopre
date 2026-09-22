@@ -55,10 +55,23 @@ test(
         .click();
       await page
         .getByLabel("프로젝트 이름", { exact: true })
-        .fill("roopre 사용성 개선");
+        .fill("다른 프로젝트");
       await page
         .getByLabel("설명", { exact: true })
         .fill("실제 Electron/IPC/DB로 루프리의 개발 동선을 확인한다.");
+      await page
+        .getByRole("dialog", { name: "새 프로젝트" })
+        .getByRole("button", { name: "프로젝트 만들기", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "프로젝트 추가", exact: true })
+        .click();
+      await page
+        .getByLabel("프로젝트 이름", { exact: true })
+        .fill("roopre 사용성 개선");
+      await page
+        .getByLabel("설명", { exact: true })
+        .fill("두 번째 프로젝트의 설정 문맥을 확인한다.");
       await page
         .getByRole("dialog", { name: "새 프로젝트" })
         .getByRole("button", { name: "프로젝트 만들기", exact: true })
@@ -79,6 +92,19 @@ test(
       await expect(
         page.getByRole("button", { name: "개발 시작", exact: true }),
       ).toBeDisabled();
+      const taskState = await page.evaluate(() =>
+        (globalThis as any).roopre.snapshot(),
+      );
+      const taskProjectId = taskState.features[0].projectId;
+      await page
+        .getByRole("button", { name: "실행 프로필 설정", exact: true })
+        .click();
+      await expect(
+        page.getByRole("combobox", { name: "프로젝트", exact: true }),
+      ).toHaveValue(taskProjectId);
+      await page
+        .getByRole("button", { name: "작업으로 돌아가기", exact: true })
+        .click();
       await page
         .getByRole("button", { name: "설계 작성·검토로 이동", exact: true })
         .click();
@@ -129,10 +155,17 @@ test(
       const before = await page.evaluate(() =>
         (globalThis as any).roopre.snapshot(),
       );
-      assert.equal(before.projects.length, 1);
+      assert.equal(before.projects.length, 2);
+      const savedProject = before.projects.find(
+        (p: any) => p.id === taskProjectId,
+      );
+      assert.equal(
+        before.projects.find((p: any) => p.id !== taskProjectId).workflow,
+        undefined,
+      );
       assert.equal(before.features.length, 1);
       assert.equal(
-        before.projects[0].workflow.assignments.filter(
+        savedProject.workflow.assignments.filter(
           (a: any) => a.stage === "verification",
         ).length,
         2,
@@ -160,7 +193,8 @@ test(
             realElectronIPC: true,
             realPostgreSQL: true,
             persistedAfterRestart: true,
-            agentCount: after.projects[0].workflow.assignments.length,
+            agentCount: after.projects.find((p: any) => p.id === taskProjectId)
+              .workflow.assignments.length,
             implementationExecuted: false,
             modelCalled: false,
             approvalFabricated: false,

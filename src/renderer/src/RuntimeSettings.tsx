@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { Snapshot } from "../../shared/contracts";
 import {
   standardSteps,
@@ -20,12 +20,30 @@ const defaults = [
 ];
 export default function RuntimeSettings({
   snapshot,
+  initialProjectId,
+  onProjectChange,
+  focusSection,
   onSaved,
 }: {
   snapshot: Snapshot;
+  initialProjectId?: string;
+  onProjectChange?: (id: string) => void;
+  focusSection?: "connection" | "profile";
   onSaved: () => Promise<unknown>;
 }) {
   const desktop = window.roopre;
+  const connectionSection = useRef<HTMLElement>(null);
+  const profileSection = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const section =
+      focusSection === "connection"
+        ? connectionSection.current
+        : focusSection === "profile"
+          ? profileSection.current
+          : undefined;
+    section?.scrollIntoView({ block: "start" });
+    section?.focus({ preventScroll: true });
+  }, [focusSection]);
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [name, setName] = useState("Claude Code");
   const [endpoint, setEndpoint] = useState("https://api.anthropic.com");
@@ -33,7 +51,11 @@ export default function RuntimeSettings({
   const [model, setModel] = useState("claude-sonnet-4-6");
   const [key, setKey] = useState("");
   const [editing, setEditing] = useState<string>();
-  const [projectId, setProjectId] = useState(snapshot.projects[0]?.id ?? "");
+  const [projectId, setProjectId] = useState(
+    initialProjectId && snapshot.projects.some((p) => p.id === initialProjectId)
+      ? initialProjectId
+      : (snapshot.projects[0]?.id ?? ""),
+  );
   const project = snapshot.projects.find((p) => p.id === projectId);
   const [path, setPath] = useState("");
   const [branch, setBranch] = useState("main");
@@ -79,7 +101,6 @@ export default function RuntimeSettings({
     <div className="content-page runtime-settings">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">팀의 개발 방식</div>
           <h1>표준 · 연결 · 실행 환경</h1>
           <p>같은 절차로 시작하고, 근거를 확인한 뒤 다음 단계로 진행합니다.</p>
         </div>
@@ -90,8 +111,10 @@ export default function RuntimeSettings({
         </p>
       )}
       {message && <p role="status">{message}</p>}
-      <section className="runtime-card">
-        <h2>팀 표준 v{snapshot.policies.at(-1)!.version}</h2>
+      <details className="runtime-card runtime-standard">
+        <summary>
+          적용 중인 팀 표준 v{snapshot.policies.at(-1)!.version}
+        </summary>
         <div className="standard-steps">
           {standardSteps.map((s) => (
             <div key={s.id}>
@@ -105,7 +128,7 @@ export default function RuntimeSettings({
           필수 검사: {snapshot.policies.at(-1)!.requiredChecks.join(" · ")}.
           프로젝트 설정으로 삭제할 수 없습니다.
         </p>
-      </section>
+      </details>
       {!desktop ? (
         <section className="runtime-card">
           <h2>맥 앱에서 연결하세요</h2>
@@ -116,7 +139,12 @@ export default function RuntimeSettings({
         </section>
       ) : (
         <>
-          <section className="runtime-card">
+          <section
+            className="runtime-card"
+            ref={connectionSection}
+            tabIndex={-1}
+            aria-label="AI 연결 설정"
+          >
             <h2>AI 연결</h2>
             <p>
               Claude Code · Anthropic Messages 규격. key는 이 맥의 암호화
@@ -247,7 +275,12 @@ export default function RuntimeSettings({
               </p>
             </form>
           </section>
-          <section className="runtime-card">
+          <section
+            className="runtime-card"
+            ref={profileSection}
+            tabIndex={-1}
+            aria-label="프로젝트 실행 프로필 설정"
+          >
             <h2>프로젝트 실행 프로필</h2>
             {!project && (
               <p className="muted">
@@ -284,7 +317,10 @@ export default function RuntimeSettings({
                   프로젝트
                   <select
                     value={projectId}
-                    onChange={(e) => setProjectId(e.target.value)}
+                    onChange={(e) => {
+                      setProjectId(e.target.value);
+                      onProjectChange?.(e.target.value);
+                    }}
                   >
                     {snapshot.projects.map((p) => (
                       <option key={p.id} value={p.id}>

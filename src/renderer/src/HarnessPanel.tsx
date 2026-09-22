@@ -28,14 +28,22 @@ const instructions = {
 };
 export default function HarnessPanel({
   snapshot,
+  initialProjectId,
+  onProjectChange,
   send,
   onSaved,
 }: {
   snapshot: Snapshot;
+  initialProjectId?: string;
+  onProjectChange?: (id: string) => void;
   send: (c: Command) => Promise<unknown>;
   onSaved: () => Promise<unknown>;
 }) {
-  const [projectId, setProjectId] = useState(snapshot.projects[0]?.id ?? "");
+  const [projectId, setProjectId] = useState(
+    initialProjectId && snapshot.projects.some((p) => p.id === initialProjectId)
+      ? initialProjectId
+      : (snapshot.projects[0]?.id ?? ""),
+  );
   const project = snapshot.projects.find((p) => p.id === projectId);
   const [pendingStage, setPendingStage] = useState<Stage>();
   const [editing, setEditing] = useState<AgentDefinition>();
@@ -152,6 +160,7 @@ export default function HarnessPanel({
   const selectProject = (id: string) => {
     const p = snapshot.projects.find((p) => p.id === id);
     setProjectId(id);
+    onProjectChange?.(id);
     setFlow(
       readDraft(id)?.flow ??
         p?.workflow ?? {

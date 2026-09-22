@@ -1,3 +1,7 @@
+import ExecutionSetup, {
+  type SetupDestination,
+} from "./workspace/ExecutionSetup";
+import { workflowIssues } from "../../shared/harness";
 import ExecutionGraph from "./workspace/ExecutionGraph";
 import ReviewEvidence from "./workspace/ReviewEvidence";
 import { stageNames } from "../../shared/harness";
@@ -28,12 +32,14 @@ export default function RunPanel({
   send,
   connected = true,
   onDesign,
+  onSetup,
 }: {
   snapshot: Snapshot;
   feature: Feature;
   send: (c: Command) => Promise<unknown>;
   connected?: boolean;
   onDesign: () => void;
+  onSetup: (destination: SetupDestination) => void;
 }) {
   const runs = snapshot.runs
     .filter((r) => r.featureId === feature.id)
@@ -46,6 +52,13 @@ export default function RunPanel({
   const run = runs.find((r) => r.id === selected) || current;
   const runtime = run?.runtime;
   const gate = snapshot.gates[feature.id];
+  const project = snapshot.projects.find((p) => p.id === feature.projectId)!;
+  const planningConfigured =
+    !!project.executionProfile &&
+    !!project.workflow?.assignments.some(
+      (a) => a.stage === "requirements" || a.stage === "design",
+    ) &&
+    !workflowIssues(snapshot, project).length;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("flow");
@@ -172,15 +185,15 @@ export default function RunPanel({
           </span>
         )}
         <div className="button-row">
+          {run && <button onClick={() => onSetup("profile")}>실행 설정</button>}
           <button
             className="secondary"
-            disabled={
-              !connected ||
-              busy ||
-              working ||
-              !snapshot.projects.find((p) => p.id === feature.projectId)
-                ?.workflow
+            title={
+              !planningConfigured
+                ? "실행 프로필과 요구사항 또는 설계 에이전트를 먼저 설정하세요."
+                : "현재 저장된 초안을 기준으로 계획합니다."
             }
+            disabled={!connected || busy || working || !planningConfigured}
             onClick={() =>
               void act(() =>
                 send({
@@ -277,13 +290,12 @@ export default function RunPanel({
         </details>
       )}
       {!run ? (
-        <Empty title="설계에서 시작해, 검증된 변경까지">
-          요구사항과 설계를 작성하고 본인 승인을 받으세요. 실행을 시작하면 변경
-          파일, 검사 결과와 에이전트 활동이 여기에 표시됩니다.
-          <button className="primary" onClick={onDesign}>
-            설계 작성·검토로 이동
-          </button>
-        </Empty>
+        <ExecutionSetup
+          snapshot={snapshot}
+          feature={feature}
+          onSetup={onSetup}
+          onDesign={onDesign}
+        />
       ) : (
         <>
           <div
