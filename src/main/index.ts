@@ -38,7 +38,7 @@ function createWindow() {
       sandbox: true,
     },
   });
-  const freeze = rememberWindow(window, statePath, saved);
+  const freeze = rememberWindow(window, statePath);
   app.on("before-quit", freeze);
   window.once("closed", () => app.removeListener("before-quit", freeze));
   if (saved.maximized)

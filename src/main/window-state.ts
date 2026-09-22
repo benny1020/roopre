@@ -77,13 +77,11 @@ export function readWindowState(path: string, workAreas: Rect[]) {
   return restoreWindowState(raw, workAreas);
 }
 
-export function rememberWindow(
-  window: BrowserWindow,
-  path: string,
-  initial: WindowState,
-) {
+export function rememberWindow(window: BrowserWindow, path: string) {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let last = initial;
+  // Calculated startup defaults are not a persisted preference. Save the first
+  // observed normal state even when the user has not resized the window.
+  let last: WindowState | undefined;
   let closing = false;
   const save = () => {
     clearTimeout(timer);

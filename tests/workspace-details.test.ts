@@ -1,5 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   rememberLocation,
   historyTarget,
@@ -8,7 +12,10 @@ import {
 } from "../src/renderer/src/workspace/navigation.ts";
 import { searchCommands } from "../src/renderer/src/workspace/search.ts";
 import { parseDiff } from "../src/renderer/src/workspace/diff.ts";
-import { restoreWindowState } from "../src/main/window-state.ts";
+import {
+  rememberWindow,
+  restoreWindowState,
+} from "../src/main/window-state.ts";
 const location = (scope: string, query = ""): WorkspaceLocation => ({
   scope,
   selected: null,
@@ -130,4 +137,39 @@ test("window restore handles disconnected displays, negative coordinates and inv
     [primary],
   );
   assert.deepEqual(clipped.bounds, primary);
+});
+
+test("first normal close persists unchanged startup geometry and ignores teardown changes", () => {
+  const root = mkdtempSync(join(tmpdir(), "roopre-window-state-"));
+  const path = join(root, "window-state.json");
+  const bounds = { x: 0, y: 25, width: 1024, height: 700 };
+  let current = bounds;
+  const window = Object.assign(new EventEmitter(), {
+    isDestroyed: () => false,
+    isFullScreen: () => false,
+    isMinimized: () => false,
+    isMaximized: () => false,
+    getNormalBounds: () => current,
+  });
+  try {
+    const freeze = rememberWindow(
+      window as unknown as Parameters<typeof rememberWindow>[0],
+      path,
+    );
+    // No resize/move event: this is also a valid first session on a small screen.
+    window.emit("close");
+    const saved = readFileSync(path, "utf8");
+    assert.deepEqual(JSON.parse(saved), {
+      version: 1,
+      bounds,
+      maximized: false,
+    });
+    current = { x: -500, y: -500, width: 1800, height: 1100 };
+    window.emit("resize");
+    freeze();
+    window.emit("closed");
+    assert.equal(readFileSync(path, "utf8"), saved);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

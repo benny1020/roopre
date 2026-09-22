@@ -105,7 +105,7 @@ Orca의 추적된 `src` 파일 **22,677개**를 목록화했다. 파일명 기�
 
 ## 검증과 출처 경계
 
-루프리 검증: `pnpm check`(단위/DB 97개), `pnpm test:web`(31개), 실제 Electron 시작/온보딩/self-use 3개. 변경된 상태 전이, 검색·IME, diff 갱신·경로, 로그 갱신·보존 범위, 창 종료·재시작을 포함한다. 브라우저에서 axe 검사 및 1280×800 다크/1024×700 라이트 화면을 확인했다. 최종 커밋은 별도 PR 리뷰와 최신 CI로 확인한다.
+루프리 검증: `pnpm check`(단위/DB 98개), `pnpm test:web`(31개), 실제 Electron 시작/온보딩/self-use 3개. 변경된 상태 전이, 검색·IME, diff 갱신·경로, 로그 갱신·보존 범위, 창 종료·재시작을 포함한다. 브라우저에서 axe 검사 및 1280×800 다크/1024×700 라이트 화면을 확인했다. 최종 커밋은 별도 PR 리뷰와 최신 CI로 확인한다.
 
 근거 파일: `artifacts/orca-check.log`, `artifacts/orca-web.log`, `artifacts/orca-native.log`, `artifacts/orca-diff-dark.png`, `artifacts/orca-diff-compact.png`, `artifacts/orca-log-paused.png`. 테스트 fixture는 사용자 앱 기본 데이터에 포함하지 않는다. 실제 모델 호출, 사용자 본인 인증, 장시간 운영, 배포 검증은 이 소스 비교의 완료 근거에 포함하지 않는다.
 
