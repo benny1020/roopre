@@ -20,7 +20,7 @@ import {
   readdir,
   rm,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, relative, isAbsolute } from "node:path";
 import type { Store } from "../database/store.ts";
 import type { ConnectionVault } from "../main/connections/vault.ts";
 import { activeStatuses, type Evidence } from "../shared/runtime.ts";
@@ -32,6 +32,11 @@ import { readWorkspaceFile } from "./files.ts";
 const occupiesSlot = (r: Run) =>
   r.runtime?.terminationConfirmed === false ||
   (activeStatuses.includes(r.status) && r.status !== "queued");
+
+async function gitPath(cwd: string, path: string) {
+  const value = await git(cwd, "rev-parse", "--git-path", path);
+  return isAbsolute(value) ? value : resolve(cwd, value);
+}
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
   private stopping = false;
@@ -396,25 +401,48 @@ export class RunnerManager {
       );
       await mkdir(area, { recursive: true, mode: 0o700 });
       await this.docker(["image", "inspect", profile.image], abort.signal);
+      const branch = `roopre/${f.id}/${id}/attempt-1`;
+      // A run owns one linked worktree and one branch. The source checkout is never
+      // modified, so features can execute concurrently from the same fixed base.
       await git(
         profile.repositoryPath,
-        "clone",
-        "--no-hardlinks",
-        "--no-local",
-        profile.repositoryPath,
-        checkout,
+        "config",
+        "extensions.worktreeConfig",
+        "true",
       );
-      await git(checkout, "checkout", "-b", `codex/${id}`, profile.baseCommit);
-      await git(checkout, "remote", "remove", "origin");
+      await git(
+        profile.repositoryPath,
+        "worktree",
+        "add",
+        "--force",
+        "-b",
+        branch,
+        checkout,
+        profile.baseCommit,
+      );
+      // The run gets its own identity and cannot push through the source remote.
+      await git(checkout, "config", "--worktree", "user.name", "Roopre Agent");
+      await git(
+        checkout,
+        "config",
+        "--worktree",
+        "user.email",
+        "agent@roopre.local",
+      );
+      await git(
+        checkout,
+        "config",
+        "--worktree",
+        "remote.origin.pushurl",
+        "no_push",
+      );
       await writeFile(
-        join(checkout, ".git/info/exclude"),
+        await gitPath(checkout, "info/exclude"),
         "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n",
       );
-      await git(checkout, "config", "user.name", "Roopre Agent");
-      await git(checkout, "config", "user.email", "agent@roopre.local");
       await this.update(id, (r) => {
         r.runtime!.worktree = checkout;
-        r.runtime!.branch = `codex/${id}`;
+        r.runtime!.branch = branch;
       });
       const rootConfig =
         /^(package\.json$|pnpm-lock\.yaml$|package-lock\.json$|\.gitignore$|\.npmrc$|\.pnpmfile\.[cm]?js$|\.yarnrc|\.eslintrc|\.babelrc|tsconfig|eslint|vitest|playwright|(?:babel|jest|vite|webpack|rollup|next|svelte|postcss|tailwind)\.config\.)/;
@@ -562,8 +590,38 @@ export class RunnerManager {
         connection: ReturnType<ConnectionVault["get"]>;
         token: string;
         broker?: Awaited<ReturnType<typeof startBroker>>;
+        containerGitFile?: string;
+        commonGitDir?: string;
       };
-      const mainTarget: Target = { names: n, checkout, connection, token: "" };
+      const commonGitDir = await git(
+        profile.repositoryPath,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+      );
+      const worktreeGitDir = await git(
+        checkout,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-dir",
+      );
+      const relativeGitDir = relative(commonGitDir, worktreeGitDir);
+      if (!relativeGitDir || relativeGitDir.startsWith(".."))
+        throw Error("격리 worktree Git 경로를 확인하지 못했습니다.");
+      const containerGitFile = join(area, "container.git");
+      await writeFile(
+        containerGitFile,
+        `gitdir: /roopre-git/${relativeGitDir}\n`,
+        { mode: 0o600 },
+      );
+      const mainTarget: Target = {
+        names: n,
+        checkout,
+        connection,
+        token: "",
+        containerGitFile,
+        commonGitDir,
+      };
       const secrets = new Set<string>([connection.key]);
       const redact = (text: string) => {
         for (const secret of secrets)
@@ -659,7 +717,15 @@ export class RunnerManager {
             "--mount",
             `type=bind,src=${target.checkout},dst=/workspace${readonly ? ",readonly" : ""}`,
             "--mount",
-            `type=bind,src=${join(target.checkout, ".git")},dst=/workspace/.git,readonly`,
+            target.containerGitFile
+              ? `type=bind,src=${target.containerGitFile},dst=/workspace/.git,readonly`
+              : `type=bind,src=${join(target.checkout, ".git")},dst=/workspace/.git,readonly`,
+            ...(target.commonGitDir
+              ? [
+                  "--mount",
+                  `type=bind,src=${target.commonGitDir},dst=/roopre-git,readonly`,
+                ]
+              : []),
             "--mount",
             `type=volume,src=${n.dependencies},dst=/workspace/node_modules,readonly,volume-nocopy`,
             "--tmpfs",
@@ -925,8 +991,8 @@ export class RunnerManager {
             workers[index] = target;
             await cloneStage(checkout, target.checkout, snapshot.commit);
             await copyFile(
-              join(checkout, ".git/info/exclude"),
-              join(target.checkout, ".git/info/exclude"),
+              await gitPath(checkout, "info/exclude"),
+              await gitPath(target.checkout, "info/exclude"),
             );
             await this.docker(
               [

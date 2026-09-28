@@ -1,5 +1,6 @@
 import type { ResolvedHarness, AgentExecution } from "./harness.ts";
 import { z } from "zod";
+import { gitHostBindingSchema } from "./git-host.ts";
 export const checkSchema = z.object({
   name: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
   argv: z.array(z.string().min(1).max(500)).min(1).max(30),
@@ -17,6 +18,7 @@ export const profileSchema = z.object({
   budgetUsd: z.number().positive().max(1000),
   timeoutMinutes: z.number().int().min(1).max(240),
   repairLimit: z.number().int().min(0).max(3),
+  gitHost: gitHostBindingSchema.optional(),
 });
 export type ExecutionProfile = z.infer<typeof profileSchema>;
 export const connectionInputSchema = z.object({
@@ -90,6 +92,15 @@ export type RuntimeDetails = {
   events: { at: string; message: string }[];
   evidence: Evidence[];
   review?: string;
+  delivery?: {
+    provider: "github" | "gitlab" | "generic";
+    branch: string;
+    headSha: string;
+    baseSha: string;
+    changeId?: string;
+    url?: string;
+    deliveredAt: string;
+  };
   cancelRequested?: boolean;
 };
 export const standardSteps = [

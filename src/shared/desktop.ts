@@ -8,6 +8,11 @@ import type {
   ExecutionProfile,
 } from "./runtime";
 import type {
+  GitHostConnectionInfo,
+  GitHostConnectionInput,
+  GitRemote,
+} from "./git-host";
+import type {
   ConversationScope,
   ConversationThread,
   ConversationTurn,
@@ -44,10 +49,17 @@ export interface DesktopAPI {
   saveConnection: (input: ConnectionInput) => Promise<ConnectionInfo[]>;
   removeConnection: (id: string) => Promise<ConnectionInfo[]>;
   testConnection: (id: string) => Promise<ConnectionInfo[]>;
+  gitHostConnections: () => Promise<GitHostConnectionInfo[]>;
+  saveGitHostConnection: (
+    input: GitHostConnectionInput,
+  ) => Promise<GitHostConnectionInfo[]>;
+  removeGitHostConnection: (id: string) => Promise<GitHostConnectionInfo[]>;
+  testGitHostConnection: (id: string) => Promise<GitHostConnectionInfo[]>;
   chooseRepository: () => Promise<{
     path: string;
     branch: string;
     commit: string;
+    remote?: GitRemote;
   } | null>;
   configureProject: (
     projectId: string,
@@ -61,6 +73,11 @@ export interface DesktopAPI {
   }>;
   revealArtifact: (runId: string, index: number) => Promise<void>;
   runAction: (id: string, action: "retry" | "diff") => Promise<string>;
+  deliverRun: (input: {
+    runId: string;
+    title: string;
+    body: string;
+  }) => Promise<{ url?: string; branch: string }>;
   conversations: {
     listThreads: (scope: ConversationScope) => Promise<ConversationThread[]>;
     getThread: (threadId: string) => Promise<ConversationThread>;

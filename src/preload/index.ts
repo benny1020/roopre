@@ -25,12 +25,17 @@ const api: DesktopAPI = {
   saveConnection: (input) => request("saveConnection", input),
   removeConnection: (id) => request("removeConnection", id),
   testConnection: (id) => request("testConnection", id),
+  gitHostConnections: () => request("gitHostConnections"),
+  saveGitHostConnection: (input) => request("saveGitHostConnection", input),
+  removeGitHostConnection: (id) => request("removeGitHostConnection", id),
+  testGitHostConnection: (id) => request("testGitHostConnection", id),
   chooseRepository: () => request("chooseRepository"),
   configureProject: (projectId, profile) =>
     request("configureProject", { projectId, profile }),
   diagnostics: () => request("diagnostics"),
   revealArtifact: (runId, index) => request("revealArtifact", { runId, index }),
   runAction: (id, action) => request("runAction", { id, action }),
+  deliverRun: (input) => request("deliverRun", input),
   conversations: {
     listThreads: (scope) => request("conversations:listThreads", scope),
     getThread: (threadId) => request("conversations:getThread", threadId),

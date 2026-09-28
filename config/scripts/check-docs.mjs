@@ -33,6 +33,8 @@ const approved = {
     "f848a6f15fb6c987f16d5c581858545cd770c3459061d3f6a2e300911878254b",
   "TEAM-STANDARD-ADDENDUM.md":
     "7c4f9cd55b338063b82f0a65807d7dadc467873468ff282cf1da4d4b15b3ec62",
+  "GIT-HOST-INTEGRATION.md":
+    "72d4dd5f0ba4682a1d2a79cd008712c3e920b6e8a97d7f25a9f96c4673d3cc87",
 };
 for (const [file, expected] of Object.entries(approved)) {
   const hash = createHash("sha256")

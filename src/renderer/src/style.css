@@ -1677,6 +1677,34 @@ kbd {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.runtime-section-heading {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.runtime-section-heading h2 {
+  margin-bottom: 4px;
+}
+.runtime-section-heading p {
+  margin: 0;
+  max-width: 68ch;
+}
+.host-state {
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+.git-remote-line {
+  margin: 14px 0;
+  color: var(--muted);
+}
+.git-remote-line code {
+  color: var(--text);
+}
 .runtime-card details {
   margin: 14px 0;
 }
@@ -1686,6 +1714,15 @@ kbd {
 @media (max-width: 1100px) {
   .standard-steps {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .runtime-section-heading {
+    display: block;
+  }
+  .host-state {
+    display: inline-block;
+    margin-top: 10px;
   }
 }
 
