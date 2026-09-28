@@ -292,3 +292,27 @@ Orca 앱 자체, 실제 유료 모델·사람 승인, 장시간 운영·배포�
 - `pnpm exec tsx --test tests/portfolio.integration.ts`: **1개 통과**. 빌드된 Electron main/preload와 일회용 PostgreSQL schema/profile에서 작업실의 빈 역할 표시, 관제 선택·상세·복귀 및 앱 재시작 복원을 확인했다. 로그: `artifacts/workroom-native.log`.
 
 브라우저 검사는 테스트용 실행 기록으로 renderer의 상태 판정과 표시를 확인하며 production runner나 유료 모델을 호출하지 않는다. Electron 검사는 실제 main/preload와 임시 DB·프로필을 사용하지만 그 fixture에는 실제 에이전트 실행 기록이 없으므로 빈 역할 표시와 재시작만 확인한다. 대화와 개인 메모리는 설계 문서만 있고 개인 승인 전까지 구현하지 않았다. 실제 사용자 데이터, 실시간 runner, 본인 인증, 모델 호출, 장시간 운영은 이 결과로 검증됐다고 주장하지 않는다.
+
+## 개별 에이전트 상담·지속 기억 — 2026-09-28
+
+[사용자 승인](design/AGENT-CONVERSATION-MEMORY-APPROVAL.md)에 따라 상담·기억을 구현했다. [사용 안내](AGENT-CONVERSATIONS.md), [조사와 적용 결정](research/AGENT-MEMORY.md), [구현 기록](design/AGENT-CONVERSATION-MEMORY-IMPLEMENTATION.md)을 함께 참고한다. 앞선 작업실 절의 “대화와 개인 메모리는 설계만 존재”는 당시 상태이며 이번 변경으로 대체된다.
+
+- 개별 상담은 프로젝트·에이전트·기능별 원문과 요약을 PostgreSQL에 보존한다. 최근 기록·어휘 검색·기억·선택 실행의 실제 참조 목록을 표시한다. 자동 요약은 확정 기억이나 승인 증명이 아니다.
+- 사용자가 확인한 기억만 다음 실행 입력에 고정한다. 다른 프로젝트·에이전트·기능의 기억을 섞지 않고 변경 시 해당 프로젝트의 승인에 반영한다. 대기·실행·종료 미확인 상태에서는 변경을 차단한다.
+- 중복 요청, 연결 변경, 취소·늦은 응답, 저장 실패, 앱 강제 종료, 삭제·요약 초기화 중 준비된 요청을 검증한다. 준비한 thread/revision이 달라지면 모델 호출 전에 거절한다. 자동 재전송은 없다.
+- DB 스키마 초기화는 버전 기록과 트랜잭션 잠금을 사용하며 기존 데이터의 동시 초기화·일반 쓰기를 확인했다. DB 이전은 원문·요약·삭제 기록과 기억을 보존하고 기존 대상 내용을 덮어쓰지 않는다.
+
+검사 결과와 근거:
+
+| 검사                                       | 결과                                                                                  | 로컬 근거                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 형식·문서·타입·Electron build·단위/DB      | 126개 통과                                                                            | `artifacts/conversation-check-final.log`      |
+| 전체 브라우저                              | 40개 통과. 상담 범위·전환·기억 수정/삭제·보관 역할, 기존 개발 흐름 포함               | `artifacts/conversation-web-final.log`        |
+| 실제 Docker 실행기                         | 4개 통과. 고정 기억 입력, 다음 실행 재사용·재시도 binding, 병렬 fan-in·기존 격리 실행 | `artifacts/conversation-runner-final.log`     |
+| 실제 프로세스/Docker/DB 복구               | 1개 통과. SIGKILL·취소·연결 상실                                                      | `artifacts/conversation-resilience-final.log` |
+| 실제 Electron main/preload/임시 PostgreSQL | 3개 통과. 상담·강제 종료 복구, 신규 온보딩, 관제 재시작                               | `artifacts/conversation-native-final.log`     |
+| macOS 앱 패키지                            | 무결성 검사 통과, ZIP 생성 없음                                                       | `artifacts/conversation-package-final.log`    |
+
+1440px 다크 상담과 1024px 라이트 기억 편집을 직접 렌더링해 확인했다. Inspector의 내부 스크롤과 입력 영역, 출처·저장 범위·읽기 전용 안내를 점검했고, 브라우저 시나리오에서 해당 화면의 axe 검사를 수행했다. 대표 캡처는 `artifacts/conversation-dark-1440.png`, `artifacts/memory-light-1024.png`, `artifacts/conversation-native-rendered-compose.png`다. 이는 전체 접근성 인증이 아니다.
+
+모델 응답은 fixture다. 잘못된 JSON·429·비밀이 들어 있는 실패 메시지와 abort 형태의 합성 오류를 확인했으며, 합성 timeout 오류 검사를 실제 60초 경과 검증으로 해석하지 않는다. Native 검사는 실제 IPC로 pending을 만든 뒤 fixture 앱만 SIGKILL하고 다시 열어 `interrupted`, 예약 공간 해제, provider 자동 재호출 없음까지 확인한다. 실제 유료 모델의 답변 품질·gateway 호환성·사용자 본인 인증·장시간 운영·서명/공증·Mac App Store 심사는 미검증이다. 로컬 패키지 통과를 공개 배포 완료나 심사 적합성 보증으로 표현하지 않는다.

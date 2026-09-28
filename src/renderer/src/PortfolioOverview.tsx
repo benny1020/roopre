@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowUpRight,
   ChevronDown,
@@ -8,8 +8,11 @@ import {
   Search,
 } from "lucide-react";
 import type { Snapshot } from "../../shared/contracts";
+import { latestAgents } from "../../shared/harness";
 import { phases } from "./workspace/presentation";
 import AgentWorkroom from "./workspace/AgentWorkroom";
+import ConversationPanel from "./workspace/ConversationPanel";
+import MemoryPanel, { type MemorySeed } from "./workspace/MemoryPanel";
 import {
   projectPortfolio,
   describePortfolioRun,
@@ -536,6 +539,9 @@ function Inspector({
   const feature = snapshot.features.find(
     (candidate) => candidate.id === ref.featureId,
   );
+  const project = snapshot.projects.find(
+    (candidate) => candidate.id === feature?.projectId,
+  );
   const run = ref.runId
     ? snapshot.runs.find((candidate) => candidate.id === ref.runId)
     : undefined;
@@ -558,20 +564,32 @@ function Inspector({
         </small>
         <h2>{feature.title}</h2>
         <p className="portfolio-state">아직 실행 전</p>
-        <dl>
-          <dt>다음 행동</dt>
-          <dd>설계 작성과 승인 조건을 확인하세요.</dd>
-          <dt>요구사항</dt>
-          <dd>{feature.draft.requirements}</dd>
-        </dl>
-        <button className="soft" onClick={() => onOpen(ref, "design")}>
-          기존 설계·승인 상세 보기 <ArrowUpRight size={13} />
-        </button>
+        <InspectorTabs
+          key={JSON.stringify([feature.id, null, null, null])}
+          scopeBase={{
+            workspaceId: snapshot.teamId,
+            projectId: feature.projectId,
+            featureId: feature.id,
+          }}
+          agents={agentsForProject(snapshot, project?.id)}
+          assignments={project?.workflow?.assignments || []}
+          snapshot={snapshot}
+          work={
+            <>
+              <dl>
+                <dt>다음 행동</dt>
+                <dd>설계 작성과 승인 조건을 확인하세요.</dd>
+                <dt>요구사항</dt>
+                <dd>{feature.draft.requirements}</dd>
+              </dl>
+              <button className="soft" onClick={() => onOpen(ref, "design")}>
+                기존 설계·승인 상세 보기 <ArrowUpRight size={13} />
+              </button>
+            </>
+          }
+        />
       </aside>
     );
-  const project = snapshot.projects.find(
-    (candidate) => candidate.id === feature.projectId,
-  );
   const runtime = run?.runtime;
   const current = ref.attempt ?? runtime?.attempt;
   const [, runLabel, nextAction, owner] = describePortfolioRun(
@@ -598,6 +616,7 @@ function Inspector({
     projection.agents.find(
       (agent) => agent.ref.runId === run?.id && agent.ref.attempt === current,
     );
+  const agents = agentsForProject(snapshot, project?.id);
   return (
     <aside className="portfolio-inspector" aria-label="선택한 작업">
       <small>{project?.name} / 선택한 기능</small>
@@ -605,72 +624,347 @@ function Inspector({
       <p className="portfolio-state">
         {runLabel} · {historical ? "과거 실행" : "현재 실행"}
       </p>
-      <dl>
-        <dt>다음 담당과 행동</dt>
-        <dd>
-          {run?.runtime?.cancelRequested
-            ? "시스템 · 중단 요청 처리와 종료 확인을 기다립니다"
-            : activeAgent?.status === "running"
-              ? `에이전트 · ${activeAgent.name} 작업 기록을 확인하세요`
-              : activeAgent?.status === "stale"
-                ? "시스템 · 마지막 기록은 실행 중이나 현재 상태를 확인할 수 없습니다"
-                : `${owner} · ${nextAction}`}
-        </dd>
-        <dt>실행 ID</dt>
-        <dd>
-          <code title={run?.id}>{run?.id || "실행 정보 없음"}</code>
-        </dd>
-        <dt>선택한 시도</dt>
-        <dd>시도 {current ?? "기록 없음"}</dd>
-        <dt>최근 기록</dt>
-        <dd>{latestEvent ? latestEvent.message : "기록 없음"}</dd>
-        <dt>실행기 마지막 확인</dt>
-        <dd>
-          {runtime?.heartbeat
-            ? new Date(runtime.heartbeat).toLocaleTimeString()
-            : "기록 없음"}
-        </dd>
-        <dt>적용 설계·지침</dt>
-        <dd>
-          {run ? `${run.designId} · 정책 v${run.policyVersion}` : "기록 없음"}
-        </dd>
-        <dt>현재 시도 근거</dt>
-        <dd>
-          {currentEvidence.length
-            ? `검사 ${currentEvidence.length}개 · 산출물 ${(runtime?.artifacts || []).filter((artifact) => artifact.attempt === current).length}개`
-            : "현재 시도 근거 없음"}
-        </dd>
-        <dt>비용</dt>
-        <dd>
-          {runtime?.costReported
-            ? Number.isFinite(runtime.costUsd) && runtime.costUsd >= 0
-              ? `$${runtime.costUsd.toFixed(4)} · 보고된 누적 추정`
-              : "비용 정보 오류"
-            : "비용 미보고"}
-        </dd>
-        <dt>현재 기록</dt>
-        <dd>
-          {projection.snapshotAt
-            ? new Date(projection.snapshotAt).toLocaleTimeString()
-            : "미확인"}
-        </dd>
-      </dl>
-      {run && (
-        <button
-          className="secondary"
-          onClick={() =>
-            onOpen(
-              ref,
-              run.status === "ready_for_merge" ? "review" : "execution",
-            )
-          }
-        >
-          기존 실행·근거 상세 보기 <ArrowUpRight size={13} />
-        </button>
-      )}
-      <button className="soft" onClick={() => onOpen(ref, "design")}>
-        기존 설계·승인 상세 보기 <ArrowUpRight size={13} />
-      </button>
+      <InspectorTabs
+        key={JSON.stringify([
+          feature.id,
+          run.id,
+          current ?? null,
+          ref.agentExecutionId ?? null,
+        ])}
+        scopeBase={{
+          workspaceId: snapshot.teamId,
+          projectId: feature.projectId,
+          featureId: feature.id,
+        }}
+        agents={agents}
+        assignments={project?.workflow?.assignments || []}
+        snapshot={snapshot}
+        execution={
+          run && ref.agentExecutionId
+            ? {
+                runId: run.id,
+                attempt: current || 1,
+                executionId: ref.agentExecutionId,
+              }
+            : undefined
+        }
+        executionAssignmentId={
+          ref.agentExecutionId
+            ? runtime?.agents?.find(
+                (candidate) => candidate.id === ref.agentExecutionId,
+              )?.assignmentId
+            : undefined
+        }
+        defaultAgentId={
+          ref.agentExecutionId
+            ? runtime?.harness?.agents.find(
+                (candidate) =>
+                  candidate.id ===
+                  runtime.agents?.find(
+                    (execution) => execution.id === ref.agentExecutionId,
+                  )?.assignmentId,
+              )?.agent.id
+            : undefined
+        }
+        work={
+          <>
+            <dl>
+              <dt>다음 담당과 행동</dt>
+              <dd>
+                {run?.runtime?.cancelRequested
+                  ? "시스템 · 중단 요청 처리와 종료 확인을 기다립니다"
+                  : activeAgent?.status === "running"
+                    ? `에이전트 · ${activeAgent.name} 작업 기록을 확인하세요`
+                    : activeAgent?.status === "stale"
+                      ? "시스템 · 마지막 기록은 실행 중이나 현재 상태를 확인할 수 없습니다"
+                      : `${owner} · ${nextAction}`}
+              </dd>
+              <dt>실행 ID</dt>
+              <dd>
+                <code title={run?.id}>{run?.id || "실행 정보 없음"}</code>
+              </dd>
+              <dt>선택한 시도</dt>
+              <dd>시도 {current ?? "기록 없음"}</dd>
+              <dt>최근 기록</dt>
+              <dd>{latestEvent ? latestEvent.message : "기록 없음"}</dd>
+              <dt>실행기 마지막 확인</dt>
+              <dd>
+                {runtime?.heartbeat
+                  ? new Date(runtime.heartbeat).toLocaleTimeString()
+                  : "기록 없음"}
+              </dd>
+              <dt>적용 설계·지침</dt>
+              <dd>
+                {run
+                  ? `${run.designId} · 정책 v${run.policyVersion}`
+                  : "기록 없음"}
+              </dd>
+              <dt>현재 시도 근거</dt>
+              <dd>
+                {currentEvidence.length
+                  ? `검사 ${currentEvidence.length}개 · 산출물 ${(runtime?.artifacts || []).filter((artifact) => artifact.attempt === current).length}개`
+                  : "현재 시도 근거 없음"}
+              </dd>
+              <dt>비용</dt>
+              <dd>
+                {runtime?.costReported
+                  ? Number.isFinite(runtime.costUsd) && runtime.costUsd >= 0
+                    ? `$${runtime.costUsd.toFixed(4)} · 보고된 누적 추정`
+                    : "비용 정보 오류"
+                  : "비용 미보고"}
+              </dd>
+              <dt>현재 기록</dt>
+              <dd>
+                {projection.snapshotAt
+                  ? new Date(projection.snapshotAt).toLocaleTimeString()
+                  : "미확인"}
+              </dd>
+            </dl>
+            {run && (
+              <button
+                className="secondary"
+                onClick={() =>
+                  onOpen(
+                    ref,
+                    run.status === "ready_for_merge" ? "review" : "execution",
+                  )
+                }
+              >
+                기존 실행·근거 상세 보기 <ArrowUpRight size={13} />
+              </button>
+            )}
+            <button className="soft" onClick={() => onOpen(ref, "design")}>
+              기존 설계·승인 상세 보기 <ArrowUpRight size={13} />
+            </button>
+          </>
+        }
+      />
     </aside>
+  );
+}
+
+function agentsForProject(snapshot: Snapshot, projectId?: string) {
+  const project = snapshot.projects.find(
+    (candidate) => candidate.id === projectId,
+  );
+  const definitions = latestAgents(snapshot).filter(
+    (agent) => !agent.projectId || agent.projectId === projectId,
+  );
+  const configured = (project?.workflow?.assignments || [])
+    .map((assignment) =>
+      definitions.find((agent) => agent.id === assignment.agentId),
+    )
+    .filter((agent): agent is NonNullable<typeof agent> => !!agent);
+  const activeConfigured = configured.filter((agent) => !agent.archived);
+  const archivedConfigured = configured.filter((agent) => agent.archived);
+  const historicalArchived = definitions.filter((agent) => agent.archived);
+  const candidates = configured.length
+    ? [...activeConfigured, ...archivedConfigured, ...historicalArchived]
+    : definitions;
+  return [...new Map(candidates.map((agent) => [agent.id, agent])).values()];
+}
+
+function InspectorTabs({
+  scopeBase,
+  agents,
+  assignments,
+  snapshot,
+  defaultAgentId,
+  execution,
+  executionAssignmentId,
+  work,
+}: {
+  scopeBase: { workspaceId: string; projectId: string; featureId: string };
+  agents: NonNullable<Snapshot["agents"]>;
+  assignments: { id: string; agentId: string; stage?: string }[];
+  snapshot: Snapshot;
+  defaultAgentId?: string;
+  execution?: { runId: string; attempt: number; executionId?: string };
+  executionAssignmentId?: string;
+  work: ReactNode;
+}) {
+  const [tab, setTab] = useState<"work" | "conversation" | "memory">("work");
+  const [agentId, setAgentId] = useState(defaultAgentId || agents[0]?.id || "");
+  const [assignmentId, setAssignmentId] = useState(
+    () =>
+      assignments.find(
+        (assignment) =>
+          assignment.agentId === (defaultAgentId || agents[0]?.id),
+      )?.id || "",
+  );
+  const [projectWide, setProjectWide] = useState(false);
+  const [memorySeed, setMemorySeed] = useState<MemorySeed>();
+  const memoryScopeKey = JSON.stringify([
+    scopeBase.projectId,
+    scopeBase.featureId,
+    agentId,
+    projectWide,
+  ]);
+  useEffect(() => setMemorySeed(undefined), [memoryScopeKey]);
+  useEffect(() => {
+    if (!agents.some((agent) => agent.id === agentId))
+      setAgentId(agents[0]?.id || "");
+  }, [agents, agentId]);
+  const agent = agents.find((candidate) => candidate.id === agentId);
+  const agentAssignments = assignments.filter(
+    (candidate) => candidate.agentId === agent?.id,
+  );
+  const assignment = agentAssignments.find(
+    (candidate) => candidate.id === assignmentId,
+  );
+  return (
+    <div className="inspector-tabs">
+      <div
+        className="inspector-tab-list"
+        role="tablist"
+        aria-label="작업 상세 맥락"
+      >
+        <button
+          role="tab"
+          aria-selected={tab === "work"}
+          onClick={() => setTab("work")}
+        >
+          작업
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "conversation"}
+          onClick={() => setTab("conversation")}
+        >
+          대화
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "memory"}
+          onClick={() => setTab("memory")}
+        >
+          기억
+        </button>
+      </div>
+      {(tab === "conversation" || tab === "memory") && (
+        <label className="inspector-agent-select">
+          상담 에이전트
+          <select
+            aria-label="상담 에이전트"
+            value={agentId}
+            onChange={(event) => {
+              const nextAgentId = event.target.value;
+              setAgentId(nextAgentId);
+              setAssignmentId(
+                assignments.find(
+                  (candidate) => candidate.agentId === nextAgentId,
+                )?.id || "",
+              );
+            }}
+          >
+            {!agents.length && <option value="">배치된 에이전트 없음</option>}
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name} · v{agent.revision}
+                {agent.archived ? " · 보관됨" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {(tab === "conversation" || tab === "memory") &&
+        agentAssignments.length > 1 && (
+          <label className="inspector-agent-select">
+            배치 맥락
+            <select
+              aria-label="상담 배치"
+              value={assignmentId}
+              onChange={(event) => setAssignmentId(event.target.value)}
+            >
+              <option value="">현재 정의만 사용</option>
+              {agentAssignments.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.stage || "단계"} · {item.id}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      {(tab === "conversation" || tab === "memory") && (
+        <label className="inspector-agent-select">
+          대화 범위
+          <select
+            aria-label="대화 범위"
+            value={projectWide ? "project" : "feature"}
+            onChange={(event) =>
+              setProjectWide(event.target.value === "project")
+            }
+          >
+            <option value="feature">이 기능</option>
+            <option value="project">프로젝트 전체</option>
+          </select>
+        </label>
+      )}
+      {tab === "work" && work}
+      {tab === "conversation" && agent && (
+        <ConversationPanel
+          key={JSON.stringify([
+            scopeBase.workspaceId,
+            scopeBase.projectId,
+            scopeBase.featureId,
+            agent.id,
+            projectWide,
+          ])}
+          agentName={agent.name}
+          scope={{
+            ...scopeBase,
+            agentDefinitionId: agent.id,
+            ...(projectWide ? { featureId: undefined } : {}),
+          }}
+          assignmentId={assignment?.id}
+          execution={
+            !projectWide && assignment?.id === executionAssignmentId
+              ? execution
+              : undefined
+          }
+          configured={
+            !agent.archived &&
+            (!!agent.connectionId ||
+              !!snapshot.projects.find(
+                (project) => project.id === scopeBase.projectId,
+              )?.executionProfile?.connectionId)
+          }
+          archived={agent.archived}
+          onSaveTurn={(turn) => {
+            setMemorySeed({
+              title: "대화에서 확인한 작업 기억",
+              body: turn.answer || turn.input,
+              sourceRef: {
+                type: "conversation",
+                threadId: turn.threadId,
+                turnId: turn.id,
+              },
+            });
+            setTab("memory");
+          }}
+          memories={
+            snapshot.projects.find(
+              (project) => project.id === scopeBase.projectId,
+            )?.memories || []
+          }
+        />
+      )}
+      {tab === "conversation" && !agent && (
+        <p className="muted">
+          이 프로젝트에 설정된 에이전트가 없습니다. 배치 관리에서 역할을
+          연결하세요.
+        </p>
+      )}
+      {tab === "memory" && (
+        <MemoryPanel
+          key={memoryScopeKey}
+          snapshot={snapshot}
+          projectId={scopeBase.projectId}
+          featureId={projectWide ? undefined : scopeBase.featureId}
+          agentId={agent?.id}
+          seed={memorySeed}
+        />
+      )}
+    </div>
   );
 }

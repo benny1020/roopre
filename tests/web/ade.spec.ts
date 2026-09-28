@@ -2,9 +2,9 @@ import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { adeFixture, patch } from "../fixtures/ade";
 const state = adeFixture();
-async function prepare(page: Page, state = adeFixture()) {
+async function prepare(page: Page, state = adeFixture(), conversation?: any) {
   await page.addInitScript(
-    ({ state, patch }) => {
+    ({ state, patch, conversation }) => {
       const w = globalThis as unknown as {
         roopre: unknown;
         __diffResolvers: Record<string, (s: string) => void>;
@@ -29,6 +29,22 @@ async function prepare(page: Page, state = adeFixture()) {
           w.__revealed.push(args);
         },
       };
+      if (conversation) {
+        (w.roopre as any).conversations = {
+          listThreads: async () => [conversation.thread],
+          getThread: async () => conversation.thread,
+          listTurns: async () => conversation.turns || [],
+          sendTurn: async () => {
+            throw Error("unused");
+          },
+          cancelTurn: async () => true,
+          resetSummary: async () => conversation.thread,
+          deleteThread: async (input: any) => {
+            (globalThis as any).__deleteInputs.push(input);
+          },
+        };
+        (globalThis as any).__deleteInputs = [];
+      }
       if (localStorage.getItem("owner:selected") === null)
         localStorage.setItem(
           "owner:selected",
@@ -40,7 +56,7 @@ async function prepare(page: Page, state = adeFixture()) {
       );
       localStorage.setItem("theme", JSON.stringify("dark"));
     },
-    { state, patch },
+    { state, patch, conversation },
   );
   await page.goto("/");
   await expect(
@@ -150,6 +166,435 @@ test("portfolio is read-only, separates queued work from active agents, and stay
     ),
   ).toBe(true);
   await axe(page);
+});
+
+test("conversation scopes keep drafts and delayed replies with their selected feature", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  const agentId = "00000000-0000-4000-8000-000000000099";
+  state.agents = [
+    {
+      id: agentId,
+      revision: 1,
+      name: "상담 구현 에이전트",
+      description: "fixture",
+      capability: "implementation",
+      connectionId: "00000000-0000-4000-8000-000000000001",
+      connectionVersion: 1,
+      markdown: "fixture",
+      archived: false,
+    },
+  ];
+  await prepare(page, state);
+  await page.evaluate(() => {
+    const threads = new Map<string, any>();
+    const turns = new Map<string, any[]>();
+    let resolveFirst: ((value: any) => void) | undefined;
+    (globalThis as any).__resolveSlowConversation = () =>
+      resolveFirst?.(undefined);
+    (globalThis as any).roopre.conversations = {
+      listThreads: async (scope: any) =>
+        [threads.get(scope.featureId)].filter(Boolean),
+      getThread: async (id: string) =>
+        [...threads.values()].find((thread) => thread.id === id),
+      listTurns: async ({ threadId }: any) => turns.get(threadId) || [],
+      cancelTurn: async () => true,
+      resetSummary: async ({ threadId }: any) =>
+        [...threads.values()].find((thread) => thread.id === threadId),
+      sendTurn: (input: any) =>
+        new Promise((resolve) => {
+          const id = `00000000-0000-4000-8000-${input.scope.featureId.endsWith("checkout") ? "000000000101" : "000000000102"}`;
+          const thread = threads.get(input.scope.featureId) || {
+            id,
+            scope: input.scope,
+            revision: 0,
+            epoch: 0,
+            archived: false,
+            summary: null,
+            summaryThrough: null,
+            summaryRevision: 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          threads.set(input.scope.featureId, thread);
+          const turn = {
+            id: `00000000-0000-4000-8000-000000000201`,
+            threadId: id,
+            ordinal: 1,
+            requestId: input.requestId,
+            input: input.message,
+            answer: "늦은 A 답변",
+            status: "completed",
+            retryOf: null,
+            error: null,
+            contextManifest: {
+              agentRevision: 1,
+              memories: [],
+              recentTurnIds: [],
+              searchTurnIds: [],
+              excluded: [],
+            },
+            usage: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          resolveFirst = () => {
+            turns.set(id, [turn]);
+            resolve({ thread, turn });
+          };
+        }),
+    };
+  });
+  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await page
+    .getByRole("button", { name: state.features[0].title, exact: false })
+    .last()
+    .click();
+  await page.getByRole("tab", { name: "대화", exact: true }).click();
+  await page.getByLabel("상담 메시지").fill("A 초안");
+  await page.getByRole("button", { name: "질문 보내기" }).click();
+  await page
+    .getByRole("button", { name: state.features[1].title, exact: false })
+    .last()
+    .click();
+  await page.getByRole("tab", { name: "대화", exact: true }).click();
+  await page.getByLabel("상담 메시지").fill("B 초안");
+  await page.evaluate(() => (globalThis as any).__resolveSlowConversation());
+  await expect(page.getByLabel("상담 메시지")).toHaveValue("B 초안");
+  await expect(page.getByText("늦은 A 답변", { exact: true })).toHaveCount(0);
+  await page
+    .getByRole("button", { name: state.features[0].title, exact: false })
+    .last()
+    .click();
+  await page.getByRole("tab", { name: "대화", exact: true }).click();
+  await expect(page.getByText("늦은 A 답변", { exact: true })).toBeVisible();
+});
+
+test("answer memory uses its conversation source and requires user confirmation", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  const agentId = "00000000-0000-4000-8000-000000000099";
+  state.agents = [
+    {
+      id: agentId,
+      revision: 1,
+      name: "상담 구현 에이전트",
+      description: "fixture",
+      capability: "implementation",
+      connectionId: "00000000-0000-4000-8000-000000000001",
+      connectionVersion: 1,
+      markdown: "fixture",
+      archived: false,
+    },
+  ];
+  await prepare(page, state);
+  await page.evaluate((agentId) => {
+    const thread = {
+      id: "00000000-0000-4000-8000-000000000401",
+      scope: {
+        workspaceId: "team-local",
+        projectId: "commerce",
+        agentDefinitionId: agentId,
+        featureId: "feature-checkout",
+      },
+      revision: 1,
+      epoch: 0,
+      archived: false,
+      summary: null,
+      summaryThrough: null,
+      summaryRevision: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const turn = {
+      id: "00000000-0000-4000-8000-000000000402",
+      threadId: thread.id,
+      ordinal: 1,
+      requestId: "00000000-0000-4000-8000-000000000403",
+      input: "질문",
+      answer: "기억할 답변",
+      status: "completed",
+      retryOf: null,
+      error: null,
+      contextManifest: {
+        agentRevision: 1,
+        memories: [],
+        recentTurnIds: [],
+        searchTurnIds: [],
+        excluded: [],
+      },
+      usage: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const api = (globalThis as any).roopre;
+    (globalThis as any).__commands = [];
+    api.command = async (command: any) => {
+      (globalThis as any).__commands.push(command);
+      return {};
+    };
+    api.conversations = {
+      listThreads: async () => [thread],
+      getThread: async () => thread,
+      listTurns: async () => [turn],
+      sendTurn: async () => ({ thread, turn }),
+      cancelTurn: async () => true,
+      resetSummary: async () => thread,
+      deleteThread: async () => {},
+    };
+  }, agentId);
+  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await page
+    .getByRole("button", { name: state.features[0].title, exact: false })
+    .last()
+    .click();
+  await page.getByRole("tab", { name: "대화", exact: true }).click();
+  await expect(page.getByText("기억할 답변", { exact: true })).toBeVisible();
+  await axe(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator(".conversation-turn").scrollIntoViewIfNeeded();
+  await page
+    .locator(".portfolio-inspector")
+    .evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await page.screenshot({ path: "artifacts/conversation-dark-1440.png" });
+  await page
+    .locator(".conversation-panel")
+    .screenshot({ path: "artifacts/conversation-panel-dark-1440.png" });
+  await page
+    .getByRole("button", { name: "기억으로 저장", exact: true })
+    .click();
+  await expect(
+    page.getByRole("tab", { name: "기억", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByLabel("기억 내용")).toHaveValue("기억할 답변");
+  await expect(
+    page.getByText(/conversation:00000000-0000-4000-8000-000000000401/),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.locator(".theme-select").selectOption("light");
+  await page.getByLabel("기억 내용").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "artifacts/memory-light-1024.png" });
+  await axe(page);
+  await expect(
+    page.getByRole("button", { name: "기억으로 저장", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("checkbox", { name: /승인 재확인 영향/ }).check();
+  await page
+    .getByRole("button", { name: "기억으로 저장", exact: true })
+    .click();
+  expect(
+    await page.evaluate(
+      () => (globalThis as any).__commands[0].memory.sourceRefs[0],
+    ),
+  ).toEqual({
+    type: "conversation",
+    threadId: "00000000-0000-4000-8000-000000000401",
+    turnId: "00000000-0000-4000-8000-000000000402",
+  });
+});
+
+test("memory edit preserves source and shows revision conflicts", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  const agentId = "00000000-0000-4000-8000-000000000099";
+  state.agents = [
+    {
+      id: agentId,
+      revision: 1,
+      name: "상담 구현 에이전트",
+      description: "fixture",
+      capability: "implementation",
+      connectionId: "00000000-0000-4000-8000-000000000001",
+      connectionVersion: 1,
+      markdown: "fixture",
+      archived: false,
+    },
+  ];
+  state.projects[0].memories = [
+    {
+      id: "memory-edit",
+      agentDefinitionId: agentId,
+      featureId: state.features[0].id,
+      title: "기존 기억",
+      body: "이전 내용",
+      revision: 3,
+      sourceRefs: [{ type: "manual", label: "사용자 결정" }],
+      active: true,
+      authorId: "owner",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+  await prepare(page, state);
+  await page.evaluate(() => {
+    (globalThis as any).roopre.command = async () => {
+      throw Error("상태가 변경됐습니다. 최신 기억을 확인하세요.");
+    };
+  });
+  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await page
+    .getByRole("button", { name: state.features[0].title, exact: false })
+    .last()
+    .click();
+  await page.getByRole("tab", { name: "기억", exact: true }).click();
+  await page.getByRole("button", { name: "수정", exact: true }).click();
+  await page.getByLabel("기억 내용").fill("변경 내용");
+  await page.getByRole("checkbox", { name: /승인 재확인 영향/ }).check();
+  await page.getByRole("button", { name: "수정 저장", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("상태가 변경됐습니다");
+  await expect(page.getByLabel("기억 내용")).toHaveValue("변경 내용");
+});
+
+test("conversation deletion can atomically deactivate selected derived memories", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  const agentId = "00000000-0000-4000-8000-000000000099";
+  const threadId = "00000000-0000-4000-8000-000000000501";
+  state.agents = [
+    {
+      id: agentId,
+      revision: 1,
+      name: "상담 구현 에이전트",
+      description: "fixture",
+      capability: "implementation",
+      connectionId: "00000000-0000-4000-8000-000000000001",
+      connectionVersion: 1,
+      markdown: "fixture",
+      archived: false,
+    },
+  ];
+  state.projects[0].memories = [
+    {
+      id: "memory-derived",
+      agentDefinitionId: agentId,
+      featureId: state.features[0].id,
+      title: "파생 기억",
+      body: "본문",
+      revision: 1,
+      sourceRefs: [{ type: "conversation", threadId, turnId: "turn-derived" }],
+      active: true,
+      authorId: "owner",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+  const thread = {
+    id: threadId,
+    scope: {
+      workspaceId: "team-local",
+      projectId: "commerce",
+      agentDefinitionId: agentId,
+      featureId: "feature-checkout",
+    },
+    revision: 1,
+    epoch: 0,
+    archived: false,
+    summary: null,
+    summaryThrough: null,
+    summaryRevision: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await prepare(page, state, { thread, turns: [] });
+  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await page
+    .getByRole("button", { name: state.features[0].title, exact: false })
+    .last()
+    .click();
+  await page.getByRole("tab", { name: "대화", exact: true }).click();
+  await page.getByText("요약·참조 기록", { exact: true }).click();
+  await page.getByRole("button", { name: "대화 삭제", exact: true }).click();
+  await page.getByRole("checkbox", { name: /파생 기억/ }).check();
+  await page.getByRole("button", { name: "삭제 확인", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => (globalThis as any).__deleteInputs.length))
+    .toBe(1);
+  expect(
+    await page.evaluate(() => (globalThis as any).__deleteInputs[0]),
+  ).toEqual({ threadId, deactivateDerivedMemoryIds: ["memory-derived"] });
+});
+
+test("archived agents retain readable consultation history but cannot send", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs = [];
+  const agentId = "00000000-0000-4000-8000-000000000598";
+  state.agents = [
+    {
+      id: agentId,
+      revision: 1,
+      name: "보관된 상담 에이전트",
+      description: "historical fixture",
+      capability: "read-only",
+      connectionId: "00000000-0000-4000-8000-000000000001",
+      connectionVersion: 1,
+      markdown: "historical fixture",
+      archived: true,
+    },
+  ];
+  const thread = {
+    id: "00000000-0000-4000-8000-000000000599",
+    scope: {
+      workspaceId: "team-local",
+      projectId: "commerce",
+      agentDefinitionId: agentId,
+      featureId: state.features[0].id,
+    },
+    revision: 1,
+    epoch: 0,
+    archived: false,
+    summary: null,
+    summaryThrough: null,
+    summaryRevision: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const turn = {
+    id: "00000000-0000-4000-8000-000000000600",
+    threadId: thread.id,
+    ordinal: 1,
+    requestId: "00000000-0000-4000-8000-000000000601",
+    input: "기존 질문",
+    answer: "보관된 기록 답변",
+    status: "completed",
+    retryOf: null,
+    error: null,
+    contextManifest: {
+      agentRevision: 1,
+      memories: [],
+      recentTurnIds: [],
+      searchTurnIds: [],
+      excluded: [],
+    },
+    usage: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await prepare(page, state, { thread, turns: [turn] });
+  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await page
+    .getByRole("button", { name: state.features[0].title, exact: false })
+    .last()
+    .click();
+  await page.getByRole("tab", { name: "대화", exact: true }).click();
+  await expect(page.getByLabel("상담 에이전트")).toHaveText(/보관됨/);
+  await expect(
+    page.getByText("보관된 기록 답변", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/기존 기록은 읽을 수 있지만/)).toBeVisible();
+  await page.getByLabel("상담 메시지").fill("새 질문");
+  await expect(
+    page.getByRole("button", { name: "질문 보내기", exact: true }),
+  ).toBeDisabled();
 });
 
 test("portfolio command, view, exact historical run, and back navigation preserve context", async ({

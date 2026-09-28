@@ -7,6 +7,12 @@ import type {
   ConnectionInfo,
   ExecutionProfile,
 } from "./runtime";
+import type {
+  ConversationScope,
+  ConversationThread,
+  ConversationTurn,
+  SendTurnInput,
+} from "./conversations";
 export interface DesktopAPI {
   name: string;
   refineAgent: (input: RefinementInput) => Promise<RefinementOutput>;
@@ -55,4 +61,28 @@ export interface DesktopAPI {
   }>;
   revealArtifact: (runId: string, index: number) => Promise<void>;
   runAction: (id: string, action: "retry" | "diff") => Promise<string>;
+  conversations: {
+    listThreads: (scope: ConversationScope) => Promise<ConversationThread[]>;
+    getThread: (threadId: string) => Promise<ConversationThread>;
+    listTurns: (input: {
+      threadId: string;
+      beforeOrdinal?: number;
+      limit?: number;
+    }) => Promise<ConversationTurn[]>;
+    sendTurn: (
+      input: SendTurnInput,
+    ) => Promise<{ thread: ConversationThread; turn: ConversationTurn }>;
+    cancelTurn: (input: {
+      threadId: string;
+      turnId: string;
+    }) => Promise<boolean>;
+    resetSummary: (input: {
+      threadId: string;
+      expectedRevision: number;
+    }) => Promise<ConversationThread>;
+    deleteThread: (input: {
+      threadId: string;
+      deactivateDerivedMemoryIds?: string[];
+    }) => Promise<void>;
+  };
 }

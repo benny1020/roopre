@@ -31,5 +31,14 @@ const api: DesktopAPI = {
   diagnostics: () => request("diagnostics"),
   revealArtifact: (runId, index) => request("revealArtifact", { runId, index }),
   runAction: (id, action) => request("runAction", { id, action }),
+  conversations: {
+    listThreads: (scope) => request("conversations:listThreads", scope),
+    getThread: (threadId) => request("conversations:getThread", threadId),
+    listTurns: (input) => request("conversations:listTurns", input),
+    sendTurn: (input) => request("conversations:sendTurn", input),
+    cancelTurn: (input) => request("conversations:cancelTurn", input),
+    resetSummary: (input) => request("conversations:resetSummary", input),
+    deleteThread: (input) => request("conversations:deleteThread", input),
+  },
 };
 contextBridge.exposeInMainWorld("roopre", Object.freeze(api));

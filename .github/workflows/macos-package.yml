@@ -7,7 +7,7 @@ permissions:
 jobs:
   package:
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -21,6 +21,23 @@ jobs:
       - run: pnpm build:mac
         if: github.event_name == 'workflow_dispatch'
       - run: pnpm test:desktop
+      - name: Start PostgreSQL for native conversation fixture
+        run: |
+          brew install postgresql@18
+          pg_bin="$(brew --prefix postgresql@18)/bin"
+          pg_data="$RUNNER_TEMP/roopre-conversation-postgres"
+          "$pg_bin/initdb" --pgdata="$pg_data" --username=devflow --auth=trust
+          "$pg_bin/pg_ctl" --pgdata="$pg_data" --log="$RUNNER_TEMP/roopre-conversation-postgres.log" --options='-p 55441 -h 127.0.0.1' --wait start
+          "$pg_bin/createdb" --host=127.0.0.1 --port=55441 --username=devflow devflow
+      - run: pnpm test:conversation
+      - name: Stop native conversation fixture PostgreSQL
+        if: always()
+        run: |
+          pg_data="$RUNNER_TEMP/roopre-conversation-postgres"
+          if command -v brew >/dev/null && [ -f "$pg_data/postmaster.pid" ]; then
+            pg_bin="$(brew --prefix postgresql@18)/bin"
+            "$pg_bin/pg_ctl" --pgdata="$pg_data" --wait stop --mode=fast
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: github.event_name == 'workflow_dispatch'
         with:

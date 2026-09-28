@@ -74,3 +74,13 @@ agent 네트워크는 internal Docker network다. sidecar는 호스트 broker만
 ## 하네스 패키지 v1
 
 `shared/harness-package.ts`가 portable 스키마·고정 폴더 레이아웃을 정의한다. `main/harness`는 제한된 폴더/Git 읽기와 검증된 임시 후보를 관리한다. Renderer는 후보 token으로 변경 비교·적용을 요청하며 원본 검증 없이 직접 package 적용 IPC를 보낼 수 없다. `domain/harness-package.ts`는 버전·참조·현재 revision·실행 상태를 확인한 뒤 프로젝트 설정과 에이전트 버전을 한 트랜잭션으로 적용한다. 실행기는 승인 binding의 표준/범위 스냅샷과 staged 경로 검사를 사용한다. 실제 키/로컬 경로는 vault/실행 설정에 남는다. [명세와 제한](specs/HARNESS-V1.md)을 따른다.
+
+## 개별 상담과 기억
+
+`main/conversations/service.ts`는 기존 vault의 연결로 읽기 전용 Messages 상담을 수행한다. Docker 실행기에 입력을 주입하거나 승인 권한을 부여하지 않는다. `shared/conversations.ts`의 한정된 IPC를 거쳐 원문을 페이지 단위로 읽으며 전체 대화는 workspace snapshot에 포함하지 않는다.
+
+`database/conversations.ts`의 별도 thread/turn/tombstone 테이블은 workspace·project·agent definition·선택 feature 범위를 유지한다. 질문의 요청 ID와 digest, 상태, 실제 입력 출처, provider 사용량을 저장한다. 삭제한 요청의 재전송 방지 기록에는 원문을 보관하지 않는다. DB 이전은 대화와 삭제 기록도 포함하며 원본을 보존한다.
+
+`shared/memory.ts`의 작업 기억은 프로젝트의 작은 버전 집합이다. Store가 원문·실행 출처의 실제 소유 범위를 검사하고 domain이 revision·한도·실행 상태·승인 영향을 검사한다. 공유 하네스 패키지와 개인 기억은 별개다. `domain/memory.ts`가 실행 입력에 기억 내용과 해시를 고정하고 runner는 그 스냅샷만 읽는다. 상담의 자동 요약은 작업 기억으로 자동 승격되지 않는다.
+
+상담 provider, 실행 broker와 암호화 저장소는 호스트의 신뢰 경계 안에 있다. API key를 renderer나 대화 기록에 넣지 않는다. 실행 원본과 상담 기록은 서로 다른 수명주기를 가지며, 상담의 성공은 코드 구현·검사 성공을 의미하지 않는다. [사용 흐름](AGENT-CONVERSATIONS.md)과 [구현 검증 기록](design/AGENT-CONVERSATION-MEMORY-IMPLEMENTATION.md)을 함께 확인한다.
