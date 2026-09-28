@@ -2,7 +2,7 @@ import { defaultPackage } from "../src/shared/default-package.ts";
 import { ownerFixture } from "./fixtures/workspace.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, readFile, rm, cp } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm, cp, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -56,6 +56,11 @@ test(
           lockfileVersion: 3,
           packages: { "": { name: "fixture", version: "1.0.0" } },
         }),
+      );
+      await mkdir(join(repo, "test-results"));
+      await writeFile(
+        join(repo, "test-results", "golden.json"),
+        JSON.stringify({ baseline: true }),
       );
       await git(repo, "add", ".");
       await git(repo, "commit", "-m", "fixture baseline");
@@ -207,9 +212,14 @@ test(
         ).output.trim(),
         "",
       );
-      assert.match(await runner.diff(runId), /hello from fixture/);
-      assert.equal(result.runtime!.artifacts?.length, 1);
-      const artifact = result.runtime!.artifacts![0];
+      const diff = await runner.diff(runId);
+      assert.match(diff, /hello from fixture/);
+      assert.doesNotMatch(diff, /golden\.json/);
+      assert.equal(result.runtime!.artifacts?.length, 2);
+      const artifact = result.runtime!.artifacts!.find((item) =>
+        item.path.endsWith("/test-results/result.json"),
+      );
+      assert(artifact);
       assert.equal(
         JSON.parse(
           await readFile(

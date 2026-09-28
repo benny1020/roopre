@@ -1207,20 +1207,6 @@ export class RunnerManager {
         // Verify the candidate Git tree, never ignored outputs/caches left by the agent.
         await this.docker(["rm", "-f", n.container], abort.signal);
         await git(checkout, "add", "-A");
-        // A caller may have supplied an index that already includes an ignored
-        // runtime directory. Unstage those paths explicitly before clean so
-        // ignored agent output can never become verification input.
-        await git(
-          checkout,
-          "rm",
-          "--cached",
-          "-r",
-          "--ignore-unmatch",
-          ".roopre-artifacts",
-          "node_modules",
-          "test-results",
-          "playwright-report",
-        );
         await git(checkout, "clean", "-ffdx");
         await createContainer();
         await this.phase(
