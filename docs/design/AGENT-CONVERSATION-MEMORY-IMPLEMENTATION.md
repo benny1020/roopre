@@ -2,7 +2,7 @@
 
 기준: [승인 기록](AGENT-CONVERSATION-MEMORY-APPROVAL.md), [고정 설계](AGENT-CONVERSATION-MEMORY.md). 시작 커밋 `d29a9f05b280eb56cafab469a684c74e2d605000`, 작업 브랜치 `codex/agent-conversation-memory`.
 
-현재 상태: 구현 및 로컬 통합 검사 완료, 독립 PR 리뷰 진행 중. 아래 기록은 명시한 검사 범위의 근거이며 실제 모델 품질이나 공개 배포 완료를 의미하지 않는다.
+구현 및 로컬 통합 검사 기록이다. 독립 리뷰·CI·머지의 최종 상태는 [PR #12](https://github.com/benny1020/roopre/pull/12)의 정확한 커밋별 보고서와 검사 결과를 따른다. 아래 기록은 명시한 검사 범위의 근거이며 실제 모델 품질이나 공개 배포 완료를 의미하지 않는다.
 
 ## 구현 경계
 
@@ -34,6 +34,7 @@
 - [x] 브라우저 상호작용·다크/라이트·1024px·키보드·axe·시각 확인
 - [x] 실제 Electron/main/preload/PostgreSQL의 상담 저장·재시작·DB 복구
 - [x] 기존 전체 검사·runner/parallel/resilience·패키지 무결성
-- [ ] 고정 head/base 독립 Astra 리뷰·게시·CI·main 반영
+
+고정 head/base 독립 Astra 리뷰·게시·CI·main 반영은 PR #12에서 확인한다. 이 문서의 로컬 체크리스트를 원격 검사나 머지 완료 기록으로 대신하지 않는다.
 
 fixture, 실제 모델, 사용자 본인 인증과 배포 심사 검증을 구분한다. 사용자 데이터·개인 인증·과금 호출을 합성하거나 테스트 통과를 App Store 준비 완료로 확대하지 않는다.
