@@ -21,7 +21,7 @@
 
 ## PR 리뷰와 머지
 
-- 선택형 에이전트 작업실은 `docs/design/AGENT-WORKROOM-APPROVAL.md`의 사용자 지시에 따라 구현한다. 개별 대화·기억은 `docs/design/AGENT-CONVERSATION-MEMORY.md`의 별도 세부 설계 검토 대상이며 작업실 승인을 재사용하지 않는다.
+- 선택형 에이전트 작업실은 `docs/design/AGENT-WORKROOM-APPROVAL.md`의 사용자 지시에 따라 구현한다. 개별 대화·기억은 `docs/design/AGENT-CONVERSATION-MEMORY-APPROVAL.md`의 별도 사용자 승인에 따라 구현한다. 고정 원문 설계와 승인 기록을 함께 읽으며 작업실 승인을 재사용하지 않는다. 저장·상담, 기억·실행 계약, UI는 겹치지 않는 파일 소유권으로 Terra 담당을 나누고 Astra가 독립 리뷰한다.
 
 - 모든 PR 생성/수정 후 `docs/PR-REVIEW-PROCESS.md`를 따르고 `agents/pr-reviewer.md`를 읽은 별도 리뷰 전담 에이전트를 호출한다. 이 절은 전담 sub-agent 사용 지시다. 구현 담당이 자기 보고서로 대체하지 않는다.
 - PR 번호와 정확한 head/base를 고정한다. 차단 지적 수정 → 검사 → 새 커밋 전담 재리뷰를 반복한다. 기존 결과나 승인으로 새 커밋을 머지하지 않는다.

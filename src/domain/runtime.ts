@@ -1,8 +1,10 @@
 import { latestAgents } from "../shared/harness.ts";
 import { createHash } from "node:crypto";
 import type { Workspace, Feature } from "../shared/contracts.ts";
+import { canonicalActiveMemories } from "../shared/memory.ts";
 export function policyBinding(w: Workspace, f: Feature) {
   const p = w.projects.find((p) => p.id === f.projectId)!;
+  const memories = canonicalActiveMemories(p.memories);
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -16,6 +18,9 @@ export function policyBinding(w: Workspace, f: Feature) {
           requiredChecks: p.requiredChecks,
           ownerId: p.ownerId,
           profile: p.executionProfile,
+          // Leave legacy empty projects byte-for-byte compatible with their
+          // existing approvals; non-empty memories are deliberately binding.
+          ...(memories.length ? { memories } : {}),
         },
         dependencies: f.dependencies,
         harness: p.workflow

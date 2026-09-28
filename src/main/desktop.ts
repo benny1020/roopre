@@ -32,9 +32,20 @@ import { authenticateOwner } from "./approval/native.ts";
 import { RunnerManager } from "../runner/manager.ts";
 import { command, git } from "../runner/process.ts";
 import { trustedRenderer } from "./security.ts";
+import { ConversationService } from "./conversations/service.ts";
+import { interruptPendingConversations } from "../database/conversations.ts";
+import {
+  conversationScopeSchema,
+  sendTurnSchema,
+  listTurnsSchema,
+  cancelTurnSchema,
+  deleteThreadSchema,
+  resetSummarySchema,
+} from "../shared/conversations.ts";
 export async function installDesktop() {
   let store: Store | undefined;
   let runner: RunnerManager | undefined;
+  let conversations: ConversationService | undefined;
   let closing = false;
   let refining = false;
   let migrationCleanup: Promise<void> | undefined;
@@ -65,6 +76,7 @@ export async function installDesktop() {
     );
     try {
       await next.init();
+      await interruptPendingConversations(next.pool, next.key);
       if (closing) throw Error("앱 종료 중입니다.");
       await nextRunner.init();
     } catch (error) {
@@ -74,6 +86,7 @@ export async function installDesktop() {
     }
     store = next;
     runner = nextRunner;
+    conversations = new ConversationService(next, vault);
   };
   const bootstrap = new Bootstrap(
     join(app.getPath("userData"), "private"),
@@ -271,6 +284,7 @@ export async function installDesktop() {
             migrating = true;
             let pending: Store | undefined;
             try {
+              await conversations?.interruptAll();
               await runner!.stop();
               value = bootstrap.migrate(async (url, backup) => {
                 pending = new Store(source.key, url, "local-owner");
@@ -286,6 +300,7 @@ export async function installDesktop() {
                     join(app.getPath("userData"), "runs"),
                     app.isPackaged ? process.resourcesPath : resources,
                   );
+                  conversations = new ConversationService(next, vault);
                   if (!closing) await runner.init();
                   await source.close();
                 };
@@ -295,14 +310,20 @@ export async function installDesktop() {
                 while (bootstrap.status().busy)
                   await new Promise((r) => setTimeout(r, 100));
                 await pending?.close();
-                if (store === source && !closing) await runner!.init();
+                if (store === source && !closing) {
+                  conversations?.resumeAdmissions();
+                  await runner!.init();
+                }
                 migrating = false;
               })().catch(() => {
                 migrating = false;
               });
             } catch (e) {
               migrating = false;
-              if (!closing) await runner!.init();
+              if (!closing) {
+                conversations?.resumeAdmissions();
+                await runner!.init();
+              }
               throw e;
             }
             break;
@@ -368,6 +389,50 @@ export async function installDesktop() {
           case "snapshot":
             value = await store!.read("owner");
             break;
+          case "conversations:listThreads":
+            value = await conversations!.listThreads(
+              conversationScopeSchema.parse(payload),
+            );
+            break;
+          case "conversations:getThread":
+            value = await conversations!.getThread(
+              z.string().uuid().parse(payload),
+            );
+            break;
+          case "conversations:listTurns": {
+            const input = listTurnsSchema.parse(payload);
+            value = await conversations!.listTurns(
+              input.threadId,
+              input.beforeOrdinal,
+              input.limit,
+            );
+            break;
+          }
+          case "conversations:sendTurn":
+            value = await conversations!.send(sendTurnSchema.parse(payload));
+            break;
+          case "conversations:cancelTurn": {
+            const input = cancelTurnSchema.parse(payload);
+            value = await conversations!.cancel(input.threadId, input.turnId);
+            break;
+          }
+          case "conversations:resetSummary": {
+            const input = resetSummarySchema.parse(payload);
+            value = await conversations!.resetSummary(
+              input.threadId,
+              input.expectedRevision,
+            );
+            break;
+          }
+          case "conversations:deleteThread": {
+            const input = deleteThreadSchema.parse(payload);
+            await conversations!.deleteThread(
+              input.threadId,
+              input.deactivateDerivedMemoryIds,
+            );
+            value = null;
+            break;
+          }
           case "command": {
             const c = commandSchema.parse(payload);
             if (c.type === "save_agent" && c.agent.connectionId) {
@@ -535,9 +600,17 @@ export async function installDesktop() {
           error:
             e instanceof z.ZodError
               ? "입력 형식을 확인하세요."
-              : e instanceof Error
-                ? e.message
-                : "요청을 처리하지 못했습니다.",
+              : operation.startsWith("conversations:") &&
+                  !(
+                    e instanceof Error &&
+                    /^(프로젝트|이 프로젝트|이 에이전트|보관된|선택한|에이전트 연결|검증된 AI|다른 워크스페이스|대화가|동시에 상담|이미 사용|삭제된 대화|대화 저장 공간|필수 상담 맥락|진행 중인 상담|중지할 파생 기억|대기·실행)/.test(
+                      e.message,
+                    )
+                  )
+                ? "상담 요청을 처리하지 못했습니다. 입력은 유지됩니다."
+                : e instanceof Error
+                  ? e.message
+                  : "요청을 처리하지 못했습니다.",
         };
       }
     },
@@ -551,6 +624,10 @@ export async function installDesktop() {
       .then(() => restoration)
       .then(() => migrationCleanup)
       .then(() => runner?.stop())
+      .then(() => conversations?.interruptAll())
+      .catch(() => {
+        // A DB failure leaves pending rows for startup recovery; never resend.
+      })
       .finally(async () => {
         await store?.close();
         app.quit();

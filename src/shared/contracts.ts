@@ -19,6 +19,7 @@ import {
   type RuntimeDetails,
   type RuntimeStatus,
 } from "./runtime.ts";
+import { workMemorySchema, type WorkMemory } from "./memory.ts";
 
 export const sections = [
   "요구사항",
@@ -47,6 +48,8 @@ export type Project = {
   executionProfile?: ExecutionProfile;
   reviewerIds: string[];
   requiredChecks: string[];
+  // Omitted in legacy workspace rows. New writes always create this collection.
+  memories?: WorkMemory[];
 };
 export type Decision = {
   actorId: string;
@@ -163,6 +166,23 @@ export const commandSchema = z.discriminatedUnion("type", [
     profileId: z.string(),
     bindings: bindingSchema,
     source: packageSourceSchema,
+  }),
+  z.object({
+    type: z.literal("save_memory"),
+    projectId: id,
+    expectedRevision: z.number().int().nonnegative(),
+    promoteToProject: z.boolean().default(false),
+    memory: workMemorySchema.omit({
+      createdAt: true,
+      updatedAt: true,
+      authorId: true,
+    }),
+  }),
+  z.object({
+    type: z.literal("deactivate_memory"),
+    projectId: id,
+    memoryId: id,
+    expectedRevision: z.number().int().nonnegative(),
   }),
   z.object({
     type: z.literal("set_feature_scope"),

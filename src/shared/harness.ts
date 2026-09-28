@@ -1,6 +1,7 @@
 import { packageInstructions } from "./harness-package.ts";
 import { z } from "zod";
 import type { Workspace, Project } from "./contracts.ts";
+import { canonicalSourceRef, type ResolvedMemory } from "./memory.ts";
 import { stages } from "./harness-stages.ts";
 import {
   stageExecutionSchema,
@@ -52,6 +53,7 @@ export type ResolvedAgent = z.infer<typeof assignmentSchema> & {
   instructions: string;
   connectionId: string;
   connectionVersion: number;
+  memory?: ResolvedMemory[];
 };
 export type ResolvedHarness = {
   version: 1;
@@ -59,6 +61,30 @@ export type ResolvedHarness = {
   execution?: StageExecution;
   agents: ResolvedAgent[];
 };
+/**
+ * The immutable instruction block used for one assigned agent. Consultation
+ * uses the same block, without resolving the whole workflow (which could be
+ * invalid for an unrelated assignment).
+ */
+export function agentInstructionContext(
+  w: Workspace,
+  p: Project,
+  agent: AgentDefinition,
+  assignment?: z.infer<typeof assignmentSchema>,
+  scopeId?: string,
+) {
+  const policy = w.policies.at(-1);
+  const base = `${packageInstructions(p.harness, scopeId)}\n\n# 전역 v${policy?.version ?? 0}\n${policy?.global ?? ""}\n\n# 프로젝트 ${p.name}\n${p.instructions ?? ""}`;
+  if (!assignment)
+    return `${base}\n\n# 에이전트 ${agent.name} v${agent.revision}\n${agent.markdown}`;
+  const rolePolicy =
+    assignment.stage === "design" || assignment.stage === "requirements"
+      ? policy?.design
+      : assignment.stage === "implementation"
+        ? policy?.implementation
+        : policy?.reviewer;
+  return `${base}\n\n# 단계 ${stageNames[assignment.stage]}\n${rolePolicy ?? ""}\n${p.workflow?.instructions[assignment.stage] ?? ""}\n\n# 에이전트 ${agent.name} v${agent.revision}\n${agent.markdown}`;
+}
 export type AgentExecution = {
   id: string;
   assignmentId: string;
@@ -120,11 +146,11 @@ export function resolveHarness(
   w: Workspace,
   p: Project,
   scopeId?: string,
+  featureId?: string,
 ): ResolvedHarness | undefined {
   if (!p.workflow) return undefined;
   const issues = workflowIssues(w, p);
   if (issues.length) throw Error(issues.join(" "));
-  const policy = w.policies.at(-1)!;
   return {
     version: 1,
     workflowRevision: p.workflow.revision,
@@ -139,12 +165,39 @@ export function resolveHarness(
           const connectionVersion = agent.connectionId
             ? (agent.connectionVersion ?? 0)
             : (p.executionProfile?.connectionVersion ?? 0);
+          const memory: ResolvedMemory[] = (p.memories ?? [])
+            .filter(
+              (memory) =>
+                memory.active &&
+                memory.agentDefinitionId === agent.id &&
+                (!memory.featureId || memory.featureId === featureId),
+            )
+            .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+            .map((memory) => {
+              const frozen = {
+                id: memory.id,
+                agentDefinitionId: memory.agentDefinitionId,
+                featureId: memory.featureId,
+                title: memory.title,
+                body: memory.body,
+                revision: memory.revision,
+                sourceRefs: [...memory.sourceRefs].sort((a, b) =>
+                  canonicalSourceRef(a) < canonicalSourceRef(b)
+                    ? -1
+                    : canonicalSourceRef(a) > canonicalSourceRef(b)
+                      ? 1
+                      : 0,
+                ),
+              };
+              return frozen;
+            });
           return {
             ...a,
             agent: structuredClone(agent),
             connectionId,
             connectionVersion,
-            instructions: `${packageInstructions(p.harness, scopeId)}\n\n# 전역 v${policy.version}\n${policy.global}\n\n# 프로젝트 ${p.name}\n${p.instructions ?? ""}\n\n# 단계 ${stageNames[stage]}\n${stage === "design" || stage === "requirements" ? policy.design : stage === "implementation" ? policy.implementation : policy.reviewer}\n${p.workflow!.instructions[stage]}\n\n# 에이전트 ${agent.name} v${agent.revision}\n${agent.markdown}`,
+            memory,
+            instructions: agentInstructionContext(w, p, agent, a, scopeId),
           };
         }),
     ),

@@ -1,5 +1,13 @@
 # 변경 이력
 
+## 미출시 · 개별 에이전트 상담과 기억
+
+- 전역 관제 Inspector의 작업·대화·기억, 현재 에이전트와 기능별 상담 범위.
+- PostgreSQL 원문·요약·출처, 명시적 재시도와 취소, 삭제 및 DB 이전.
+- 사용자가 확인한 작업 기억의 범위·버전 관리와 실행 입력 스냅샷.
+- 기억 변경에 따른 프로젝트 설계 승인 재확인. 자동 요약은 작업 기억으로 승격하지 않음.
+- [사용 안내](docs/AGENT-CONVERSATIONS.md), [구현·검증 기록](docs/design/AGENT-CONVERSATION-MEMORY-IMPLEMENTATION.md). 실제 모델·서명·공증·App Store 검증은 별도 조건.
+
 ## 0.4.0-beta.1 · Git으로 공유하는 하네스 표준
 
 - JSON + Markdown v1 스펙, 회사/프로젝트/단계/에이전트/기능 디렉토리 구성.

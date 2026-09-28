@@ -10,8 +10,14 @@ import {
   workflowIssues,
 } from "../shared/harness.ts";
 import { policyBinding, approvalBinding } from "./runtime.ts";
+import {
+  assertMemoryMutationAllowed,
+  freezeHarnessMemory,
+  validateMemoryMutation,
+} from "./memory.ts";
 import { activeStatuses, executionProfileIssues } from "../shared/runtime.ts";
 import { createHash, randomUUID } from "node:crypto";
+import { canonicalSourceRef } from "../shared/memory.ts";
 import {
   sections,
   gate,
@@ -104,6 +110,86 @@ export function apply(
         403,
       );
       applyPackage(w, c);
+      break;
+    }
+    case "save_memory": {
+      requireThat(
+        actor.role === "admin",
+        "forbidden",
+        "관리자만 사용자 확인 작업 기억을 저장할 수 있습니다.",
+        403,
+      );
+      requireThat(
+        w.revision === c.expectedRevision,
+        "revision_conflict",
+        "상태가 변경됐습니다. 최신 기억을 확인하세요.",
+      );
+      const project = w.projects.find((item) => item.id === c.projectId);
+      requireThat(project, "not_found", "프로젝트가 없습니다.", 404);
+      assertMemoryMutationAllowed(w, project.id);
+      const existing = (project.memories ?? []).find(
+        (item) => item.id === c.memory.id,
+      );
+      requireThat(
+        (!existing && c.memory.revision === 1) ||
+          (!!existing && c.memory.revision === existing.revision + 1),
+        "revision_conflict",
+        "기억이 변경됐습니다. 최신 버전을 확인하세요.",
+      );
+      requireThat(
+        !existing ||
+          (existing.agentDefinitionId === c.memory.agentDefinitionId &&
+            existing.featureId === c.memory.featureId &&
+            existing.sourceRefs.map(canonicalSourceRef).sort().join("\n") ===
+              c.memory.sourceRefs.map(canonicalSourceRef).sort().join("\n")),
+        "memory_scope_immutable",
+        "기억의 범위와 출처는 변경할 수 없습니다.",
+      );
+      const memory = {
+        ...c.memory,
+        authorId: existing?.authorId ?? actor.id,
+        createdAt: existing?.createdAt ?? stamp,
+        updatedAt: stamp,
+      };
+      validateMemoryMutation(w, project, memory);
+      project.memories ??= [];
+      if (existing)
+        project.memories[project.memories.indexOf(existing)] = memory;
+      else project.memories.push(memory);
+      for (const feature of w.features.filter(
+        (item) => item.projectId === project.id,
+      ))
+        if (latestDesign(feature)) latestDesign(feature)!.decisions = [];
+      entityId = memory.id;
+      break;
+    }
+    case "deactivate_memory": {
+      requireThat(
+        actor.role === "admin",
+        "forbidden",
+        "관리자만 작업 기억을 중지할 수 있습니다.",
+        403,
+      );
+      requireThat(
+        w.revision === c.expectedRevision,
+        "revision_conflict",
+        "상태가 변경됐습니다. 최신 기억을 확인하세요.",
+      );
+      const project = w.projects.find((item) => item.id === c.projectId);
+      requireThat(project, "not_found", "프로젝트가 없습니다.", 404);
+      assertMemoryMutationAllowed(w, project.id);
+      const memory = (project.memories ?? []).find(
+        (item) => item.id === c.memoryId,
+      );
+      requireThat(memory, "not_found", "작업 기억이 없습니다.", 404);
+      memory.active = false;
+      memory.revision++;
+      memory.updatedAt = stamp;
+      for (const feature of w.features.filter(
+        (item) => item.projectId === project.id,
+      ))
+        if (latestDesign(feature)) latestDesign(feature)!.decisions = [];
+      entityId = memory.id;
       break;
     }
     case "set_feature_scope": {
@@ -239,7 +325,7 @@ export function apply(
         "profile_required",
         "프로젝트 실행 프로필을 먼저 설정하세요.",
       );
-      const harness = resolveHarness(w, p, f!.harnessScope);
+      const harness = resolveHarness(w, p, f!.harnessScope, f!.id);
       requireThat(
         harness?.agents.some(
           (a) => a.stage === "requirements" || a.stage === "design",
@@ -271,7 +357,7 @@ export function apply(
         runtime: {
           kind: "planning",
           draftRevision: f!.draft.revision,
-          harness,
+          harness: freezeHarnessMemory(harness!),
           agents: [],
           profile: structuredClone(p.executionProfile),
           binding: policyBinding(w, f!),
@@ -603,11 +689,15 @@ export function apply(
                   w.projects.find((p) => p.id === f!.projectId)!
                     .executionProfile!,
                 ),
-                harness: resolveHarness(
-                  w,
-                  w.projects.find((p) => p.id === f!.projectId)!,
-                  f!.harnessScope,
-                ),
+                harness: (() => {
+                  const resolved = resolveHarness(
+                    w,
+                    w.projects.find((p) => p.id === f!.projectId)!,
+                    f!.harnessScope,
+                    f!.id,
+                  );
+                  return resolved ? freezeHarnessMemory(resolved) : undefined;
+                })(),
                 agents: [],
                 binding: approvalBinding(w, f!),
                 attempt: 0,

@@ -984,6 +984,7 @@ export class RunnerManager {
         connectionId: profile.connectionId,
         connectionVersion: profile.connectionVersion,
         instructions: r.effectivePolicy,
+        memory: [],
         agent: {
           id: `default-${stage}`,
           revision: 1,

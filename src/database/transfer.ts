@@ -39,10 +39,34 @@ async function snapshot(store: Store) {
         [store.key],
       )
     ).rows;
-    if (events.length > 10000 || commands.length > 10000)
+    const threads = (
+      await client.query(
+        "SELECT * FROM conversation_threads WHERE workspace_id=$1 ORDER BY id LIMIT 10001",
+        [store.key],
+      )
+    ).rows;
+    const turns = (
+      await client.query(
+        "SELECT c.* FROM conversation_turns c JOIN conversation_threads t ON t.id=c.thread_id WHERE t.workspace_id=$1 ORDER BY c.thread_id,c.ordinal LIMIT 10001",
+        [store.key],
+      )
+    ).rows;
+    const tombstones = (
+      await client.query(
+        "SELECT * FROM conversation_tombstones WHERE workspace_id=$1 ORDER BY thread_id LIMIT 10001",
+        [store.key],
+      )
+    ).rows;
+    if (
+      events.length > 10000 ||
+      commands.length > 10000 ||
+      threads.length > 10000 ||
+      turns.length > 10000 ||
+      tombstones.length > 10000
+    )
       throw Error("자동 이전 기록 수 한도를 넘었습니다.");
     await client.query("COMMIT");
-    return { state, events, commands };
+    return { state, events, commands, threads, turns, tombstones };
   } catch (e) {
     await client.query("ROLLBACK");
     throw e;
@@ -66,6 +90,8 @@ export async function transferWorkspace(
     )
   )
     throw Error("실행을 종료하고 종료 확인 후 이전하세요.");
+  if (bundle.turns.some((t: any) => t.status === "pending"))
+    throw Error("진행 중인 상담이 있습니다. 종료된 뒤 다시 시도하세요.");
   const bytes = JSON.stringify({
     version: 1,
     workspaceId: source.key,
@@ -102,6 +128,30 @@ export async function transferWorkspace(
       )
     ).rows[0].count;
     if (count) throw Error("대상 데이터베이스에 기존 이벤트가 있습니다.");
+    const commandCount = (
+      await client.query(
+        "SELECT count(*)::int AS count FROM commands WHERE workspace_id=$1",
+        [target.key],
+      )
+    ).rows[0].count;
+    if (commandCount)
+      throw Error("대상 데이터베이스에 기존 명령 기록이 있습니다.");
+    const conversationCount = (
+      await client.query(
+        "SELECT count(*)::int AS count FROM conversation_threads WHERE workspace_id=$1",
+        [target.key],
+      )
+    ).rows[0].count;
+    if (conversationCount)
+      throw Error("대상 데이터베이스에 기존 대화가 있습니다.");
+    const tombstoneCount = (
+      await client.query(
+        "SELECT count(*)::int AS count FROM conversation_tombstones WHERE workspace_id=$1",
+        [target.key],
+      )
+    ).rows[0].count;
+    if (tombstoneCount)
+      throw Error("대상 데이터베이스에 기존 대화 삭제 기록이 있습니다.");
     await client.query("UPDATE workspaces SET state=$2 WHERE id=$1", [
       target.key,
       JSON.stringify(bundle.state),
@@ -129,6 +179,62 @@ export async function transferWorkspace(
           c.digest,
           JSON.stringify(c.command),
           JSON.stringify(c.response),
+        ],
+      );
+    for (const t of bundle.threads)
+      await client.query(
+        "INSERT INTO conversation_threads(id,workspace_id,project_id,agent_definition_id,feature_key,revision,epoch,archived,summary,summary_through,summary_sources,summary_revision,reserved_bytes,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
+        [
+          t.id,
+          t.workspace_id,
+          t.project_id,
+          t.agent_definition_id,
+          t.feature_key,
+          t.revision,
+          t.epoch,
+          t.archived,
+          t.summary,
+          t.summary_through,
+          JSON.stringify(t.summary_sources || []),
+          t.summary_revision,
+          t.reserved_bytes,
+          t.created_at,
+          t.updated_at,
+        ],
+      );
+    for (const c of bundle.turns)
+      await client.query(
+        "INSERT INTO conversation_turns(id,thread_id,ordinal,request_id,input,answer,status,input_digest,retry_of,error,warning,context_manifest,usage,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
+        [
+          c.id,
+          c.thread_id,
+          c.ordinal,
+          c.request_id,
+          c.input,
+          c.answer,
+          c.status,
+          c.input_digest,
+          c.retry_of,
+          c.error,
+          c.warning,
+          JSON.stringify(c.context_manifest),
+          c.usage ? JSON.stringify(c.usage) : null,
+          c.created_at,
+          c.updated_at,
+        ],
+      );
+    for (const tombstone of bundle.tombstones)
+      await client.query(
+        "INSERT INTO conversation_tombstones(thread_id,workspace_id,project_id,agent_definition_id,feature_key,epoch,request_digests,deleted_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+        [
+          tombstone.thread_id,
+          tombstone.workspace_id,
+          tombstone.project_id,
+          tombstone.agent_definition_id,
+          tombstone.feature_key,
+          tombstone.epoch,
+          JSON.stringify(tombstone.request_digests || []),
+          tombstone.deleted_at,
         ],
       );
     await client.query(
