@@ -59,6 +59,10 @@ test(
       );
       await git(repo, "add", ".");
       await git(repo, "commit", "-m", "fixture baseline");
+      const sourceExclude = join(repo, ".git", "info", "exclude");
+      const originalSourceExclude =
+        "# developer-local exclusion\nprivate-note\n";
+      await writeFile(sourceExclude, originalSourceExclude);
       const base = await git(repo, "rev-parse", "HEAD");
       const connectionId = randomUUID();
       const vault = {
@@ -183,6 +187,11 @@ test(
         result.status,
         "ready_for_merge",
         JSON.stringify(result, null, 2),
+      );
+      assert.equal(
+        await readFile(sourceExclude, "utf8"),
+        originalSourceExclude,
+        "a run must not overwrite the source repository's personal exclusions",
       );
       assert.equal(result.runtime!.evidence.length, 2);
       assert(result.runtime!.head);

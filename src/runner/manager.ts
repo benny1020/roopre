@@ -20,7 +20,7 @@ import {
   readdir,
   rm,
 } from "node:fs/promises";
-import { join, resolve, relative, isAbsolute } from "node:path";
+import { join, resolve } from "node:path";
 import type { Store } from "../database/store.ts";
 import type { ConnectionVault } from "../main/connections/vault.ts";
 import { activeStatuses, type Evidence } from "../shared/runtime.ts";
@@ -33,10 +33,8 @@ const occupiesSlot = (r: Run) =>
   r.runtime?.terminationConfirmed === false ||
   (activeStatuses.includes(r.status) && r.status !== "queued");
 
-async function gitPath(cwd: string, path: string) {
-  const value = await git(cwd, "rev-parse", "--git-path", path);
-  return isAbsolute(value) ? value : resolve(cwd, value);
-}
+const runnerIgnoredPaths =
+  "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n";
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
   private stopping = false;
@@ -436,10 +434,11 @@ export class RunnerManager {
         "remote.origin.pushurl",
         "no_push",
       );
-      await writeFile(
-        await gitPath(checkout, "info/exclude"),
-        "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n",
-      );
+      // info/exclude belongs to the common Git directory for linked worktrees.
+      // Keep the user repository untouched by using a run-private worktree config.
+      const exclude = join(area, "git-exclude");
+      await writeFile(exclude, runnerIgnoredPaths, { mode: 0o600 });
+      await git(checkout, "config", "--worktree", "core.excludesFile", exclude);
       await this.update(id, (r) => {
         r.runtime!.worktree = checkout;
         r.runtime!.branch = branch;
@@ -590,37 +589,28 @@ export class RunnerManager {
         connection: ReturnType<ConnectionVault["get"]>;
         token: string;
         broker?: Awaited<ReturnType<typeof startBroker>>;
-        containerGitFile?: string;
-        commonGitDir?: string;
+        gitDirectory: string;
+        // Linked worktrees have a .git file, whereas the isolated stages below
+        // have a .git directory. Only the linked worktree needs a synthetic
+        // gitfile pointing at its sanitized metadata mount.
+        gitFile?: string;
       };
-      const commonGitDir = await git(
-        profile.repositoryPath,
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-common-dir",
-      );
-      const worktreeGitDir = await git(
-        checkout,
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-dir",
-      );
-      const relativeGitDir = relative(commonGitDir, worktreeGitDir);
-      if (!relativeGitDir || relativeGitDir.startsWith(".."))
-        throw Error("격리 worktree Git 경로를 확인하지 못했습니다.");
+      // A linked worktree shares its source .git/config. Agents need Git context
+      // but must never see user remotes or credential helper settings, so mount a
+      // fresh local metadata clone with its origin removed instead.
+      const containerMetadata = join(area, "container-git");
+      await cloneStage(checkout, containerMetadata, profile.baseCommit);
       const containerGitFile = join(area, "container.git");
-      await writeFile(
-        containerGitFile,
-        `gitdir: /roopre-git/${relativeGitDir}\n`,
-        { mode: 0o600 },
-      );
+      await writeFile(containerGitFile, "gitdir: /roopre-agent-git\n", {
+        mode: 0o600,
+      });
       const mainTarget: Target = {
         names: n,
         checkout,
         connection,
         token: "",
-        containerGitFile,
-        commonGitDir,
+        gitDirectory: join(containerMetadata, ".git"),
+        gitFile: containerGitFile,
       };
       const secrets = new Set<string>([connection.key]);
       const redact = (text: string) => {
@@ -717,13 +707,13 @@ export class RunnerManager {
             "--mount",
             `type=bind,src=${target.checkout},dst=/workspace${readonly ? ",readonly" : ""}`,
             "--mount",
-            target.containerGitFile
-              ? `type=bind,src=${target.containerGitFile},dst=/workspace/.git,readonly`
-              : `type=bind,src=${join(target.checkout, ".git")},dst=/workspace/.git,readonly`,
-            ...(target.commonGitDir
+            target.gitFile
+              ? `type=bind,src=${target.gitFile},dst=/workspace/.git,readonly`
+              : `type=bind,src=${target.gitDirectory},dst=/workspace/.git,readonly`,
+            ...(target.gitFile
               ? [
                   "--mount",
-                  `type=bind,src=${target.commonGitDir},dst=/roopre-git,readonly`,
+                  `type=bind,src=${target.gitDirectory},dst=/roopre-agent-git,readonly`,
                 ]
               : []),
             "--mount",
@@ -987,12 +977,15 @@ export class RunnerManager {
               checkout: join(area, `agent-${suffix}`),
               connection: this.vault.get(assignment.connectionId),
               token: "",
+              gitDirectory: "",
             };
             workers[index] = target;
             await cloneStage(checkout, target.checkout, snapshot.commit);
-            await copyFile(
-              await gitPath(checkout, "info/exclude"),
-              await gitPath(target.checkout, "info/exclude"),
+            target.gitDirectory = join(target.checkout, ".git");
+            await writeFile(
+              join(target.checkout, ".git", "info", "exclude"),
+              runnerIgnoredPaths,
+              { mode: 0o600 },
             );
             await this.docker(
               [
@@ -1214,6 +1207,20 @@ export class RunnerManager {
         // Verify the candidate Git tree, never ignored outputs/caches left by the agent.
         await this.docker(["rm", "-f", n.container], abort.signal);
         await git(checkout, "add", "-A");
+        // A caller may have supplied an index that already includes an ignored
+        // runtime directory. Unstage those paths explicitly before clean so
+        // ignored agent output can never become verification input.
+        await git(
+          checkout,
+          "rm",
+          "--cached",
+          "-r",
+          "--ignore-unmatch",
+          ".roopre-artifacts",
+          "node_modules",
+          "test-results",
+          "playwright-report",
+        );
         await git(checkout, "clean", "-ffdx");
         await createContainer();
         await this.phase(

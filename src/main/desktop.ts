@@ -667,10 +667,8 @@ export async function installDesktop() {
               if (!existing)
                 await git(
                   worktree,
-                  "-c",
-                  `remote.origin.pushurl=${binding.remote.url}`,
                   "push",
-                  "origin",
+                  binding.remote.url,
                   `${head}:refs/heads/${branch}`,
                 );
               let delivery: NonNullable<typeof run.runtime.delivery>;
