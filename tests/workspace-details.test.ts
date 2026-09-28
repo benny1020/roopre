@@ -68,6 +68,45 @@ test("history skips removed projects and keeps project-specific settings destina
     undefined,
   );
 });
+test("portfolio history restores view and exact run selection while search replaces its current entry", () => {
+  let h: NavigationHistory = { entries: [], index: -1 };
+  const base = {
+    ...location("portfolio"),
+    portfolio: {
+      projectScope: "all",
+      query: "",
+      attentionOnly: false,
+      view: "flow" as const,
+      selectionRef: { featureId: "f", runId: "old", attempt: 1 },
+      collapsedProjectIds: ["p"],
+      scrollTop: 240,
+    },
+  };
+  h = rememberLocation(h, base);
+  h = rememberLocation(h, {
+    ...base,
+    portfolio: { ...base.portfolio, query: "payment" },
+  });
+  assert.equal(h.entries.length, 1);
+  h = rememberLocation(h, {
+    ...base,
+    portfolio: {
+      ...base.portfolio,
+      view: "roles",
+      selectionRef: { featureId: "f", runId: "current", attempt: 2 },
+    },
+  });
+  assert.equal(h.entries.length, 2);
+  assert.equal(
+    historyTarget(h, -1, () => true),
+    0,
+  );
+  assert.deepEqual(h.entries[0].portfolio?.selectionRef, {
+    featureId: "f",
+    runId: "old",
+    attempt: 1,
+  });
+});
 test("command search ranks exact titles and matches words across project and feature", () => {
   const commands = [
     { title: "Setup", meta: "결제 프로젝트" },

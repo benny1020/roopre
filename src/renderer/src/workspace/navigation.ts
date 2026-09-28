@@ -1,18 +1,40 @@
 export type WorkspaceLocation = {
   scope: string;
   selected: string | null;
+  detailRunId?: string | null;
+  detailTab?: "design" | "requirements" | "execution" | "policy";
   query: string;
   settingsContext?: { projectId: string; featureId?: string };
   runtimeSection: "connection" | "profile";
+  portfolio?: {
+    projectScope: string;
+    query: string;
+    attentionOnly: boolean;
+    view: "flow" | "roles";
+    selectionRef?: {
+      featureId: string;
+      runId?: string;
+      attempt?: number;
+      agentExecutionId?: string;
+    };
+    collapsedProjectIds: string[];
+    scrollTop: number;
+  };
 };
 export type NavigationHistory = { entries: WorkspaceLocation[]; index: number };
 const identity = (location: WorkspaceLocation) =>
   JSON.stringify([
     location.scope,
     location.selected,
+    location.detailRunId,
+    location.detailTab,
     location.settingsContext?.projectId,
     location.settingsContext?.featureId,
     location.scope === "runtime" ? location.runtimeSection : undefined,
+    location.scope === "portfolio" ? location.portfolio?.view : undefined,
+    location.scope === "portfolio"
+      ? location.portfolio?.selectionRef
+      : undefined,
   ]);
 
 export function rememberLocation(

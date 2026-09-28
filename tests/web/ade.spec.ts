@@ -96,6 +96,110 @@ test("run-specific diff rejects stale responses, checks retain attempt identity,
     ["ade-run-previous", 0],
   ]);
 });
+
+test("portfolio is read-only, separates queued work from active agents, and stays usable at 1024px", async ({
+  page,
+}) => {
+  const portfolio = adeFixture();
+  const current = portfolio.runs.at(-1)!;
+  current.status = "queued";
+  current.runtime!.costReported = false;
+  await prepare(page, portfolio);
+  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "전역 관제", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("전역 기록상 슬롯 점유 · 선택 범위 큐 1", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("선택 범위 에이전트 작업 중", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/미보고 1개 run/)).toBeVisible();
+  await page
+    .getByRole("button", { name: portfolio.features[0].title, exact: false })
+    .last()
+    .click();
+  await expect(page.getByText("현재 시도 근거", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("검사 1개 · 산출물 1개", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "역할별 운영 맵", exact: true })
+    .click();
+  await expect(
+    page.getByText("현재 실행 기록 없음", { exact: true }).first(),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 1024, height: 700 });
+  expect(
+    await page.evaluate(
+      () =>
+        (globalThis as any).document.documentElement.scrollWidth <=
+        (globalThis as any).innerWidth,
+    ),
+  ).toBe(true);
+  await axe(page);
+});
+
+test("portfolio command, view, exact historical run, and back navigation preserve context", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  state.runs[0].runtime!.agents![0].status = "running";
+  state.runs[0].runtime!.agents![0].attempt = state.runs[0].runtime!.attempt;
+  state.runs[0].runtime!.heartbeat = new Date().toISOString();
+  await prepare(page, state);
+  await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+  await page
+    .getByRole("combobox", { name: "명령과 작업 검색" })
+    .fill("전역 관제");
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "전역 관제", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "역할별 운영 맵", exact: true })
+    .click();
+  const previousAgent = page
+    .locator(".portfolio-agent")
+    .filter({ hasText: "ade-run-previous" });
+  await previousAgent.click();
+  await expect(previousAgent).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "프로젝트 흐름", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: state.features[0].title, exact: false })
+    .last()
+    .click();
+  await page.getByRole("button", { name: "기존 실행·근거 상세 보기" }).click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
+  await page.getByLabel("실행 선택").selectOption("ade-run-previous");
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
+  await page
+    .locator(".detail-tabs")
+    .getByRole("tab", { name: /설계·리뷰/ })
+    .click();
+  await page
+    .locator(".detail-tabs")
+    .getByRole("tab", { name: /실행·결과/ })
+    .click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
+  await page.keyboard.press("Meta+[");
+  await expect(
+    page.locator(".detail-tabs").getByRole("tab", { name: /설계·리뷰/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Meta+]");
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
+  await page.getByRole("button", { name: "기능 목록으로" }).click();
+  await expect(
+    page.getByRole("heading", { name: "전역 관제", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Meta+[");
+  await expect(
+    page.getByRole("heading", { name: state.features[0].title, exact: true }),
+  ).toBeVisible();
+});
 test("keyboard commands trap and restore focus, project search, no background filter mutation", async ({
   page,
 }) => {

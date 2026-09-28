@@ -17,6 +17,8 @@
 
 - v0.4 하네스 표준 import/export 구현은 `docs/design/V04-APPROVAL.md`의 사용자 지시로 승인됐다. 머지 승인은 별도다. 앱 ZIP 요청이 없으면 `pnpm check:mac`으로 동일 앱 무결성을 임시 디렉토리에서 검사한다.
 
+- 전역 관제 구현은 `docs/design/PORTFOLIO-CONTROL-CENTER-APPROVAL.md`의 사용자 설계 승인에 따른다. 고정 설계와 독립 설계 리뷰를 함께 읽는다. GPT-5.6 Terra가 구현하고 Astra가 독립 리뷰하며, PR 머지는 해당 기록의 최신 사용자 위임을 따른다. 제품 내부의 본인 설계 승인 규칙은 유지한다.
+
 ## PR 리뷰와 머지
 
 - 모든 PR 생성/수정 후 `docs/PR-REVIEW-PROCESS.md`를 따르고 `agents/pr-reviewer.md`를 읽은 별도 리뷰 전담 에이전트를 호출한다. 이 절은 전담 sub-agent 사용 지시다. 구현 담당이 자기 보고서로 대체하지 않는다.

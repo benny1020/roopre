@@ -34,6 +34,8 @@ export default function RunPanel({
   connected = true,
   onDesign,
   onSetup,
+  selectedRunId,
+  onSelectRun,
 }: {
   snapshot: Snapshot;
   feature: Feature;
@@ -41,6 +43,8 @@ export default function RunPanel({
   connected?: boolean;
   onDesign: () => void;
   onSetup: (destination: SetupDestination) => void;
+  selectedRunId?: string | null;
+  onSelectRun?: (runId: string | null) => void;
 }) {
   const runs = snapshot.runs
     .filter((r) => r.featureId === feature.id)
@@ -50,6 +54,11 @@ export default function RunPanel({
   const [selected, setSelected] = useState(
     () => localStorage.getItem(`ade:run:${feature.id}`) || "",
   );
+  useEffect(() => {
+    setSelected(
+      selectedRunId || localStorage.getItem(`ade:run:${feature.id}`) || "",
+    );
+  }, [feature.id, selectedRunId]);
   const run = runs.find((r) => r.id === selected) || current;
   const runtime = run?.runtime;
   const gate = snapshot.gates[feature.id];
@@ -174,6 +183,7 @@ export default function RunPanel({
             onChange={(e) => {
               setSelected(e.target.value);
               localStorage.setItem(`ade:run:${feature.id}`, e.target.value);
+              onSelectRun?.(e.target.value || null);
             }}
           >
             {!runs.length && <option value="">아직 실행 없음</option>}

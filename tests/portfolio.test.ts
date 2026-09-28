@@ -1,0 +1,148 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { adeFixture } from "./fixtures/ade.ts";
+import {
+  describePortfolioRun,
+  isHistoricalPortfolioRun,
+  projectPortfolio,
+} from "../src/renderer/src/workspace/portfolio-model.ts";
+
+const now = Date.parse("2026-09-28T10:00:00.000Z");
+const at = new Date(now - 1000).toISOString();
+function fixture() {
+  const snapshot = adeFixture();
+  for (const run of snapshot.runs) {
+    run.runtime!.heartbeat = at;
+    run.at = at;
+  }
+  return snapshot;
+}
+
+test("portfolio separates queue, all-run occupancy, current agents and reported cost", () => {
+  const snapshot = fixture();
+  const current = snapshot.runs.at(-1)!;
+  current.status = "queued";
+  current.runtime!.costReported = true;
+  current.runtime!.costUsd = 0;
+  const previous = snapshot.runs[0];
+  previous.status = "failed";
+  previous.runtime!.terminationConfirmed = false;
+  previous.runtime!.costReported = false;
+  const projection = projectPortfolio(snapshot, at, "", now);
+  assert.equal(projection.queued, 1);
+  assert.equal(projection.occupied, 2);
+  assert.equal(projection.activeAgents, 0);
+  assert.equal(projection.reportedCost, 0);
+  assert.equal(projection.reportedRuns, 1);
+  assert.equal(projection.unreportedRuns, 1);
+  assert.ok(
+    projection.attention.some(
+      (item) => item.reason === "termination" && item.ref.runId === previous.id,
+    ),
+  );
+});
+
+test("portfolio keeps identity and excludes cancelled, stale, or residual agents from active work", () => {
+  const snapshot = fixture();
+  const run = snapshot.runs.at(-1)!;
+  run.status = "implementing";
+  run.runtime!.agents![0].status = "running";
+  run.runtime!.agents!.push({
+    ...run.runtime!.agents![0],
+    id: "same-name-second",
+    name: run.runtime!.agents![0].name,
+  });
+  let projection = projectPortfolio(snapshot, at, "", now);
+  assert.equal(projection.agents.length, 2);
+  assert.equal(new Set(projection.agents.map((agent) => agent.key)).size, 2);
+  assert.equal(projection.activeAgents, 2);
+  run.runtime!.cancelRequested = true;
+  projection = projectPortfolio(snapshot, at, "", now);
+  assert.equal(projection.activeAgents, 0);
+  assert.ok(projection.agents.every((agent) => agent.status === "stopping"));
+  run.runtime!.cancelRequested = false;
+  run.runtime!.heartbeat = new Date(now - 31000).toISOString();
+  projection = projectPortfolio(snapshot, at, "", now);
+  assert.equal(projection.activeAgents, 0);
+  assert.ok(projection.attention.some((item) => item.reason === "stale"));
+});
+
+test("portfolio keeps the current-attempt identity when an accepted snapshot is stale", () => {
+  const snapshot = fixture();
+  const run = snapshot.runs.at(-1)!;
+  run.status = "verifying";
+  run.runtime!.agents![0].status = "running";
+  const projection = projectPortfolio(
+    snapshot,
+    new Date(now - 6000).toISOString(),
+    "",
+    now,
+  );
+  assert.equal(projection.freshness, "stale");
+  assert.equal(projection.activeAgents, 0);
+  assert.equal(projection.items[0].freshness, "stale");
+  assert.equal(projection.items[0].ref.attempt, run.runtime!.attempt);
+});
+
+test("selected queued and termination-pending runs retain the system owner", () => {
+  const snapshot = fixture();
+  const run = snapshot.runs.at(-1)!;
+  run.status = "queued";
+  assert.equal(
+    describePortfolioRun(run, snapshot.features[0], snapshot)[3],
+    "시스템",
+  );
+  run.status = "failed";
+  run.runtime!.terminationConfirmed = false;
+  assert.equal(
+    describePortfolioRun(run, snapshot.features[0], snapshot)[3],
+    "시스템",
+  );
+});
+
+test("a selected older run is historical even at its own latest attempt", () => {
+  const snapshot = fixture();
+  const old = snapshot.runs[0];
+  const latest = snapshot.runs.at(-1)!;
+  assert.notEqual(old.id, latest.id);
+  assert.equal(old.runtime!.attempt, 1);
+  assert.equal(latest.runtime!.attempt, 2);
+  assert.equal(
+    isHistoricalPortfolioRun(
+      snapshot,
+      old.featureId,
+      old,
+      old.runtime!.attempt,
+    ),
+    true,
+  );
+  assert.equal(
+    isHistoricalPortfolioRun(
+      snapshot,
+      latest.featureId,
+      latest,
+      latest.runtime!.attempt,
+    ),
+    false,
+  );
+});
+
+test("portfolio separates invalid cost reports and asks for missing live heartbeat confirmation", () => {
+  const snapshot = fixture();
+  const current = snapshot.runs.at(-1)!;
+  current.status = "implementing";
+  current.runtime!.agents![0].status = "running";
+  current.runtime!.heartbeat = undefined;
+  current.runtime!.costReported = true;
+  current.runtime!.costUsd = -1;
+  const projection = projectPortfolio(snapshot, at, "", now);
+  assert.equal(projection.invalidCostRuns, 1);
+  assert.equal(projection.reportedRuns, 1);
+  assert.equal(projection.unreportedRuns, 0);
+  assert.equal(projection.reportedCost, 0.184);
+  assert.ok(
+    projection.attention.some(
+      (item) => item.reason === "stale" && item.ref.runId === current.id,
+    ),
+  );
+});
