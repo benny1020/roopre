@@ -789,8 +789,14 @@ function InspectorTabs({
     () =>
       assignments.find(
         (assignment) =>
+          assignment.id === executionAssignmentId &&
           assignment.agentId === (defaultAgentId || agents[0]?.id),
-      )?.id || "",
+      )?.id ||
+      assignments.find(
+        (assignment) =>
+          assignment.agentId === (defaultAgentId || agents[0]?.id),
+      )?.id ||
+      "",
   );
   const [projectWide, setProjectWide] = useState(false);
   const [memorySeed, setMemorySeed] = useState<MemorySeed>();

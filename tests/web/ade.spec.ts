@@ -272,6 +272,159 @@ test("conversation scopes keep drafts and delayed replies with their selected fe
   await expect(page.getByText("늦은 A 답변", { exact: true })).toBeVisible();
 });
 
+test("execution-seat consultation keeps the selected assignment when one agent has two stages", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  const agentId = "00000000-0000-4000-8000-000000000111";
+  const requirementsAssignment = "00000000-0000-4000-8000-000000000112";
+  const designAssignment = "00000000-0000-4000-8000-000000000113";
+  state.agents = [
+    {
+      id: agentId,
+      revision: 1,
+      name: "두 단계 상담 에이전트",
+      description: "fixture",
+      capability: "read-only",
+      connectionId: "00000000-0000-4000-8000-000000000001",
+      connectionVersion: 1,
+      markdown: "fixture",
+      archived: false,
+    },
+  ];
+  state.projects[0].workflow = {
+    revision: 1,
+    instructions: {
+      requirements: "requirements fixture",
+      design: "design fixture",
+      implementation: "implementation fixture",
+      verification: "verification fixture",
+      review: "review fixture",
+    },
+    assignments: [
+      {
+        id: requirementsAssignment,
+        agentId,
+        stage: "requirements",
+        required: true,
+      },
+      {
+        id: designAssignment,
+        agentId,
+        stage: "design",
+        required: true,
+      },
+    ],
+  };
+  const run = state.runs.at(-1)!;
+  const execution = run.runtime!.agents![0];
+  run.runtime!.agents = [
+    {
+      ...execution,
+      id: "requirements-execution",
+      assignmentId: requirementsAssignment,
+      name: "두 단계 상담 에이전트",
+      stage: "requirements",
+      status: "running",
+    },
+    {
+      ...execution,
+      id: "design-execution",
+      assignmentId: designAssignment,
+      name: "두 단계 상담 에이전트",
+      stage: "design",
+      status: "running",
+    },
+  ];
+  await prepare(page, state);
+  await page.evaluate(() => {
+    const thread = {
+      id: "00000000-0000-4000-8000-000000000114",
+      revision: 1,
+      epoch: 0,
+      archived: false,
+      summary: null,
+      summaryThrough: null,
+      summaryRevision: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    (globalThis as any).__conversationInputs = [];
+    (globalThis as any).roopre.conversations = {
+      listThreads: async () => [],
+      getThread: async () => thread,
+      listTurns: async () => [],
+      sendTurn: async (input: any) => {
+        (globalThis as any).__conversationInputs.push(input);
+        return {
+          thread,
+          turn: {
+            id: "00000000-0000-4000-8000-000000000115",
+            threadId: thread.id,
+            ordinal: 1,
+            requestId: input.requestId,
+            input: input.message,
+            answer: null,
+            status: "pending",
+            retryOf: null,
+            error: null,
+            contextManifest: {
+              agentRevision: 1,
+              memories: [],
+              recentTurnIds: [],
+              searchTurnIds: [],
+              excluded: [],
+            },
+            usage: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        };
+      },
+      cancelTurn: async () => true,
+      resetSummary: async () => thread,
+      deleteThread: async () => {},
+    };
+  });
+  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await page
+    .getByRole("button", { name: "역할별 운영 맵", exact: true })
+    .click();
+  await page
+    .locator(".portfolio-role-map section")
+    .filter({ hasText: "설계" })
+    .getByRole("button")
+    .click();
+  await page.getByRole("tab", { name: "대화", exact: true }).click();
+  await expect(page.getByLabel("상담 배치")).toHaveValue(designAssignment);
+  await page.getByLabel("상담 메시지").fill("설계 문맥 질문");
+  await page.getByRole("button", { name: "질문 보내기", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (globalThis as any).__conversationInputs.length),
+    )
+    .toBe(1);
+  expect(
+    await page.evaluate(() => (globalThis as any).__conversationInputs[0]),
+  ).toMatchObject({
+    assignmentId: designAssignment,
+    execution: {
+      runId: run.id,
+      attempt: run.runtime!.attempt,
+      executionId: "design-execution",
+    },
+  });
+  await page
+    .locator(".portfolio-role-map section")
+    .filter({ hasText: "요구사항" })
+    .getByRole("button")
+    .click();
+  await page.getByRole("tab", { name: "대화", exact: true }).click();
+  await expect(page.getByLabel("상담 배치")).toHaveValue(
+    requirementsAssignment,
+  );
+});
+
 test("answer memory uses its conversation source and requires user confirmation", async ({
   page,
 }) => {

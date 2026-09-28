@@ -77,6 +77,10 @@ test("service records truncated and oversized provider bodies as failures and ig
     ];
   });
   let release!: () => void;
+  let providerEntered!: () => void;
+  const providerEnteredPromise = new Promise<void>((resolve) => {
+    providerEntered = resolve;
+  });
   let calls = 0;
   const service = new ConversationService(store, vault, async () => {
     calls++;
@@ -87,6 +91,7 @@ test("service records truncated and oversized provider bodies as failures and ig
     if (calls === 2) return new Response("x".repeat(128001));
     await new Promise<void>((resolve) => {
       release = resolve;
+      providerEntered();
     });
     return new Response(
       JSON.stringify({
@@ -114,6 +119,7 @@ test("service records truncated and oversized provider bodies as failures and ig
     requestId: randomUUID(),
     message: "cancel",
   });
+  await providerEnteredPromise;
   assert.equal(await service.cancel(late.thread.id, late.turn.id), true);
   release();
   await new Promise((r) => setTimeout(r, 20));

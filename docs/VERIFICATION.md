@@ -304,14 +304,14 @@ Orca 앱 자체, 실제 유료 모델·사람 승인, 장시간 운영·배포�
 
 검사 결과와 근거:
 
-| 검사                                       | 결과                                                                                  | 로컬 근거                                     |
-| ------------------------------------------ | ------------------------------------------------------------------------------------- | --------------------------------------------- |
-| 형식·문서·타입·Electron build·단위/DB      | 126개 통과                                                                            | `artifacts/conversation-check-final.log`      |
-| 전체 브라우저                              | 40개 통과. 상담 범위·전환·기억 수정/삭제·보관 역할, 기존 개발 흐름 포함               | `artifacts/conversation-web-final.log`        |
-| 실제 Docker 실행기                         | 4개 통과. 고정 기억 입력, 다음 실행 재사용·재시도 binding, 병렬 fan-in·기존 격리 실행 | `artifacts/conversation-runner-final.log`     |
-| 실제 프로세스/Docker/DB 복구               | 1개 통과. SIGKILL·취소·연결 상실                                                      | `artifacts/conversation-resilience-final.log` |
-| 실제 Electron main/preload/임시 PostgreSQL | 3개 통과. 상담·강제 종료 복구, 신규 온보딩, 관제 재시작                               | `artifacts/conversation-native-final.log`     |
-| macOS 앱 패키지                            | 무결성 검사 통과, ZIP 생성 없음                                                       | `artifacts/conversation-package-final.log`    |
+| 검사                                       | 결과                                                                                                     | 로컬 근거                                     |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 형식·문서·타입·Electron build·단위/DB      | 126개 통과                                                                                               | `artifacts/conversation-check-final.log`      |
+| 전체 브라우저                              | 41개 통과. 상담 범위·전환·기억 수정/삭제·보관 역할·같은 에이전트의 단계별 배치 선택, 기존 개발 흐름 포함 | `artifacts/conversation-web-final.log`        |
+| 실제 Docker 실행기                         | 4개 통과. 고정 기억 입력, 다음 실행 재사용·재시도 binding, 병렬 fan-in·기존 격리 실행                    | `artifacts/conversation-runner-final.log`     |
+| 실제 프로세스/Docker/DB 복구               | 1개 통과. SIGKILL·취소·연결 상실                                                                         | `artifacts/conversation-resilience-final.log` |
+| 실제 Electron main/preload/임시 PostgreSQL | 3개 통과. 상담·강제 종료 복구, 신규 온보딩, 관제 재시작                                                  | `artifacts/conversation-native-final.log`     |
+| macOS 앱 패키지                            | 무결성 검사 통과, ZIP 생성 없음                                                                          | `artifacts/conversation-package-final.log`    |
 
 1440px 다크 상담과 1024px 라이트 기억 편집을 직접 렌더링해 확인했다. Inspector의 내부 스크롤과 입력 영역, 출처·저장 범위·읽기 전용 안내를 점검했고, 브라우저 시나리오에서 해당 화면의 axe 검사를 수행했다. 대표 캡처는 `artifacts/conversation-dark-1440.png`, `artifacts/memory-light-1024.png`, `artifacts/conversation-native-rendered-compose.png`다. 이는 전체 접근성 인증이 아니다.
 
