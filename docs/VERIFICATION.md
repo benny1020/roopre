@@ -269,8 +269,8 @@ Orca 앱 자체, 실제 유료 모델·사람 승인, 장시간 운영·배포�
 
 전역 관제는 [승인된 설계](design/PORTFOLIO-CONTROL-CENTER-APPROVAL.md)에 따른 기존 Snapshot의 읽기 projection이다. 새 runner, IPC, DB mutation은 추가하지 않았다. 큐·점유·현재 에이전트·비용 보고 여부와 현재 시도 근거를 분리하고, 낮은 revision 응답은 관제의 채택 시각도 갱신하지 않는다.
 
-- `pnpm check`: 형식·문서·타입·빌드 및 단위/DB **102개 통과**.
-- 전용 projection 검사 **3개 통과**: queued/종료 미확인 점유, 실행 정체성·취소/오래된 heartbeat, 5초 화면 최신성을 다뤘다.
+- `pnpm check`: 형식·문서·타입·빌드 및 단위/DB **105개 통과**.
+- 전용 projection 검사 **6개 통과**: queued/종료 미확인 점유, 실행 정체성·취소/heartbeat 누락·오래된 heartbeat, 5초 화면 최신성, 과거 run/attempt, 비용 오류를 다뤘다.
 - `pnpm test:web`: **33개 통과**. 관제의 읽기 전용 경계, current attempt, 역할 정체성, 1024px/axe, 명령 팔레트, 필터·보기·과거 run 상세와 뒤로/앞으로 복원을 포함한다.
 - `pnpm test:desktop`: 기존 Electron 시작·재시작 **1개 통과**. 별도 `pnpm exec tsx --test tests/portfolio.integration.ts`도 **1개 통과**: 실제 Electron main/preload·disposable PostgreSQL에서 3프로젝트 snapshot, 전역→상세→복귀, 앱 재시작 문맥, TCP proxy DB 조회 실패·복구를 확인했다.
 - `pnpm check:mac`: 임시 Apple Silicon 앱 패키지 무결성 통과. ZIP 생성 없음이며 Developer ID/공증 검사는 아니다.
@@ -278,3 +278,7 @@ Orca 앱 자체, 실제 유료 모델·사람 승인, 장시간 운영·배포�
 독립 브라우저 점검에서 실제 렌더링을 보며 1440px 다크/1024px 라이트, 역할 선택 정체성, 상세 복귀·키보드 포커스, 멈춘 snapshot·낮은 revision 거부·실행기 연결 복구를 확인했다. 최종 흐름/역할 화면의 WCAG A/AA axe 검출은 0건이었다. 이는 전체 접근성 적합성 인증이 아니다. 점검 기록과 스크린샷은 로컬 `artifacts/portfolio-parent/`에, 실제 Electron 검사 결과는 `artifacts/portfolio-native-result.json`에 보관한다.
 
 실제 사용자 창 조작은 macOS 잠금 상태여서 수행하지 못했다. fixture와 자동 Electron 검사는 실제 모델 호출, 본인 인증, 장시간 runner 상태 또는 사용자 데이터의 관제 동작을 대체하지 않는다.
+
+후속 독립 리뷰에서 확인된 관제 회귀도 같은 renderer 소스에서 보완하고 다시 검사했다. 과거 실행 선택은 App 이력 상태까지 전달해 설계·실행 탭과 뒤로/앞으로를 거쳐도 유지하며, 선택 변경은 실행 결과의 하위 탭을 다시 초기화하지 않는다. Inspector는 selected run의 시스템/사람 담당과 feature 최신 run 대비 과거 여부, 시도 번호를 표시한다. 무효 비용은 부분 합계와 별도 오류로, heartbeat 누락은 상태 확인 항목으로 표시한다. 역할 카드 선택은 run·attempt·agent execution identity의 `aria-pressed` 상태를 사용한다.
+
+이 교정본에서 `pnpm check`는 **105개**, `pnpm test:web`는 **33개**가 통과했다. targeted browser 회귀는 과거 run 선택 → 설계/실행 왕복 → 뒤로/앞으로와 실행별 diff 탭 보존을 함께 확인했다. 로컬 stdout은 `artifacts/portfolio-parent/fix-check.log`, `fix-test-web-final.log`, `fix-targeted-web.log`에 보관한다. 이 renderer 교정 뒤의 native portfolio smoke와 macOS package 재검사는 커밋된 정확한 head에서 별도 수행한다.

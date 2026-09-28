@@ -145,6 +145,9 @@ test("portfolio command, view, exact historical run, and back navigation preserv
   page,
 }) => {
   const state = adeFixture();
+  state.runs[0].runtime!.agents![0].status = "running";
+  state.runs[0].runtime!.agents![0].attempt = state.runs[0].runtime!.attempt;
+  state.runs[0].runtime!.heartbeat = new Date().toISOString();
   await prepare(page, state);
   await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
   await page
@@ -157,6 +160,11 @@ test("portfolio command, view, exact historical run, and back navigation preserv
   await page
     .getByRole("button", { name: "역할별 운영 맵", exact: true })
     .click();
+  const previousAgent = page
+    .locator(".portfolio-agent")
+    .filter({ hasText: "ade-run-previous" });
+  await previousAgent.click();
+  await expect(previousAgent).toHaveAttribute("aria-pressed", "true");
   await page
     .getByRole("button", { name: "프로젝트 흐름", exact: true })
     .click();
@@ -166,6 +174,23 @@ test("portfolio command, view, exact historical run, and back navigation preserv
     .click();
   await page.getByRole("button", { name: "기존 실행·근거 상세 보기" }).click();
   await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
+  await page.getByLabel("실행 선택").selectOption("ade-run-previous");
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
+  await page
+    .locator(".detail-tabs")
+    .getByRole("tab", { name: /설계·리뷰/ })
+    .click();
+  await page
+    .locator(".detail-tabs")
+    .getByRole("tab", { name: /실행·결과/ })
+    .click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
+  await page.keyboard.press("Meta+[");
+  await expect(
+    page.locator(".detail-tabs").getByRole("tab", { name: /설계·리뷰/ }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Meta+]");
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
   await page.getByRole("button", { name: "기능 목록으로" }).click();
   await expect(
     page.getByRole("heading", { name: "전역 관제", exact: true }),

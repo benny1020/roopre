@@ -108,7 +108,11 @@ export const snapshotFreshness = (
   return now - at > 5000 ? "stale" : "fresh";
 };
 
-function runLabel(run: Run | undefined, feature: Feature, snapshot: Snapshot) {
+export function describePortfolioRun(
+  run: Run | undefined,
+  feature: Feature,
+  snapshot: Snapshot,
+) {
   const gate = snapshot.gates[feature.id];
   if (!gate)
     return [
@@ -202,6 +206,23 @@ function runLabel(run: Run | undefined, feature: Feature, snapshot: Snapshot) {
   return [2, "실행 기록", "실행 결과를 확인하세요", "사람"] as const;
 }
 
+/**
+ * A run can be the latest attempt of its own record while still being an older
+ * execution for the feature. Keep this identity check shared by the renderer
+ * and its regression tests so the inspector never calls that record current.
+ */
+export function isHistoricalPortfolioRun(
+  snapshot: Snapshot,
+  featureId: string,
+  run: Run,
+  attempt: number | undefined,
+) {
+  const latest = snapshot.runs
+    .filter((candidate) => candidate.featureId === featureId)
+    .at(-1);
+  return latest?.id !== run.id || attempt !== run.runtime?.attempt;
+}
+
 export function projectPortfolio(
   snapshot: Snapshot,
   acceptedAt: string | undefined,
@@ -213,7 +234,11 @@ export function projectPortfolio(
     const run = snapshot.runs
       .filter((candidate) => candidate.featureId === feature.id)
       .at(-1);
-    const [phase, label, next, owner] = runLabel(run, feature, snapshot);
+    const [phase, label, next, owner] = describePortfolioRun(
+      run,
+      feature,
+      snapshot,
+    );
     return {
       ref: {
         featureId: feature.id,
@@ -338,7 +363,7 @@ export function projectPortfolio(
         "design",
       );
     if (
-      item.run?.runtime?.heartbeat &&
+      item.run?.runtime &&
       running.has(item.run.status) &&
       heartbeatFreshness(item.run.runtime.heartbeat, now) !== "fresh"
     )

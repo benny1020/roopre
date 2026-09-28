@@ -11,6 +11,8 @@ import type { Snapshot } from "../../shared/contracts";
 import { phases } from "./workspace/presentation";
 import {
   projectPortfolio,
+  describePortfolioRun,
+  isHistoricalPortfolioRun,
   type AgentCard,
   type PortfolioItem,
   type PortfolioProjection,
@@ -187,12 +189,15 @@ export default function PortfolioOverview({
         <span>
           <strong>
             {filteredProjection.reportedRuns
-              ? `$${filteredProjection.reportedCost.toFixed(2)}${filteredProjection.unreportedRuns ? " 일부" : ""}`
+              ? `$${filteredProjection.reportedCost.toFixed(2)}${filteredProjection.unreportedRuns || filteredProjection.invalidCostRuns ? " 일부" : ""}`
               : "미보고"}
           </strong>
           <small>
             선택 범위 보고된 누적 추정 · 보고 {filteredProjection.reportedRuns}
             개 · 미보고 {filteredProjection.unreportedRuns}개 run
+            {filteredProjection.invalidCostRuns
+              ? ` · 비용 정보 오류 ${filteredProjection.invalidCostRuns}개`
+              : ""}
           </small>
         </span>
       </div>
@@ -457,6 +462,11 @@ function RoleMap({
                 <button
                   key={agent.key}
                   className={`portfolio-agent ${selected?.runId === agent.ref.runId && selected?.attempt === agent.ref.attempt && selected?.agentExecutionId === agent.ref.agentExecutionId ? "selected" : ""}`}
+                  aria-pressed={
+                    selected?.runId === agent.ref.runId &&
+                    selected?.attempt === agent.ref.attempt &&
+                    selected?.agentExecutionId === agent.ref.agentExecutionId
+                  }
                   data-portfolio-focus={`${agent.ref.featureId}:${agent.ref.runId}:${agent.ref.attempt}:${agent.ref.agentExecutionId}`}
                   onClick={() => onSelect(agent.ref)}
                 >
@@ -548,6 +558,17 @@ function Inspector({
   );
   const runtime = run?.runtime;
   const current = ref.attempt ?? runtime?.attempt;
+  const [, runLabel, nextAction, owner] = describePortfolioRun(
+    run,
+    feature,
+    snapshot,
+  );
+  const historical = isHistoricalPortfolioRun(
+    snapshot,
+    feature.id,
+    run,
+    current,
+  );
   const currentEvidence =
     runtime?.evidence.filter((e) => e.attempt === current) || [];
   const latestEvent = runtime?.events.at(-1);
@@ -566,9 +587,7 @@ function Inspector({
       <small>{project?.name} / 선택한 기능</small>
       <h2>{feature.title}</h2>
       <p className="portfolio-state">
-        {run
-          ? `${run.status === "verifying" ? "검증 중" : run.status} · ${ref.attempt !== runtime?.attempt ? "과거 실행" : "현재 실행"}`
-          : "실행 정보 없음"}
+        {runLabel} · {historical ? "과거 실행" : "현재 실행"}
       </p>
       <dl>
         <dt>다음 담당과 행동</dt>
@@ -579,12 +598,14 @@ function Inspector({
               ? `에이전트 · ${activeAgent.name} 작업 기록을 확인하세요`
               : activeAgent?.status === "stale"
                 ? "시스템 · 마지막 기록은 실행 중이나 현재 상태를 확인할 수 없습니다"
-                : "사람 · 기존 상세에서 근거와 다음 조건을 확인하세요"}
+                : `${owner} · ${nextAction}`}
         </dd>
         <dt>실행 ID</dt>
         <dd>
           <code title={run?.id}>{run?.id || "실행 정보 없음"}</code>
         </dd>
+        <dt>선택한 시도</dt>
+        <dd>시도 {current ?? "기록 없음"}</dd>
         <dt>최근 기록</dt>
         <dd>{latestEvent ? latestEvent.message : "기록 없음"}</dd>
         <dt>실행기 마지막 확인</dt>
@@ -606,7 +627,9 @@ function Inspector({
         <dt>비용</dt>
         <dd>
           {runtime?.costReported
-            ? `$${runtime.costUsd.toFixed(4)} · 보고된 누적 추정`
+            ? Number.isFinite(runtime.costUsd) && runtime.costUsd >= 0
+              ? `$${runtime.costUsd.toFixed(4)} · 보고된 누적 추정`
+              : "비용 정보 오류"
             : "비용 미보고"}
         </dd>
         <dt>현재 기록</dt>

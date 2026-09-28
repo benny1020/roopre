@@ -35,6 +35,7 @@ export default function RunPanel({
   onDesign,
   onSetup,
   selectedRunId,
+  onSelectRun,
 }: {
   snapshot: Snapshot;
   feature: Feature;
@@ -43,6 +44,7 @@ export default function RunPanel({
   onDesign: () => void;
   onSetup: (destination: SetupDestination) => void;
   selectedRunId?: string | null;
+  onSelectRun?: (runId: string | null) => void;
 }) {
   const runs = snapshot.runs
     .filter((r) => r.featureId === feature.id)
@@ -181,6 +183,7 @@ export default function RunPanel({
             onChange={(e) => {
               setSelected(e.target.value);
               localStorage.setItem(`ade:run:${feature.id}`, e.target.value);
+              onSelectRun?.(e.target.value || null);
             }}
           >
             {!runs.length && <option value="">아직 실행 없음</option>}

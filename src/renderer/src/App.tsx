@@ -708,7 +708,7 @@ export default function App() {
             </div>
           ) : feature ? (
             <FeatureView
-              key={`${feature.id}:${actor}:${detailRunId || "latest"}`}
+              key={`${feature.id}:${actor}`}
               snapshot={snapshot}
               feature={feature}
               actor={actor}
@@ -718,6 +718,7 @@ export default function App() {
               initialTab={detailTab}
               onTabChange={setDetailTab}
               detailRunId={detailRunId}
+              onSelectRun={setDetailRunId}
               onBack={() => {
                 setSelected(null);
                 requestAnimationFrame(() => {
@@ -1140,6 +1141,7 @@ function FeatureView({
   initialTab,
   onTabChange,
   detailRunId,
+  onSelectRun,
 }: {
   snapshot: Snapshot;
   feature: Feature;
@@ -1154,6 +1156,7 @@ function FeatureView({
     tab: "design" | "requirements" | "execution" | "policy",
   ) => void;
   detailRunId: string | null;
+  onSelectRun: (runId: string | null) => void;
 }) {
   const [reviewWidth, setReviewWidth] = useState(
     Math.max(280, Math.min(400, readLocal(`review-width:${f.id}`, 320))),
@@ -1876,6 +1879,7 @@ function FeatureView({
           snapshot={snapshot}
           feature={f}
           selectedRunId={detailRunId}
+          onSelectRun={onSelectRun}
           send={send}
           connected={connected}
           onDesign={() => setTab("design")}
