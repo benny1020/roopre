@@ -125,6 +125,20 @@ test(
       await expect(
         page.getByRole("heading", { name: "전역 관제", exact: true }),
       ).toBeVisible();
+      await page
+        .getByRole("button", { name: "에이전트 작업실", exact: true })
+        .click();
+      await expect(
+        page.getByText("실행 인스턴스가 있는 작업석만 표시합니다.", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByText("현재 실행 기록 없음", { exact: true }).first(),
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: "프로젝트 흐름", exact: true })
+        .click();
       await expect(
         page.getByRole("region", { name: "프로젝트 단계 관제" }),
       ).toBeVisible();

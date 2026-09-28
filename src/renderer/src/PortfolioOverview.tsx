@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { Snapshot } from "../../shared/contracts";
 import { phases } from "./workspace/presentation";
+import AgentWorkroom from "./workspace/AgentWorkroom";
 import {
   projectPortfolio,
   describePortfolioRun,
@@ -24,7 +25,7 @@ export type PortfolioViewState = {
   projectScope: string;
   query: string;
   attentionOnly: boolean;
-  view: "flow" | "roles";
+  view: "flow" | "roles" | "workroom";
   selectionRef?: PortfolioRef;
   collapsedProjectIds: string[];
   scrollTop: number;
@@ -312,6 +313,13 @@ export default function PortfolioOverview({
           >
             역할별 운영 맵
           </button>
+          <button
+            className={view === "workroom" ? "active" : ""}
+            aria-pressed={view === "workroom"}
+            onClick={() => update({ view: "workroom" })}
+          >
+            에이전트 작업실
+          </button>
         </div>
       </div>
       <div className="portfolio-layout">
@@ -328,8 +336,16 @@ export default function PortfolioOverview({
               }}
               onSelect={select}
             />
-          ) : (
+          ) : view === "roles" ? (
             <RoleMap
+              agents={projection.agents.filter((agent) =>
+                items.some((item) => item.feature.id === agent.ref.featureId),
+              )}
+              selected={selected}
+              onSelect={select}
+            />
+          ) : (
+            <AgentWorkroom
               agents={projection.agents.filter((agent) =>
                 items.some((item) => item.feature.id === agent.ref.featureId),
               )}

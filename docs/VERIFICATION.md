@@ -282,3 +282,13 @@ Orca 앱 자체, 실제 유료 모델·사람 승인, 장시간 운영·배포�
 후속 독립 리뷰에서 확인된 관제 회귀도 같은 renderer 소스에서 보완하고 다시 검사했다. 과거 실행 선택은 App 이력 상태까지 전달해 설계·실행 탭과 뒤로/앞으로를 거쳐도 유지하며, 선택 변경은 실행 결과의 하위 탭을 다시 초기화하지 않는다. Inspector는 selected run의 시스템/사람 담당과 feature 최신 run 대비 과거 여부, 시도 번호를 표시한다. 무효 비용은 부분 합계와 별도 오류로, heartbeat 누락은 상태 확인 항목으로 표시한다. 역할 카드 선택은 run·attempt·agent execution identity의 `aria-pressed` 상태를 사용한다.
 
 이 교정본에서 `pnpm check`는 **105개**, `pnpm test:web`는 **33개**가 통과했다. targeted browser 회귀는 과거 run 선택 → 설계/실행 왕복 → 뒤로/앞으로와 실행별 diff 탭 보존을 함께 확인했다. 로컬 stdout은 `artifacts/portfolio-parent/fix-check.log`, `fix-test-web-final.log`, `fix-targeted-web.log`에 보관한다. 이 renderer 교정 뒤의 native portfolio smoke와 macOS package 재검사는 커밋된 정확한 head에서 별도 수행한다.
+
+## 에이전트 작업실 — 2026-09-28
+
+전역 관제의 선택 보기로 실제 `projectPortfolio(...).agents` 카드만 역할 단계 순서대로 표시한다. 빈 역할은 한 줄 상태로 압축하며, 실행석 선택은 기존 Inspector와 run·attempt·agent execution identity를 그대로 사용한다. 예정 배치, 완료 기록, 대화, 개인 메모리와 새 실행 제어는 추가하지 않았다.
+
+- `pnpm check`: 형식·문서·타입·Electron 빌드와 단위/DB 검사 **105개 통과**. 로그: `artifacts/workroom-check.log`.
+- `pnpm test:web`: **35개 통과**. reload 뒤 작업실/정확한 선택 복원, 상세 진입·복귀 포커스, 검색으로 선택 대상이 사라질 때 Inspector 초기화, stale/stopping/residual의 비활성 색상, 1440 다크·1024 라이트 axe 검사를 포함한다. 로그: `artifacts/workroom-web.log`; 시각 확인: `artifacts/workroom-active-dark-1440.png`, `artifacts/workroom-active-light-1024.png`.
+- `pnpm exec tsx --test tests/portfolio.integration.ts`: **1개 통과**. 빌드된 Electron main/preload와 일회용 PostgreSQL schema/profile에서 작업실의 빈 역할 표시, 관제 선택·상세·복귀 및 앱 재시작 복원을 확인했다. 로그: `artifacts/workroom-native.log`.
+
+브라우저 검사는 테스트용 실행 기록으로 renderer의 상태 판정과 표시를 확인하며 production runner나 유료 모델을 호출하지 않는다. Electron 검사는 실제 main/preload와 임시 DB·프로필을 사용하지만 그 fixture에는 실제 에이전트 실행 기록이 없으므로 빈 역할 표시와 재시작만 확인한다. 대화와 개인 메모리는 설계 문서만 있고 개인 승인 전까지 구현하지 않았다. 실제 사용자 데이터, 실시간 runner, 본인 인증, 모델 호출, 장시간 운영은 이 결과로 검증됐다고 주장하지 않는다.
