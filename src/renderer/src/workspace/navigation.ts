@@ -10,7 +10,7 @@ export type WorkspaceLocation = {
     projectScope: string;
     query: string;
     attentionOnly: boolean;
-    view: "flow" | "roles";
+    view: "flow" | "roles" | "workroom";
     selectionRef?: {
       featureId: string;
       runId?: string;

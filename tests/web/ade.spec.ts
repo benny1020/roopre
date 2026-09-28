@@ -130,6 +130,17 @@ test("portfolio is read-only, separates queued work from active agents, and stay
   await expect(
     page.getByText("현재 실행 기록 없음", { exact: true }).first(),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "에이전트 작업실", exact: true })
+    .click();
+  await expect(
+    page.getByText("실행 인스턴스가 있는 작업석만 표시합니다.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("현재 실행 기록 없음", { exact: true }).first(),
+  ).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 700 });
   expect(
     await page.evaluate(
@@ -166,6 +177,44 @@ test("portfolio command, view, exact historical run, and back navigation preserv
   await previousAgent.click();
   await expect(previousAgent).toHaveAttribute("aria-pressed", "true");
   await page
+    .getByRole("button", { name: "에이전트 작업실", exact: true })
+    .click();
+  const workroomAgent = page
+    .locator(".agent-workroom-seat")
+    .filter({ hasText: "ade-run-previous" });
+  await workroomAgent.click();
+  await expect(workroomAgent).toHaveAttribute("aria-pressed", "true");
+  await page.setViewportSize({ width: 1440, height: 940 });
+  await axe(page);
+  await page.screenshot({ path: "artifacts/workroom-dark-1440.png" });
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "에이전트 작업실", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  const restoredWorkroomAgent = page
+    .locator(".agent-workroom-seat")
+    .filter({ hasText: "ade-run-previous" });
+  await expect(restoredWorkroomAgent).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("전역 기능 검색").fill("없음");
+  await expect(
+    page
+      .getByLabel("선택한 작업")
+      .getByText(
+        "기능 행 또는 실행 카드를 선택하면 상태 근거와 상세 이동을 표시합니다.",
+        { exact: true },
+      ),
+  ).toBeVisible();
+  await page.getByLabel("전역 기능 검색").fill("");
+  await restoredWorkroomAgent.click();
+  await page.getByLabel("화면 테마").selectOption("light");
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await axe(page);
+  await page.screenshot({ path: "artifacts/workroom-light-1024.png" });
+  await page.getByRole("button", { name: "기존 실행·근거 상세 보기" }).click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
+  await page.getByRole("button", { name: "기능 목록으로" }).click();
+  await expect(restoredWorkroomAgent).toBeFocused();
+  await page
     .getByRole("button", { name: "프로젝트 흐름", exact: true })
     .click();
   await page
@@ -199,6 +248,125 @@ test("portfolio command, view, exact historical run, and back navigation preserv
   await expect(
     page.getByRole("heading", { name: state.features[0].title, exact: true }),
   ).toBeVisible();
+});
+
+test("workroom labels stale, stopping and residual execution cards without active color", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  const current = state.runs.at(-1)!;
+  current.status = "implementing";
+  current.runtime!.agents![0].status = "running";
+  current.runtime!.heartbeat = new Date(Date.now() - 31_000).toISOString();
+  const previous = state.runs[0];
+  previous.runtime!.agents![0].status = "running";
+  previous.runtime!.agents![0].attempt = previous.runtime!.attempt;
+  const stopping = structuredClone(current);
+  stopping.id = "ade-run-stopping";
+  stopping.runtime!.cancelRequested = true;
+  stopping.runtime!.heartbeat = new Date().toISOString();
+  state.runs.push(stopping);
+  await prepare(page, state);
+  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await page
+    .getByRole("button", { name: "에이전트 작업실", exact: true })
+    .click();
+  await expect(page.locator(".agent-workroom-status.is-stale")).toContainText(
+    "현재 확인 불가",
+  );
+  await expect(
+    page.locator(".agent-workroom-status.is-stopping"),
+  ).toContainText("중단 요청 처리 중");
+  await expect(
+    page.locator(".agent-workroom-status.is-residual"),
+  ).toContainText("종료된 run의 잔여 기록");
+  for (const selector of [
+    ".agent-workroom-status.is-stale",
+    ".agent-workroom-status.is-stopping",
+    ".agent-workroom-status.is-residual",
+  ])
+    await expect(page.locator(selector)).not.toHaveCSS(
+      "color",
+      "rgb(122, 197, 169)",
+    );
+});
+
+test("workroom keeps several real execution desks visible across stages", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  const current = state.runs.at(-1)!;
+  current.status = "implementing";
+  current.runtime!.agents![0] = {
+    ...current.runtime!.agents![0],
+    id: "implementation-agent",
+    name: "구현 담당",
+    stage: "implementation",
+    status: "running",
+  };
+  current.runtime!.agents!.push(
+    {
+      ...current.runtime!.agents![0],
+      id: "implementation-agent-second",
+      name: "구현 병렬 A",
+    },
+    {
+      ...current.runtime!.agents![0],
+      id: "implementation-agent-third",
+      name: "구현 병렬 B",
+    },
+  );
+  current.runtime!.heartbeat = new Date().toISOString();
+  const execution = (
+    id: string,
+    featureId: string,
+    stage: "verification" | "review",
+  ) => {
+    const run = structuredClone(current);
+    run.id = id;
+    run.featureId = featureId;
+    run.status = stage === "verification" ? "verifying" : "reviewing";
+    run.runtime!.agents = [
+      {
+        ...run.runtime!.agents![0],
+        id: `${stage}-agent`,
+        name: stage === "verification" ? "검증 담당" : "독립 리뷰",
+        stage,
+      },
+    ];
+    return run;
+  };
+  state.runs.push(
+    execution("ade-run-verification", state.features[1].id, "verification"),
+    execution("ade-run-review", state.features[2].id, "review"),
+  );
+  await prepare(page, state);
+  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await page
+    .getByRole("button", { name: "에이전트 작업실", exact: true })
+    .click();
+  const desks = page.locator(".agent-workroom-seat");
+  await expect(desks).toHaveCount(5);
+  await expect(
+    page.locator(".agent-workroom-room.has-three-or-more"),
+  ).toHaveCount(1);
+  await desks.filter({ hasText: "검증 담당" }).click();
+  await expect(page.getByLabel("선택한 작업")).toContainText("검증 담당");
+  await page.setViewportSize({ width: 1440, height: 940 });
+  await page
+    .locator(".agent-workroom-heading")
+    .evaluate((element) => element.scrollIntoView());
+  await axe(page);
+  await page.screenshot({ path: "artifacts/workroom-active-dark-1440.png" });
+  await page.getByLabel("화면 테마").selectOption("light");
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page
+    .locator(".agent-workroom-heading")
+    .evaluate((element) => element.scrollIntoView());
+  await expect(desks.filter({ hasText: "구현 담당" })).toBeInViewport();
+  await expect(desks.filter({ hasText: "검증 담당" })).toBeInViewport();
+  await axe(page);
+  await page.screenshot({ path: "artifacts/workroom-active-light-1024.png" });
 });
 test("keyboard commands trap and restore focus, project search, no background filter mutation", async ({
   page,
