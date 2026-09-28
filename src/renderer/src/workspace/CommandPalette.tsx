@@ -56,6 +56,13 @@ export default function CommandPalette({
         action: () => navigate("queued"),
       },
       {
+        id: "portfolio",
+        title: "전역 관제",
+        meta: "프로젝트 흐름 · 판단할 일 · 역할별 작업",
+        icon: Activity,
+        action: () => navigate("portfolio"),
+      },
+      {
         id: "settings",
         title: "설정",
         meta: "하네스 · 에이전트 · 연결 · 지침",

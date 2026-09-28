@@ -264,3 +264,17 @@ Orca 앱 자체, 실제 유료 모델·사람 승인, 장시간 운영·배포�
 전담 리뷰의 같은 설정 화면 내 프로젝트 이력 지적을 수정했다. 이력 복원 시 설정 화면을 해당 프로젝트로 재진입시키고, 일반 프로젝트 선택은 기존 초안 처리를 유지한다. 네 화면의 A→B→뒤로/앞으로 회귀에서 선택값·프로젝트별 초안·실제 저장/불러오기 요청 대상을 확인했다. Native 창 복원 검사는 CI의 작은 화면 안에 들어가는 경계를 사용하며, 화면 밖 보정은 별도 단위 검사로 확인한다.
 
 작은 화면 CI에서 창 경계를 한 번도 바꾸지 않은 첫 종료에는 초기 계산값의 중복 제거 때문에 설정 파일을 만들지 않던 경우도 확인했다. 최초 normal 상태는 실제로 저장하고, 저장 성공 이후 값만 중복 제거하도록 수정했다. 초기 무이동 종료·종료 과정의 후속 이벤트 회귀와 실제 Electron 종료/재시작을 재확인했다.
+
+## 전역 관제 — 2026-09-28
+
+전역 관제는 [승인된 설계](design/PORTFOLIO-CONTROL-CENTER-APPROVAL.md)에 따른 기존 Snapshot의 읽기 projection이다. 새 runner, IPC, DB mutation은 추가하지 않았다. 큐·점유·현재 에이전트·비용 보고 여부와 현재 시도 근거를 분리하고, 낮은 revision 응답은 관제의 채택 시각도 갱신하지 않는다.
+
+- `pnpm check`: 형식·문서·타입·빌드 및 단위/DB **102개 통과**.
+- 전용 projection 검사 **3개 통과**: queued/종료 미확인 점유, 실행 정체성·취소/오래된 heartbeat, 5초 화면 최신성을 다뤘다.
+- `pnpm test:web`: **33개 통과**. 관제의 읽기 전용 경계, current attempt, 역할 정체성, 1024px/axe, 명령 팔레트, 필터·보기·과거 run 상세와 뒤로/앞으로 복원을 포함한다.
+- `pnpm test:desktop`: 기존 Electron 시작·재시작 **1개 통과**. 별도 `pnpm exec tsx --test tests/portfolio.integration.ts`도 **1개 통과**: 실제 Electron main/preload·disposable PostgreSQL에서 3프로젝트 snapshot, 전역→상세→복귀, 앱 재시작 문맥, TCP proxy DB 조회 실패·복구를 확인했다.
+- `pnpm check:mac`: 임시 Apple Silicon 앱 패키지 무결성 통과. ZIP 생성 없음이며 Developer ID/공증 검사는 아니다.
+
+독립 브라우저 점검에서 실제 렌더링을 보며 1440px 다크/1024px 라이트, 역할 선택 정체성, 상세 복귀·키보드 포커스, 멈춘 snapshot·낮은 revision 거부·실행기 연결 복구를 확인했다. 최종 흐름/역할 화면의 WCAG A/AA axe 검출은 0건이었다. 이는 전체 접근성 적합성 인증이 아니다. 점검 기록과 스크린샷은 로컬 `artifacts/portfolio-parent/`에, 실제 Electron 검사 결과는 `artifacts/portfolio-native-result.json`에 보관한다.
+
+실제 사용자 창 조작은 macOS 잠금 상태여서 수행하지 못했다. fixture와 자동 Electron 검사는 실제 모델 호출, 본인 인증, 장시간 runner 상태 또는 사용자 데이터의 관제 동작을 대체하지 않는다.

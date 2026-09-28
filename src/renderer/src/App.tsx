@@ -1,4 +1,5 @@
 import { useNavigationHistory } from "./workspace/useNavigationHistory";
+import type { WorkspaceLocation } from "./workspace/navigation";
 import type { SetupDestination } from "./workspace/ExecutionSetup";
 import InstructionContext from "./workspace/InstructionContext";
 import CommandPalette from "./workspace/CommandPalette";
@@ -9,6 +10,7 @@ import HarnessPanel from "./HarnessPanel";
 import RuntimeSettings from "./RuntimeSettings";
 import RunPanel from "./RunPanel";
 import RunOverview from "./RunOverview";
+import PortfolioOverview from "./PortfolioOverview";
 import { activeStatuses } from "../../shared/runtime";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -76,12 +78,23 @@ const ago = (date: string) => {
       : `${Math.floor(m / 60)}시간 전`;
 };
 type Send = (command: Command) => Promise<any>;
+type PortfolioState = NonNullable<WorkspaceLocation["portfolio"]>;
+const initialPortfolio: PortfolioState = {
+  projectScope: "all",
+  query: "",
+  attentionOnly: false,
+  view: "flow",
+  collapsedProjectIds: [],
+  scrollTop: 0,
+};
 
 export default function App() {
   const actor = "owner";
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [connected, setConnected] = useState(false);
   const [lastSync, setLastSync] = useState("");
+  const [acceptedSnapshotAt, setAcceptedSnapshotAt] = useState("");
+  const [portfolioNow, setPortfolioNow] = useState(() => Date.now());
   const [error, setError] = useState("");
   const [syncError, setSyncError] = useState("");
   const [notice, setNotice] = useState("");
@@ -90,6 +103,18 @@ export default function App() {
   const [scope, setScope] = useState(readLocal("scope", "inbox"));
   const [selected, setSelected] = useState<string | null>(
     readLocal("selected", null),
+  );
+  const [detailRunId, setDetailRunId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<
+    "design" | "requirements" | "execution" | "policy"
+  >(() =>
+    readLocal(
+      `tab:${readLocal<string | null>("selected", null) || ""}`,
+      "design",
+    ),
+  );
+  const [portfolio, setPortfolio] = useState<PortfolioState>(() =>
+    readLocal("portfolio", initialPortfolio),
   );
   const [query, setQuery] = useState("");
   const [navigationRestore, setNavigationRestore] = useState(0);
@@ -114,13 +139,22 @@ export default function App() {
     { type: string; at: string; featureId?: string }[]
   >([]);
   const currentActor = useRef(actor);
+  const acceptedRevision = useRef(-1);
+  const defaultEntryApplied = useRef(false);
+  const hadSavedLocation = useRef(
+    !!localStorage.getItem(localKey("scope")) ||
+      !!localStorage.getItem(localKey("selected")),
+  );
+  const portfolioReturnFocus = useRef<string | null>(null);
   currentActor.current = actor;
   const refresh = async (as = actor) => {
     if (window.roopre) {
       const data = await window.roopre.snapshot();
-      setSnapshot((previous) =>
-        previous && previous.revision > data.revision ? previous : data,
-      );
+      if (data.revision >= acceptedRevision.current) {
+        acceptedRevision.current = data.revision;
+        setSnapshot(data);
+        setAcceptedSnapshotAt(new Date().toISOString());
+      }
       setConnected(true);
       setSyncError("");
       setLastSync(new Date().toISOString());
@@ -133,10 +167,13 @@ export default function App() {
       throw new Error("팀 상태를 불러올 수 없습니다. API 연결을 확인하세요.");
     const data = await response.json();
     if (currentActor.current === as) {
-      setSnapshot((previous) =>
-        previous && previous.revision > data.revision ? previous : data,
-      );
-      setLastSync(new Date().toISOString());
+      if (data.revision >= acceptedRevision.current) {
+        acceptedRevision.current = data.revision;
+        setSnapshot(data);
+        const at = new Date().toISOString();
+        setLastSync(at);
+        setAcceptedSnapshotAt(at);
+      }
     }
     return data as Snapshot;
   };
@@ -207,9 +244,21 @@ export default function App() {
     };
   }, [actor]);
   useEffect(() => {
+    if (!snapshot || defaultEntryApplied.current) return;
+    defaultEntryApplied.current = true;
+    if (hadSavedLocation.current) return;
+    if (snapshot.projects.length > 1) setScope("portfolio");
+    else if (snapshot.projects.length === 1) setScope(snapshot.projects[0].id);
+  }, [snapshot]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setPortfolioNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
     saveLocal("scope", scope);
     saveLocal("selected", selected);
   }, [scope, selected]);
+  useEffect(() => saveLocal("portfolio", portfolio), [portfolio]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
@@ -287,16 +336,30 @@ export default function App() {
             .includes(query.toLowerCase())),
     ) || [];
   const navigation = useNavigationHistory(
-    { scope, selected, query, settingsContext, runtimeSection },
+    {
+      scope,
+      selected,
+      detailRunId,
+      detailTab,
+      query,
+      settingsContext,
+      runtimeSection,
+      portfolio,
+    },
     (location) => {
       // Settings own their drafts. Re-enter a history location with fresh
       // initial context without resetting forms on ordinary project changes.
       setNavigationRestore((value) => value + 1);
       setScope(location.scope);
       setSelected(location.selected);
+      setDetailRunId(location.detailRunId || null);
+      setDetailTab(location.detailTab || "design");
       setQuery(location.query);
       setSettingsContext(location.settingsContext);
       setRuntimeSection(location.runtimeSection);
+      if (location.portfolio) setPortfolio(location.portfolio);
+      if (location.scope === "portfolio" && location.portfolio?.selectionRef)
+        portfolioReturnFocus.current = `${location.portfolio.selectionRef.featureId}:${location.portfolio.selectionRef.runId || ""}:${location.portfolio.selectionRef.attempt || ""}:${location.portfolio.selectionRef.agentExecutionId || ""}`;
     },
     (location) => {
       if (!snapshot) return false;
@@ -310,12 +373,30 @@ export default function App() {
       )
         return false;
       return (
-        ["inbox", "all", "blocked", "queued", ...settingsScopes].includes(
-          location.scope,
-        ) || snapshot.projects.some((p) => p.id === location.scope)
+        [
+          "inbox",
+          "all",
+          "blocked",
+          "queued",
+          "portfolio",
+          ...settingsScopes,
+        ].includes(location.scope) ||
+        snapshot.projects.some((p) => p.id === location.scope)
       );
     },
   );
+  useEffect(() => {
+    if (scope !== "portfolio" || selected) return;
+    const target = portfolioReturnFocus.current;
+    if (!target) return;
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(
+          `[data-portfolio-focus="${CSS.escape(target)}"]`,
+        )
+        ?.focus(),
+    );
+  }, [navigationRestore, scope, selected, portfolio]);
   const navigate = (next: string) => {
     if (settingsScopes.includes(next)) {
       const projectId = feature?.projectId ?? project?.id;
@@ -445,6 +526,12 @@ export default function App() {
               icon={<PanelLeft size={17} />}
               label="전체 작업"
               onClick={() => navigate("all")}
+            />
+            <Nav
+              active={scope === "portfolio" && !selected}
+              icon={<PanelLeft size={17} />}
+              label="전역 관제"
+              onClick={() => navigate("portfolio")}
             />
             <Nav
               active={scope === "blocked" && !selected}
@@ -621,14 +708,28 @@ export default function App() {
             </div>
           ) : feature ? (
             <FeatureView
-              key={`${feature.id}:${actor}`}
+              key={`${feature.id}:${actor}:${detailRunId || "latest"}`}
               snapshot={snapshot}
               feature={feature}
               actor={actor}
               connected={connected}
               send={send}
               act={act}
-              onBack={() => setSelected(null)}
+              initialTab={detailTab}
+              onTabChange={setDetailTab}
+              detailRunId={detailRunId}
+              onBack={() => {
+                setSelected(null);
+                requestAnimationFrame(() => {
+                  const target = portfolioReturnFocus.current;
+                  if (!target) return;
+                  document
+                    .querySelector<HTMLElement>(
+                      `[data-portfolio-focus="${CSS.escape(target)}"]`,
+                    )
+                    ?.focus();
+                });
+              }}
               onSetup={openSetup}
             />
           ) : scope === "queued" && window.roopre ? (
@@ -637,7 +738,31 @@ export default function App() {
               onSelect={(id, runId) => {
                 localStorage.setItem(`ade:run:${id}`, runId);
                 saveLocal(`tab:${id}`, "execution");
+                setDetailRunId(runId);
+                setDetailTab("execution");
                 setSelected(id);
+              }}
+            />
+          ) : scope === "portfolio" ? (
+            <PortfolioOverview
+              snapshot={snapshot}
+              acceptedAt={acceptedSnapshotAt}
+              fetchError={syncError}
+              now={portfolioNow}
+              state={portfolio}
+              onStateChange={setPortfolio}
+              onOpen={(ref, destination) => {
+                if (!ref.featureId) return;
+                portfolioReturnFocus.current = `${ref.featureId}:${ref.runId || ""}:${ref.attempt || ""}:${ref.agentExecutionId || ""}`;
+                if (ref.runId)
+                  localStorage.setItem(`ade:run:${ref.featureId}`, ref.runId);
+                saveLocal(
+                  `tab:${ref.featureId}`,
+                  destination === "design" ? "design" : "execution",
+                );
+                setDetailRunId(ref.runId || null);
+                setDetailTab(destination === "design" ? "design" : "execution");
+                setSelected(ref.featureId);
               }}
             />
           ) : scope === "harness" ? (
@@ -1012,6 +1137,9 @@ function FeatureView({
   act,
   onBack,
   onSetup,
+  initialTab,
+  onTabChange,
+  detailRunId,
 }: {
   snapshot: Snapshot;
   feature: Feature;
@@ -1021,6 +1149,11 @@ function FeatureView({
   act: (fn: () => Promise<any>, success?: string) => Promise<void>;
   onBack: () => void;
   onSetup: (destination: SetupDestination) => void;
+  initialTab: "design" | "requirements" | "execution" | "policy";
+  onTabChange: (
+    tab: "design" | "requirements" | "execution" | "policy",
+  ) => void;
+  detailRunId: string | null;
 }) {
   const [reviewWidth, setReviewWidth] = useState(
     Math.max(280, Math.min(400, readLocal(`review-width:${f.id}`, 320))),
@@ -1034,7 +1167,13 @@ function FeatureView({
   const editable =
     f.authorId === actor ||
     snapshot.people.find((p) => p.id === actor)?.role === "admin";
-  const [tab, setTab] = useState(readLocal(`tab:${f.id}`, "design"));
+  const initialTabValue = useRef(initialTab);
+  const [tab, setTab] = useState(() => readLocal(`tab:${f.id}`, initialTab));
+  useEffect(() => {
+    if (initialTabValue.current === initialTab) return;
+    initialTabValue.current = initialTab;
+    setTab(initialTab);
+  }, [initialTab]);
   const [edit, setEdit] = useState(!latest);
   const draftKey = `draft:${f.id}:${actor}`;
   const [draft, setDraft] = useState(() =>
@@ -1198,7 +1337,10 @@ function FeatureView({
         className="detail-tabs"
         label="기능 정보"
         value={tab}
-        onChange={setTab}
+        onChange={(next) => {
+          setTab(next as typeof tab);
+          onTabChange(next as typeof tab);
+        }}
         items={[
           {
             id: "design",
@@ -1733,6 +1875,7 @@ function FeatureView({
         <RunPanel
           snapshot={snapshot}
           feature={f}
+          selectedRunId={detailRunId}
           send={send}
           connected={connected}
           onDesign={() => setTab("design")}
