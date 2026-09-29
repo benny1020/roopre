@@ -304,10 +304,14 @@ test("execution profile edits survive periodic refresh and overview explains cap
     fullPage: true,
     animations: "disabled",
   });
+  await page.getByLabel("전체 동시 실행", { exact: true }).fill("4");
+  await page.getByLabel("프로젝트당 동시 실행", { exact: true }).fill("2");
+  await page.getByLabel("단계 안 병렬 에이전트", { exact: true }).fill("2");
+  await page
+    .getByRole("button", { name: "동시 실행 정책 저장", exact: true })
+    .click();
   await page.getByRole("button", { name: /^실행 현황/ }).click();
-  await expect(
-    page.getByText("프로젝트 간 최대 2개 동시 실행", { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText("전체 최대 4개", { exact: false })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "아직 실행한 작업이 없습니다" }),
   ).toBeVisible();

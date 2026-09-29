@@ -7,7 +7,13 @@ import { join } from "node:path";
 import { seed, ownerFixture } from "./fixtures/workspace.ts";
 import { apply } from "../src/domain/index.ts";
 import { approvalBinding } from "../src/domain/runtime.ts";
-import { sections, gate, type Workspace } from "../src/shared/contracts.ts";
+import {
+  commandSchema,
+  sections,
+  gate,
+  type Workspace,
+} from "../src/shared/contracts.ts";
+import { defaultExecutionCapacity } from "../src/shared/runtime.ts";
 import {
   ConnectionVault,
   validateEndpoint,
@@ -83,8 +89,52 @@ test("owner approval requires a native proof tied to current immutable contract"
     designId: review.designId,
   });
   assert.equal(w.runs[0].runtime!.profile.budgetUsd, 2);
+  assert.deepEqual(w.runs[0].runtime!.capacity, defaultExecutionCapacity);
   apply(w, "jun", { ...review, decision: "withdraw" });
   assert.equal(w.runs[0].status, "blocked");
+});
+test("owner configures bounded execution capacity and each run snapshots stage fan-out", () => {
+  const { w, f, review } = fixture();
+  const capacity = {
+    maxConcurrentRuns: 4,
+    maxConcurrentRunsPerProject: 2,
+    maxAgentsPerStage: 2,
+  };
+  assert.throws(
+    () =>
+      apply(w, "agent", {
+        type: "configure_execution_capacity",
+        expectedRevision: w.revision,
+        capacity,
+      }),
+    /에이전트는 사람의 승인·정책·실행 제어/,
+  );
+  apply(w, "jun", {
+    type: "configure_execution_capacity",
+    expectedRevision: w.revision,
+    capacity,
+  });
+  assert.deepEqual(w.executionCapacity, capacity);
+  assert.equal(
+    commandSchema.safeParse({
+      type: "configure_execution_capacity",
+      expectedRevision: w.revision,
+      capacity: { ...capacity, maxConcurrentRunsPerProject: 5 },
+    }).success,
+    false,
+  );
+  apply(w, "jun", review, {
+    authentication: "macos-owner",
+    binding: approvalBinding(w, f),
+  });
+  apply(w, "jun", {
+    type: "queue_run",
+    featureId: f.id,
+    designId: review.designId,
+  });
+  assert.deepEqual(w.runs[0].runtime!.capacity, capacity);
+  w.executionCapacity = { ...defaultExecutionCapacity };
+  assert.deepEqual(w.runs[0].runtime!.capacity, capacity);
 });
 test("profile mutation cannot reuse authenticated approval, or weaken required checks", () => {
   const { w, f, review } = fixture();
@@ -489,6 +539,10 @@ test("broker forwards stream and host credential while redacting gateway failure
 
 test("an unconfirmed prior container occupies the project slot even after failure", async () => {
   const { w, f, review } = fixture();
+  w.executionCapacity = {
+    ...defaultExecutionCapacity,
+    maxConcurrentRunsPerProject: 1,
+  };
   apply(w, "jun", review, {
     authentication: "macos-owner",
     binding: approvalBinding(w, f),
@@ -522,8 +576,12 @@ test("an unconfirmed prior container occupies the project slot even after failur
   assert.equal(queued.runtime?.lease, undefined);
 });
 
-test("scheduler skips an occupied project's queue so another project can use the free slot", async () => {
+test("scheduler skips an occupied project's queue when its project limit is one", async () => {
   const { w, f, review } = fixture();
+  w.executionCapacity = {
+    ...defaultExecutionCapacity,
+    maxConcurrentRunsPerProject: 1,
+  };
   apply(w, "jun", review, {
     authentication: "macos-owner",
     binding: approvalBinding(w, f),
@@ -566,6 +624,96 @@ test("scheduler skips an occupied project's queue so another project can use the
   };
   await (runner as unknown as { tick: () => Promise<void> }).tick();
   assert.deepEqual(selected, [otherRun.id]);
+  await runner.stop();
+});
+
+test("scheduler permits a second isolated feature in the same project by default", async () => {
+  const { w, f, review } = fixture();
+  apply(w, "jun", review, {
+    authentication: "macos-owner",
+    binding: approvalBinding(w, f),
+  });
+  apply(w, "jun", {
+    type: "queue_run",
+    featureId: f.id,
+    designId: review.designId,
+  });
+  const queued = w.runs[0];
+  const occupied = structuredClone(queued);
+  occupied.id = "run-aaaaaaaa-cccc";
+  occupied.status = "blocked";
+  occupied.runtime!.terminationConfirmed = false;
+  w.runs.push(occupied);
+  const store = {
+    read: async () => w,
+    mutate: async (fn: (w: Workspace) => void) => fn(w),
+  } as unknown as Store;
+  const runner = new RunnerManager(
+    store,
+    {} as ConnectionVault,
+    "/unused",
+    "/unused",
+  );
+  runner.cleanup = async () => {
+    throw Error("Prior container remains unavailable");
+  };
+  const selected: string[] = [];
+  runner.execute = async (id) => {
+    selected.push(id);
+  };
+  await (runner as unknown as { tick: () => Promise<void> }).tick();
+  assert.deepEqual(selected, [queued.id]);
+  await runner.stop();
+});
+
+test("scheduler round-robins queued projects before taking another project run", async () => {
+  const { w, f, review } = fixture();
+  apply(w, "jun", review, {
+    authentication: "macos-owner",
+    binding: approvalBinding(w, f),
+  });
+  apply(w, "jun", {
+    type: "queue_run",
+    featureId: f.id,
+    designId: review.designId,
+  });
+  const first = w.runs[0];
+  for (const [projectId, featureId, runId] of [
+    ["second-project", "second-feature", "run-aaaaaaaa-dddd"],
+    ["third-project", "third-feature", "run-aaaaaaaa-eeee"],
+  ]) {
+    const feature = structuredClone(f);
+    feature.id = featureId;
+    feature.projectId = projectId;
+    w.features.push(feature);
+    const run = structuredClone(first);
+    run.id = runId;
+    run.featureId = featureId;
+    w.runs.push(run);
+  }
+  const store = {
+    read: async () => w,
+    mutate: async (fn: (w: Workspace) => void) => fn(w),
+  } as unknown as Store;
+  const runner = new RunnerManager(
+    store,
+    {} as ConnectionVault,
+    "/unused",
+    "/unused",
+  );
+  runner.cleanup = async () => undefined;
+  const selected: string[] = [];
+  runner.execute = async (id) => {
+    selected.push(id);
+  };
+  await (runner as unknown as { tick: () => Promise<void> }).tick();
+  await (runner as unknown as { tick: () => Promise<void> }).tick();
+  await (runner as unknown as { tick: () => Promise<void> }).tick();
+  assert.deepEqual(selected, [
+    first.id,
+    "run-aaaaaaaa-dddd",
+    "run-aaaaaaaa-eeee",
+  ]);
   await runner.stop();
 });
 

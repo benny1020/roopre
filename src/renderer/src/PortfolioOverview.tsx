@@ -8,6 +8,7 @@ import {
   Search,
 } from "lucide-react";
 import type { Snapshot } from "../../shared/contracts";
+import { executionCapacityOf } from "../../shared/runtime";
 import { latestAgents } from "../../shared/harness";
 import { phases } from "./workspace/presentation";
 import AgentWorkroom from "./workspace/AgentWorkroom";
@@ -50,6 +51,7 @@ export default function PortfolioOverview({
   state: PortfolioViewState;
   onStateChange: (state: PortfolioViewState) => void;
 }) {
+  const capacity = executionCapacityOf(snapshot.executionCapacity);
   const {
     projectScope,
     query,
@@ -177,7 +179,9 @@ export default function PortfolioOverview({
       )}
       <div className="portfolio-summary" aria-label="전역 상태 요약">
         <span>
-          <strong>{projection.occupied}/2</strong>
+          <strong>
+            {projection.occupied}/{capacity.maxConcurrentRuns}
+          </strong>
           <small>
             전역 기록상 슬롯 점유 · 선택 범위 큐 {filteredProjection.queued}
           </small>

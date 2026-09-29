@@ -17,8 +17,7 @@ import MarkdownPreview from "./MarkdownPreview";
 import WorkflowEditor from "./workspace/WorkflowEditor";
 import { Dialog } from "./workspace/Controls";
 import type { Stage } from "./workspace/WorkflowGraph";
-import { activeStatuses } from "../../shared/runtime";
-import { stageConcurrency } from "../../shared/stage-execution";
+import { activeStatuses, executionCapacityOf } from "../../shared/runtime";
 const instructions = {
   requirements: "",
   design: "",
@@ -45,6 +44,7 @@ export default function HarnessPanel({
       : (snapshot.projects[0]?.id ?? ""),
   );
   const project = snapshot.projects.find((p) => p.id === projectId);
+  const capacity = executionCapacityOf(snapshot.executionCapacity);
   const [pendingStage, setPendingStage] = useState<Stage>();
   const [editing, setEditing] = useState<AgentDefinition>();
   const draftKey = (id: string) => `roopre:flow-draft:${snapshot.teamId}:${id}`;
@@ -547,11 +547,11 @@ export default function HarnessPanel({
             <details className="workflow-policy-hint">
               <summary>병렬 실행과 승인 규칙</summary>{" "}
               <p className="muted">
-                단계 안에서는 기본 병렬로 최대 {stageConcurrency}개씩 실행하며,
-                모두 끝나면 다음 단계로 넘어갑니다. 이전 에이전트 결과가 필요한
-                단계는 순차를 선택하세요. 구현 파일이 겹치면 통합을 중단하고
-                결과를 보존합니다. 실행 방식을 저장하면 설계를 재승인해야
-                합니다.
+                단계 안에서는 기본 병렬로 최대 {capacity.maxAgentsPerStage}개씩
+                실행하며, 모두 끝나면 다음 단계로 넘어갑니다. 이전 에이전트
+                결과가 필요한 단계는 순차를 선택하세요. 구현 파일이 겹치면
+                통합을 중단하고 결과를 보존합니다. 실행 방식을 저장하면 설계를
+                재승인해야 합니다.
               </p>
             </details>
             <div className="workflow-savebar">

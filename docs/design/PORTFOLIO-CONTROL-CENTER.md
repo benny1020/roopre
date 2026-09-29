@@ -32,7 +32,7 @@
 - `src/shared/contracts.ts`: Snapshot은 projects/features/runs/gates와 revision/sequence/runnerConnected를 제공한다. 전역 관제 전용 서버나 이벤트 스트림은 필요하지 않다.
 - `src/shared/runtime.ts`: `activeStatuses`에 queued가 포함된다. 이 배열 길이를 실제 실행 수로 사용하지 않는다. `costUsd`는 run 누적 추정이며 `costReported`는 보고값 존재 여부다.
 - `src/shared/harness.ts`: 정의/배치와 `AgentExecution`은 다르다. 실행에는 id, assignmentId, revision, stage, model, attempt, startedAt/endedAt이 있다.
-- `src/runner/manager.ts`: 전역 2개 run, 프로젝트당 1개 run이 점유 한도다. 단계 내부 최대 3개 작업은 별도 한도이며 순차 단계에는 1개씩 실행된다. 종료 미확인 run은 점유를 유지한다.
+- `src/runner/manager.ts`: 실행 한도는 워크스페이스 정책으로 관리한다. 기본값은 전역 3개 run, 프로젝트당 2개 run, 단계 내부 3개 작업이며 순차 단계에는 1개씩 실행된다. 종료 미확인 run은 점유를 유지한다.
 - `src/renderer/src/App.tsx`: 기존 약 1초 순차 snapshot 조회를 재사용한다. 보기마다 추가 polling을 만들지 않는다. revision 역행 거부와 설정 문맥 복원을 보존한다.
 - `workspace/navigation.ts`, `useNavigationHistory.ts`: scope/selected/query/settingsContext/runtimeSection과 뒤로/앞으로 이력을 확장한다. 단순히 새 페이지로 보내고 기존 문맥을 초기화하지 않는다.
 
@@ -61,7 +61,7 @@
 | 에이전트 작업 중 | 현재 attempt의 status=running인 AgentExecution, 부모 run도 non-queued active이며 cancelRequested가 아니고 조회·heartbeat 최신일 때만 실제 활성 표시 |
 | 역할 정의/배치   | 별도 참고 숫자로만 제공. 에이전트 작업 중 수와 합산하지 않음                                                                                        |
 
-run 점유와 에이전트 수는 다른 분모다. `기록상 슬롯 점유 2/2 · 큐 1 · 에이전트 작업 중 4`처럼 표시한다. 프로젝트에는 `동시 run 1개`, 단계 상세에는 `최대 3개 / 순차면 1개`를 설명한다. 필터된 결과의 수치는 `선택 범위`로 표시하고 전역 점유 2의 분모를 프로젝트 필터에 따라 바꾸지 않는다. 2를 초과하는 기록이 발견되면 잘라내지 않고 불일치로 표시한다.
+run 점유와 에이전트 수는 다른 분모다. `기록상 슬롯 점유 2/3 · 큐 1 · 에이전트 작업 중 4`처럼 현재 실행 정책의 전역 한도를 함께 표시한다. 프로젝트에는 `동시 run 최대 2개`, 단계 상세에는 `최대 3개 / 순차면 1개`를 설명한다. 필터된 결과의 수치는 `선택 범위`로 표시하고 전역 점유의 분모를 프로젝트 필터에 따라 바꾸지 않는다. 한도를 초과하는 기록이 발견되면 잘라내지 않고 불일치로 표시한다.
 
 runner는 메모리 `active` Map도 점유에 포함하므로 snapshot만으로 순간 점유를 완전히 알 수 없다. 따라서 `남은 슬롯이 있으니 실행 가능`이라는 보증, 확정 큐 순위, 시작 예정 시각은 제공하지 않는다. 큐 이유는 동일 프로젝트 점유/전역 한도와 일치할 때 `기록상 … 대기`로 설명하고 나머지는 `실행기 확인 대기`로 둔다. 승인 유효성과 실제 claim은 기존 runner가 판단한다.
 
