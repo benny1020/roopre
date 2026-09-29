@@ -14,7 +14,7 @@ Orca는 Electron 코드를 `src/main`, `src/preload`, `src/renderer/src`, `src/s
 flowchart LR
   UI[React renderer] -->|한정된 IPC| Main[Electron main]
   Main --> Auth[macOS LocalAuthentication]
-  Main --> Vault[safeStorage 암호화 연결 저장]
+  Main --> Vault[safeStorage 암호화 모델·Git host 연결 저장]
   Main --> Rules[승인·정책 domain]
   Rules --> DB[(PostgreSQL)]
   Main --> Runner[로컬 실행 관리자]
@@ -38,15 +38,23 @@ PostgreSQL workspace JSONB 행 잠금으로 명령과 실행 claim을 직렬화�
 
 ## 격리와 검증 근거
 
-독립 Git clone을 사용해 원본 저장소와 `.git` 쓰기 경계를 분리한다. agent 안의 `.git`은 읽기 전용이며 호스트 home, Docker socket, API key를 마운트하지 않는다. 구현/검사/리뷰 사이 컨테이너를 교체해 이전 background 작업을 제거한다. 검사 전에 변경을 Git index에 고정하고 격리 체크아웃의 미추적/ignored 파일을 정리해 에이전트가 남긴 빌드 결과나 캐시에 기대어 통과하지 않게 한다. 원본 저장소와 별도 보존 산출물은 정리 대상이 아니다. 리뷰에서는 체크아웃 전체가 읽기 전용이다.
+모든 기능 실행은 고정 base commit에서 `feature/run/attempt` 정체성으로 만든 별도 Git worktree와 branch를 소유한다. 원본 저장소의 working tree에는 쓰지 않는다. 같은 feature의 활성 쓰기는 하나만 허용하고, 다른 feature는 각자 worktree에서 병렬로 실행한다. agent 안의 `.git`과 공통 Git directory는 읽기 전용이며 host home, Docker socket, API key를 마운트하지 않는다. worktree의 `pushurl`은 실행 중 무효값으로 고정해 agent가 원격 전달을 수행하지 못하게 한다. 구현/검사/리뷰 사이 컨테이너를 교체해 이전 background 작업을 제거한다. 검사 전에 변경을 Git index에 고정하고 격리 checkout의 미추적/ignored 파일을 정리해 에이전트가 남긴 빌드 결과나 캐시에 기대어 통과하지 않게 한다. 원본 저장소와 별도 보존 산출물은 정리 대상이 아니다. 리뷰에서는 checkout 전체가 읽기 전용이다.
 
 agent 네트워크는 internal Docker network다. sidecar는 호스트 broker만 전달하며 broker는 실행별 토큰·모델·Messages 경로를 제한한다. 실제 key는 호스트에서 HTTPS 요청에만 붙인다. broker는 Docker 접속을 위해 임시 포트에서 listen하므로 실행 토큰 보호가 필요하다. 호스트 OS와 Docker 관리자는 신뢰 경계 안에 있다.
 
-의존성 준비는 승인한 이미지 ID와 잠금 파일을 사용하며 설치 스크립트를 비활성화한다. 준비한 node_modules는 별도 볼륨에 담아 구현·검증·리뷰 모두 읽기 전용으로 마운트한다. Vite 기본 캐시 `.vite`와 `.vite-temp`만 컨테이너마다 새 tmpfs를 사용해 구현 캐시가 검증에 이어지지 않는다. 그 밖의 node_modules 내부 캐시는 별도 경로 설정이 필요하다. 기존 테스트/설정/manifest hash를 보호하고 고정 argv 검사를 실행한다. 검사 전후 Git tree와 리뷰 후 tree가 일치해야 완료한다. AC별 AI 검토 근거도 요구하지만 그 정확성을 수학적으로 보장하지는 않는다.
+의존성 준비는 승인한 이미지 ID와 잠금 파일을 사용하며 설치 스크립트를 비활성화한다. Node 프로젝트의 준비한 node_modules는 별도 볼륨에 담아 구현·검증·리뷰 모두 읽기 전용으로 마운트한다. Java · Gradle 프로젝트는 Java 21·Gradle 8.14.5 이미지에서 root가 read-only source를 `.git` 없이 실행별 workspace volume에 복제한 뒤, unprivileged setup container가 init script와 `help` task로 compile·test runtime classpath를 해석한다. host home·API key·Git credential·Docker socket은 전달하지 않는다. 이후 각 container는 cache의 private copy만 사용한다. Vite 기본 캐시 `.vite`·`.vite-temp`과 Gradle `.gradle`·`build`는 검증 전에 새 상태로 만들며 구현 cache가 고정 검사에 이어지지 않는다. 기존 테스트/설정/manifest hash를 보호하고 고정 argv 검사를 실행한다. 검사 전후 Git tree와 리뷰 후 tree가 일치해야 완료한다. AC별 AI 검토 근거도 요구하지만 그 정확성을 수학적으로 보장하지는 않는다. [Java · Gradle 운영 기준](JAVA-GRADLE.md)을 따른다.
 
 각 시도의 검사 로그와 제한된 이미지/trace/report 산출물을 보존하고 파일 hash 확인 후 Finder에서 찾는다. HTML을 앱 권한으로 실행하지 않는다. 실패/중단 복구는 같은 승인 binding의 변경만 새로운 체크아웃에 적용한다. 대량 diff는 자동 검토/복구를 중단한다.
 
 병합·배포·의존 기능 자동 통합, 보관 기간 자동 정리, 장기 무진행 watchdog, 팀 인증·원격 runner는 후속 작업이다. 현재 의존 기능이 등록된 실행은 통합 확인을 요구하며 자동 진행하지 않는다.
+
+## Git host 연결과 원격 전달
+
+`shared/git-host.ts`는 secret 없는 remote/binding 계약과 HTTPS·SSH parser를 제공한다. `main/git-hosts/vault.ts`는 GitHub/GitLab token을 모델 연결 vault와 별도로 macOS `safeStorage`에 암호화해 저장한다. renderer와 export·runner contract에는 token을 넣지 않는다.
+
+GitHub.com/GitHub Enterprise와 GitLab.com/사내 GitLab은 직접 REST adapter를 사용해 사용자 조회, 저장소 확인, Draft PR/MR 생성과 SHA snapshot을 처리한다. 사내 GitLab subgroup은 보존하며 Git remote가 credential·query·fragment를 포함하면 감지·저장을 거부한다. 기타 host는 일반 Git으로 표시한다.
+
+`ready_for_merge` 상태의 결과만 사용자가 원격 전달을 선택할 수 있다. 전달 시 로컬 worktree `HEAD`, 고정 base, 원격 branch의 기존 SHA를 확인하고 fast-forward push만 한다. 기존 branch가 다른 SHA를 가리키면 중단하며 force push를 쓰지 않는다. provider 연결이 있으면 Draft PR/MR의 head/base SHA를 다시 비교해 기록한다. 이 작업은 사람의 host merge 승인, branch protection, pipeline 통과를 대체하지 않는다.
 
 ## 기존 폴더에서의 이전
 

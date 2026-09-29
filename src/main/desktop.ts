@@ -26,13 +26,20 @@ import { z } from "zod";
 import { Store } from "../database/store.ts";
 import { commandSchema } from "../shared/contracts.ts";
 import { profileSchema, connectionInputSchema } from "../shared/runtime.ts";
+import {
+  gitHostConnectionInputSchema,
+  parseGitRemote,
+} from "../shared/git-host.ts";
 import { approvalBinding } from "../domain/runtime.ts";
 import { ConnectionVault } from "./connections/vault.ts";
+import { GitHostVault } from "./git-hosts/vault.ts";
+import { GitHostAdapter } from "./git-hosts/adapter.ts";
 import { authenticateOwner } from "./approval/native.ts";
 import { RunnerManager } from "../runner/manager.ts";
 import { command, git } from "../runner/process.ts";
 import { trustedRenderer } from "./security.ts";
 import { ConversationService } from "./conversations/service.ts";
+import { detectRepositoryRuntime } from "./project-runtime.ts";
 import { interruptPendingConversations } from "../database/conversations.ts";
 import {
   conversationScopeSchema,
@@ -65,6 +72,18 @@ export async function installDesktop() {
     },
   );
   await vault.init();
+  const gitHostVault = new GitHostVault(
+    join(app.getPath("userData"), "private", "git-host-connections.json"),
+    {
+      encrypt: (s) => {
+        if (!safeStorage.isEncryptionAvailable())
+          throw Error("macOS 비밀 저장 기능을 사용할 수 없습니다.");
+        return safeStorage.encryptString(s);
+      },
+      decrypt: (b) => safeStorage.decryptString(b),
+    },
+  );
+  await gitHostVault.init();
   const connect = async (url: string) => {
     if (store) return;
     const next = new Store("roopre-owner-v02", url, "local-owner");
@@ -109,6 +128,7 @@ export async function installDesktop() {
   const harnessLibrary = new HarnessLibrary();
   let authenticating = false;
   let migrating = false;
+  const deliveryLocks = new Set<string>();
   ipcMain.handle(
     "roopre:request",
     async (event, operation: string, payload: unknown) => {
@@ -150,10 +170,15 @@ export async function installDesktop() {
             "saveConnection",
             "removeConnection",
             "testConnection",
+            "gitHostConnections",
+            "saveGitHostConnection",
+            "removeGitHostConnection",
+            "testGitHostConnection",
             "diagnostics",
             "chooseRepository",
             "harnessCandidate",
             "harnessExport",
+            "deliverRun",
           ].includes(operation) &&
           !store
         )
@@ -480,6 +505,20 @@ export async function installDesktop() {
           case "testConnection":
             value = await vault.test(z.string().uuid().parse(payload));
             break;
+          case "gitHostConnections":
+            value = gitHostVault.list();
+            break;
+          case "saveGitHostConnection":
+            value = await gitHostVault.save(
+              gitHostConnectionInputSchema.parse(payload),
+            );
+            break;
+          case "removeGitHostConnection":
+            value = await gitHostVault.remove(z.string().uuid().parse(payload));
+            break;
+          case "testGitHostConnection":
+            value = await gitHostVault.test(z.string().uuid().parse(payload));
+            break;
           case "chooseRepository": {
             const result = await dialog.showOpenDialog(sender, {
               properties: ["openDirectory"],
@@ -494,10 +533,23 @@ export async function installDesktop() {
               "rev-parse",
               "--show-toplevel",
             );
+            const origin = await git(path, "remote", "get-url", "origin").catch(
+              () => "",
+            );
+            let remote;
+            if (origin) {
+              try {
+                remote = parseGitRemote(origin);
+              } catch {
+                // A local, credential-bearing, or otherwise unsupported remote still works locally.
+              }
+            }
             value = {
               path,
               branch: await git(path, "branch", "--show-current"),
               commit: await git(path, "rev-parse", "HEAD"),
+              ...(await detectRepositoryRuntime(path)),
+              ...(remote ? { remote } : {}),
             };
             break;
           }
@@ -511,6 +563,9 @@ export async function installDesktop() {
               "rev-parse",
               "--show-toplevel",
             );
+            p.runtime = (
+              await detectRepositoryRuntime(p.repositoryPath)
+            ).runtime;
             p.baseCommit = await git(
               p.repositoryPath,
               "rev-parse",
@@ -518,6 +573,23 @@ export async function installDesktop() {
             );
             const connection = vault.get(p.connectionId);
             p.connectionVersion = connection.info.version;
+            if (p.gitHost?.connectionId) {
+              const hostConnection = gitHostVault.get(
+                p.gitHost.connectionId,
+              ).info;
+              if (
+                hostConnection.host !== p.gitHost.remote.host ||
+                (p.gitHost.remote.kind &&
+                  hostConnection.kind !== p.gitHost.remote.kind)
+              )
+                throw Error(
+                  "Git host 연결과 저장소 remote가 일치하지 않습니다.",
+                );
+              if (hostConnection.testStatus !== "passed")
+                throw Error(
+                  "Git host 연결을 검사한 뒤 실행 프로필을 저장하세요.",
+                );
+            }
             const image = await command("docker", [
               "image",
               "inspect",
@@ -537,6 +609,137 @@ export async function installDesktop() {
             });
             break;
           }
+          case "deliverRun": {
+            const input = z
+              .object({
+                runId: z.string().min(1),
+                title: z.string().trim().min(1).max(180),
+                body: z.string().max(60000),
+              })
+              .parse(payload);
+            const workspace = await store!.read("owner");
+            const run = workspace.runs.find((item) => item.id === input.runId);
+            if (
+              !run?.runtime ||
+              run.status !== "ready_for_merge" ||
+              !run.runtime.terminationConfirmed
+            )
+              throw Error(
+                "검증과 독립 리뷰가 끝난 실행만 원격에 전달할 수 있습니다.",
+              );
+            const feature = workspace.features.find(
+              (item) => item.id === run.featureId,
+            )!;
+            const profile = run.runtime.profile;
+            const binding = profile.gitHost;
+            if (!binding)
+              throw Error(
+                "프로젝트 실행 설정에서 Git remote를 먼저 감지하세요.",
+              );
+            const lock = `${feature.projectId}:${binding.remote.host}:${run.runtime.branch}`;
+            if (deliveryLocks.has(lock))
+              throw Error("같은 원격 branch의 전달 작업이 진행 중입니다.");
+            deliveryLocks.add(lock);
+            try {
+              const worktree = run.runtime.worktree;
+              const branch = run.runtime.branch;
+              const head = run.runtime.head;
+              if (!worktree || !branch || !head)
+                throw Error("전달할 worktree·branch·commit 근거가 없습니다.");
+              if ((await git(worktree, "rev-parse", "HEAD")) !== head)
+                throw Error(
+                  "worktree head가 검증 근거와 달라졌습니다. 새 실행이 필요합니다.",
+                );
+              if (
+                (await git(worktree, "rev-parse", profile.baseBranch)) !==
+                profile.baseCommit
+              )
+                throw Error(
+                  "기준 브랜치가 변경됐습니다. 최신 base에서 다시 검증하세요.",
+                );
+              const remoteHead = await git(
+                worktree,
+                "ls-remote",
+                "--heads",
+                binding.remote.url,
+                `refs/heads/${branch}`,
+              );
+              const existing = remoteHead.trim().split(/\s+/)[0];
+              if (existing && existing !== head)
+                throw Error(
+                  "원격 branch가 다른 commit을 가리킵니다. 새 attempt branch를 사용하세요.",
+                );
+              if (!existing)
+                await git(
+                  worktree,
+                  "push",
+                  binding.remote.url,
+                  `${head}:refs/heads/${branch}`,
+                );
+              let delivery: NonNullable<typeof run.runtime.delivery>;
+              if (binding.connectionId) {
+                const connection = gitHostVault.get(binding.connectionId);
+                if (connection.info.testStatus !== "passed")
+                  throw Error("Git host 연결을 다시 검사하세요.");
+                const change = await new GitHostAdapter(
+                  connection.info,
+                  connection.token,
+                ).createDraftChange({
+                  remote: binding.remote,
+                  head: branch,
+                  base: profile.baseBranch,
+                  title: input.title,
+                  body: input.body,
+                });
+                if (
+                  change.headSha !== head ||
+                  change.baseSha !== profile.baseCommit
+                )
+                  throw Error(
+                    "Draft PR/MR의 head 또는 base SHA가 검증 근거와 다릅니다.",
+                  );
+                delivery = {
+                  provider: connection.info.kind,
+                  branch,
+                  headSha: head,
+                  baseSha: profile.baseCommit,
+                  changeId: change.id,
+                  url: change.url,
+                  deliveredAt: new Date().toISOString(),
+                };
+              } else {
+                delivery = {
+                  provider: "generic",
+                  branch,
+                  headSha: head,
+                  baseSha: profile.baseCommit,
+                  deliveredAt: new Date().toISOString(),
+                };
+              }
+              await store!.mutate((current) => {
+                const currentRun = current.runs.find(
+                  (item) => item.id === run.id,
+                );
+                if (
+                  !currentRun?.runtime ||
+                  currentRun.status !== "ready_for_merge" ||
+                  currentRun.runtime.head !== head ||
+                  currentRun.runtime.profile.baseCommit !== profile.baseCommit
+                )
+                  throw Error(
+                    "실행 계약이 변경됐습니다. 원격 전달을 다시 확인하세요.",
+                  );
+                currentRun.runtime.delivery = delivery;
+                currentRun.reason = delivery.url
+                  ? "Draft PR/MR을 만들었습니다. host의 검사와 사람 승인을 확인하세요."
+                  : "원격 branch를 게시했습니다. 이 host의 PR/MR은 외부에서 만드세요.";
+              });
+              value = { url: delivery.url, branch };
+            } finally {
+              deliveryLocks.delete(lock);
+            }
+            break;
+          }
           case "diagnostics": {
             const docker = await command(
               "docker",
@@ -545,7 +748,7 @@ export async function installDesktop() {
             ).catch(() => ({ code: 1 }));
             const image = await command(
               "docker",
-              ["image", "inspect", "roopre-runner:0.2"],
+              ["image", "inspect", "roopre-runner:0.3"],
               { timeout: 6000 },
             ).catch(() => ({ code: 1 }));
             value = {

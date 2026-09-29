@@ -1,23 +1,19 @@
 import { useEffect, useState, useRef } from "react";
 import type { Snapshot } from "../../shared/contracts";
 import {
+  defaultChecksForRuntime,
+  runnerImageForRuntime,
   standardSteps,
   type ConnectionInfo,
   type ExecutionProfile,
+  type ProjectRuntime,
 } from "../../shared/runtime";
-const defaults = [
-  {
-    name: "typecheck",
-    argv: ["pnpm", "run", "typecheck"],
-    timeoutSeconds: 120,
-  },
-  { name: "test", argv: ["pnpm", "test"], timeoutSeconds: 300 },
-  {
-    name: "e2e",
-    argv: ["pnpm", "exec", "playwright", "test"],
-    timeoutSeconds: 600,
-  },
-];
+import type {
+  GitHostConnectionInfo,
+  GitHostKind,
+  GitRemote,
+} from "../../shared/git-host";
+const defaults = defaultChecksForRuntime("node");
 export default function RuntimeSettings({
   snapshot,
   initialProjectId,
@@ -32,6 +28,7 @@ export default function RuntimeSettings({
   onSaved: () => Promise<unknown>;
 }) {
   const desktop = window.roopre;
+  const gitHostSupported = !!desktop?.gitHostConnections;
   const connectionSection = useRef<HTMLElement>(null);
   const profileSection = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -45,6 +42,9 @@ export default function RuntimeSettings({
     section?.focus({ preventScroll: true });
   }, [focusSection]);
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
+  const [gitConnections, setGitConnections] = useState<GitHostConnectionInfo[]>(
+    [],
+  );
   const [name, setName] = useState("Claude Code");
   const [endpoint, setEndpoint] = useState("https://api.anthropic.com");
   const [auth, setAuth] = useState<"api-key" | "bearer">("api-key");
@@ -60,10 +60,18 @@ export default function RuntimeSettings({
   const [path, setPath] = useState("");
   const [branch, setBranch] = useState("main");
   const [connectionId, setConnectionId] = useState("");
+  const [remote, setRemote] = useState<GitRemote>();
+  const [gitConnectionId, setGitConnectionId] = useState("");
+  const [gitName, setGitName] = useState("GitHub");
+  const [gitKind, setGitKind] = useState<GitHostKind>("github");
+  const [gitHost, setGitHost] = useState("github.com");
+  const [gitEndpoint, setGitEndpoint] = useState("https://api.github.com");
+  const [gitToken, setGitToken] = useState("");
   const [budget, setBudget] = useState("");
   const [minutes, setMinutes] = useState(60);
   const [checks, setChecks] = useState(JSON.stringify(defaults, null, 2));
   const [web, setWeb] = useState(true);
+  const [runtime, setRuntime] = useState<ProjectRuntime>("node");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -86,6 +94,11 @@ export default function RuntimeSettings({
         .connections()
         .then(setConnections)
         .catch((e) => setError(e.message));
+    if (desktop?.gitHostConnections)
+      void desktop
+        .gitHostConnections()
+        .then(setGitConnections)
+        .catch((e) => setError(e.message));
   }, []);
   useEffect(() => {
     const p = project?.executionProfile;
@@ -96,6 +109,9 @@ export default function RuntimeSettings({
     setMinutes(p?.timeoutMinutes ?? 60);
     setChecks(JSON.stringify(p?.checks ?? defaults, null, 2));
     setWeb(p?.webRequired ?? true);
+    setRuntime(p?.runtime ?? "node");
+    setRemote(p?.gitHost?.remote);
+    setGitConnectionId(p?.gitHost?.connectionId ?? "");
   }, [projectId, JSON.stringify(project?.executionProfile)]);
   return (
     <div className="content-page runtime-settings">
@@ -276,6 +292,179 @@ export default function RuntimeSettings({
             </form>
           </section>
           <section
+            className="runtime-card git-host-card"
+            aria-label="Git host 연결 설정"
+          >
+            <div className="runtime-section-heading">
+              <div>
+                <h2>Git host</h2>
+                <p>
+                  원격 저장소의 provider API 연결입니다. access token은 이 맥의
+                  암호화 저장소에만 보관합니다.
+                </p>
+              </div>
+              {remote && (
+                <span className="host-state">
+                  {remote.kind === "github"
+                    ? "GitHub"
+                    : remote.kind === "gitlab"
+                      ? "GitLab"
+                      : "일반 Git"}{" "}
+                  · {remote.host}
+                </span>
+              )}
+            </div>
+            {remote ? (
+              <p className="git-remote-line">
+                <code>
+                  {remote.namespace}/{remote.repository}
+                </code>{" "}
+                · 실행은 worktree에서 격리됩니다. 원격 게시와 Draft PR/MR 생성은
+                실행 성공 후 별도로 선택합니다.
+              </p>
+            ) : (
+              <p className="muted">
+                저장소 폴더를 선택하면 origin remote를 안전하게 감지합니다. 알
+                수 없는 host도 로컬 Git 실행은 그대로 사용할 수 있습니다.
+              </p>
+            )}
+            {!gitHostSupported && (
+              <p className="muted">
+                이 미리보기는 Git host 연결 API를 제공하지 않습니다. macOS
+                앱에서 연결을 추가할 수 있습니다.
+              </p>
+            )}
+            {gitConnections.map((connection) => (
+              <div className="connection-row" key={connection.id}>
+                <div>
+                  <strong>{connection.name}</strong>
+                  <small>
+                    {connection.kind === "github" ? "GitHub" : "GitLab"} ·{" "}
+                    {connection.host} · v{connection.version}
+                  </small>
+                  <small>{connection.diagnostic ?? "연결 검사 전"}</small>
+                </div>
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    void act(async () =>
+                      setGitConnections(
+                        await desktop.testGitHostConnection(connection.id),
+                      ),
+                    )
+                  }
+                >
+                  연결 검사
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    void act(async () => {
+                      setGitConnections(
+                        await desktop.removeGitHostConnection(connection.id),
+                      );
+                      if (gitConnectionId === connection.id)
+                        setGitConnectionId("");
+                    })
+                  }
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!desktop.saveGitHostConnection) return;
+                const input = {
+                  name: gitName,
+                  kind: gitKind,
+                  host: gitHost,
+                  endpoint: gitEndpoint,
+                  token: gitToken,
+                };
+                setGitToken("");
+                void act(async () => {
+                  const next = await desktop.saveGitHostConnection(input);
+                  setGitConnections(next);
+                  setGitConnectionId(next.at(-1)?.id ?? "");
+                  setMessage(
+                    "Git host 연결을 저장했습니다. 연결 검사를 마친 뒤 프로젝트에 연결하세요.",
+                  );
+                });
+              }}
+            >
+              <div className="runtime-grid">
+                <label className="field">
+                  연결 이름
+                  <input
+                    value={gitName}
+                    onChange={(e) => setGitName(e.target.value)}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  Provider
+                  <select
+                    value={gitKind}
+                    onChange={(e) => {
+                      const next = e.target.value as GitHostKind;
+                      setGitKind(next);
+                      setGitHost(
+                        next === "github" ? "github.com" : "gitlab.com",
+                      );
+                      setGitEndpoint(
+                        next === "github"
+                          ? "https://api.github.com"
+                          : "https://gitlab.com",
+                      );
+                    }}
+                  >
+                    <option value="github">GitHub / GitHub Enterprise</option>
+                    <option value="gitlab">GitLab / 사내 GitLab</option>
+                  </select>
+                </label>
+                <label className="field">
+                  Web host
+                  <input
+                    value={gitHost}
+                    onChange={(e) => setGitHost(e.target.value)}
+                    placeholder="gitlab.company.example"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  API endpoint
+                  <input
+                    type="url"
+                    value={gitEndpoint}
+                    onChange={(e) => setGitEndpoint(e.target.value)}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  Access token
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={gitToken}
+                    onChange={(e) => setGitToken(e.target.value)}
+                    required
+                  />
+                </label>
+              </div>
+              <button disabled={busy || !gitHostSupported}>
+                Git host 연결 추가
+              </button>
+              <p className="muted">
+                GitHub는 API endpoint를, GitLab은 instance 기본 URL을
+                입력합니다. HTTP·인증서 우회·remote URL의 token은 허용하지
+                않습니다.
+              </p>
+            </form>
+          </section>
+          <section
             className="runtime-card"
             ref={profileSection}
             tabIndex={-1}
@@ -297,12 +486,23 @@ export default function RuntimeSettings({
                     baseCommit: "0".repeat(40),
                     connectionId,
                     connectionVersion: 1,
-                    image: "roopre-runner:0.2",
+                    image: runnerImageForRuntime(runtime),
                     checks: JSON.parse(checks),
                     webRequired: web,
                     budgetUsd: Number(budget),
                     timeoutMinutes: minutes,
                     repairLimit: 2,
+                    runtime,
+                    ...(remote
+                      ? {
+                          gitHost: {
+                            remote,
+                            ...(gitConnectionId
+                              ? { connectionId: gitConnectionId }
+                              : {}),
+                          },
+                        }
+                      : {}),
                   };
                   await desktop.configureProject(projectId, profile);
                   await onSaved();
@@ -356,6 +556,19 @@ export default function RuntimeSettings({
                         if (r) {
                           setPath(r.path);
                           setBranch(r.branch || "main");
+                          setRuntime(r.runtime);
+                          if (!project?.executionProfile) {
+                            setChecks(
+                              JSON.stringify(
+                                defaultChecksForRuntime(r.runtime),
+                                null,
+                                2,
+                              ),
+                            );
+                            setWeb(r.runtime === "node");
+                          }
+                          setRemote(r.remote);
+                          if (!r.remote) setGitConnectionId("");
                         }
                       })
                     }
@@ -371,6 +584,43 @@ export default function RuntimeSettings({
                     required
                   />
                 </label>
+                <label className="field">
+                  프로젝트 런타임
+                  <select
+                    value={runtime}
+                    onChange={(e) =>
+                      setRuntime(e.target.value as ProjectRuntime)
+                    }
+                  >
+                    <option value="node">Node.js / 웹</option>
+                    <option value="java-gradle">
+                      Java · Gradle / Spring Boot
+                    </option>
+                  </select>
+                </label>
+                {remote && (
+                  <label className="field">
+                    Git host 연결
+                    <select
+                      value={gitConnectionId}
+                      onChange={(e) => setGitConnectionId(e.target.value)}
+                    >
+                      <option value="">일반 Git만 사용</option>
+                      {gitConnections
+                        .filter(
+                          (c) =>
+                            c.host === remote.host &&
+                            (!remote.kind || c.kind === remote.kind),
+                        )
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ·{" "}
+                            {c.testStatus === "passed" ? "검사됨" : "검사 필요"}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
                 <label className="field">
                   실행당 추정 예산 (USD)
                   <input
@@ -411,10 +661,26 @@ export default function RuntimeSettings({
                   onChange={(e) => setChecks(e.target.value)}
                 />
               </label>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setChecks(
+                    JSON.stringify(defaultChecksForRuntime(runtime), null, 2),
+                  );
+                  if (runtime === "java-gradle") setWeb(false);
+                }}
+              >
+                {runtime === "java-gradle"
+                  ? "Gradle 기본 검사 적용"
+                  : "Node 기본 검사 적용"}
+              </button>
               <p className="muted">
-                필수 typecheck·test와 선택한 e2e 명령이 통과해야 합니다. 별도 AI
-                리뷰는 자동 적용됩니다. gateway의 실제 청구액은 추정 예산과 다를
-                수 있습니다.
+                {runtime === "java-gradle"
+                  ? "Java 21·Gradle 8 실행 환경에서 classes와 test를 고정 검사합니다. Spring Boot 통합 검사는 프로젝트의 test task에 포함하세요."
+                  : "필수 typecheck·test와 선택한 e2e 명령이 통과해야 합니다."}{" "}
+                별도 AI 리뷰는 자동 적용됩니다. gateway의 실제 청구액은 추정
+                예산과 다를 수 있습니다.
               </p>
               <button
                 className="primary"

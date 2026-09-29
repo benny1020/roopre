@@ -20,6 +20,7 @@ export const onboardingSchema = z.object({
       name: z.string().max(80),
       path: z.string().max(2000),
       branch: z.string().max(150),
+      runtime: z.enum(["node", "java-gradle"]).optional(),
       budget: z.string().max(20),
       checks: z.string().max(20000),
       projectInstructions: z.string().max(20000),

@@ -32,6 +32,84 @@ import { readWorkspaceFile } from "./files.ts";
 const occupiesSlot = (r: Run) =>
   r.runtime?.terminationConfirmed === false ||
   (activeStatuses.includes(r.status) && r.status !== "queued");
+
+const runnerIgnoredPaths =
+  "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n.gradle/\nbuild/\n";
+
+export const isRootRunnerConfig = (path: string) =>
+  /^(package\.json$|pnpm-lock\.yaml$|package-lock\.json$|build\.gradle(?:\.kts)?$|settings\.gradle(?:\.kts)?$|gradle\.properties$|\.gitignore$|\.npmrc$|\.pnpmfile\.[cm]?js$|\.yarnrc|\.eslintrc|\.babelrc|tsconfig|eslint|vitest|playwright|(?:babel|jest|vite|webpack|rollup|next|svelte|postcss|tailwind)\.config\.)/.test(
+    path,
+  );
+
+export const isProtectedRunnerPath = (path: string) =>
+  /(^|\/)(tests?|__tests__|scripts|config|\.github|gradle)\/|\.(test|spec)\.[a-z]+$|(^|\/)(package\.json|pnpm-lock\.yaml|package-lock\.json|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|gradle\.properties|tsconfig|eslint|vitest|playwright)/.test(
+    path,
+  );
+
+export async function discoverRunnerConfigPaths(checkout: string) {
+  const paths = new Set<string>();
+  const ignoredDirectories = new Set([
+    ".git",
+    ".gradle",
+    "build",
+    "node_modules",
+    ".roopre-artifacts",
+    "playwright-report",
+    "test-results",
+  ]);
+  const hasGradleDirectory = (path: string) =>
+    path.split("/").includes("gradle");
+  const scan = async (relative: string, depth: number): Promise<void> => {
+    if (depth > 8 || paths.size >= 1000) return;
+    const absolute = join(checkout, relative);
+    let stat;
+    try {
+      stat = await lstat(absolute);
+    } catch {
+      return;
+    }
+    if (stat.isSymbolicLink() || stat.isFile()) {
+      if (isRootRunnerConfig(relative) || hasGradleDirectory(relative))
+        paths.add(relative);
+      return;
+    }
+    if (!stat.isDirectory()) return;
+    let entries;
+    try {
+      entries = await readdir(absolute, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (paths.size >= 1000) break;
+      const path = join(relative, entry.name);
+      if (entry.isSymbolicLink() || entry.isFile()) {
+        if (isRootRunnerConfig(entry.name) || hasGradleDirectory(path))
+          paths.add(path);
+      } else if (entry.isDirectory() && !ignoredDirectories.has(entry.name))
+        await scan(path, depth + 1);
+    }
+  };
+  await scan(".", 0);
+  return [...paths];
+}
+
+const gradleClasspathInitScript = `gradle.projectsEvaluated {
+  gradle.rootProject.allprojects { project ->
+    ["compileClasspath", "runtimeClasspath", "annotationProcessor", "testCompileClasspath", "testRuntimeClasspath", "testAnnotationProcessor"].each { name ->
+      def configuration = project.configurations.findByName(name)
+      if (configuration != null && configuration.canBeResolved) configuration.resolve()
+    }
+  }
+}`;
+
+export const gradlePreparationCommand = [
+  "cat > /tmp/roopre-resolve.gradle <<'EOF'",
+  gradleClasspathInitScript,
+  "EOF",
+  "exec gradle --no-daemon --console=plain -I /tmp/roopre-resolve.gradle help",
+].join("\n");
+
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
   private stopping = false;
@@ -63,6 +141,8 @@ export class RunnerManager {
       proxy: `roopre-proxy-${id}`,
       network: `roopre-net-${id}`,
       dependencies: `roopre-deps-${id}`,
+      gradle: `roopre-gradle-${id}`,
+      gradleWorkspace: `roopre-gradle-workspace-${id}`,
     };
   }
   private async removeContainers(names: string[]) {
@@ -112,6 +192,10 @@ export class RunnerManager {
       { timeout: 10000 },
     );
     await command("docker", ["volume", "rm", n.dependencies], {
+      timeout: 10000,
+    });
+    await command("docker", ["volume", "rm", n.gradle], { timeout: 10000 });
+    await command("docker", ["volume", "rm", n.gradleWorkspace], {
       timeout: 10000,
     });
     await command(
@@ -396,47 +480,63 @@ export class RunnerManager {
       );
       await mkdir(area, { recursive: true, mode: 0o700 });
       await this.docker(["image", "inspect", profile.image], abort.signal);
+      const branch = `roopre/${f.id}/${id}/attempt-1`;
+      // A run owns one linked worktree and one branch. The source checkout is never
+      // modified, so features can execute concurrently from the same fixed base.
       await git(
         profile.repositoryPath,
-        "clone",
-        "--no-hardlinks",
-        "--no-local",
+        "config",
+        "extensions.worktreeConfig",
+        "true",
+      );
+      await git(
         profile.repositoryPath,
+        "worktree",
+        "add",
+        "--force",
+        "-b",
+        branch,
         checkout,
+        profile.baseCommit,
       );
-      await git(checkout, "checkout", "-b", `codex/${id}`, profile.baseCommit);
-      await git(checkout, "remote", "remove", "origin");
-      await writeFile(
-        join(checkout, ".git/info/exclude"),
-        "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n",
+      // The run gets its own identity and cannot push through the source remote.
+      await git(checkout, "config", "--worktree", "user.name", "Roopre Agent");
+      await git(
+        checkout,
+        "config",
+        "--worktree",
+        "user.email",
+        "agent@roopre.local",
       );
-      await git(checkout, "config", "user.name", "Roopre Agent");
-      await git(checkout, "config", "user.email", "agent@roopre.local");
+      await git(
+        checkout,
+        "config",
+        "--worktree",
+        "remote.origin.pushurl",
+        "no_push",
+      );
+      // info/exclude belongs to the common Git directory for linked worktrees.
+      // Keep the user repository untouched by using a run-private worktree config.
+      const exclude = join(area, "git-exclude");
+      await writeFile(exclude, runnerIgnoredPaths, { mode: 0o600 });
+      await git(checkout, "config", "--worktree", "core.excludesFile", exclude);
       await this.update(id, (r) => {
         r.runtime!.worktree = checkout;
-        r.runtime!.branch = `codex/${id}`;
+        r.runtime!.branch = branch;
       });
-      const rootConfig =
-        /^(package\.json$|pnpm-lock\.yaml$|package-lock\.json$|\.gitignore$|\.npmrc$|\.pnpmfile\.[cm]?js$|\.yarnrc|\.eslintrc|\.babelrc|tsconfig|eslint|vitest|playwright|(?:babel|jest|vite|webpack|rollup|next|svelte|postcss|tailwind)\.config\.)/;
       const tracked = await git(checkout, "ls-files", "-z");
       if (tracked.includes("\uFFFD"))
         throw Error(
           "UTF-8 파일 이름만 지원합니다. 저장소 파일 이름을 확인하세요.",
         );
-      const protectedPaths = tracked
-        .split("\0")
-        .filter((p) =>
-          /(^|\/)(tests?|__tests__|scripts|config|\.github)\/|\.(test|spec)\.[a-z]+$|^(package\.json|pnpm-lock\.yaml|package-lock\.json|tsconfig|eslint|vitest|playwright)/.test(
-            p,
-          ),
-        );
+      const protectedPaths = tracked.split("\0").filter(isProtectedRunnerPath);
       const fingerprint = async () => {
         const h = createHash("sha256");
         // New root configuration can redirect pnpm/npm or suppress tests too.
         const paths = [
           ...new Set([
             ...protectedPaths,
-            ...(await readdir(checkout)).filter((p) => rootConfig.test(p)),
+            ...(await discoverRunnerConfigPaths(checkout)),
           ]),
         ].sort();
         for (const p of paths) {
@@ -500,6 +600,7 @@ export class RunnerManager {
       // Dependency preparation is deterministic and separate from the agent. No host home/config is mounted.
       const setup = join(area, "setup");
       await mkdir(setup);
+      const runtime = profile.runtime ?? "node";
       let hasManifest = false;
       for (const file of [
         "package.json",
@@ -529,6 +630,75 @@ export class RunnerManager {
       // Only this trusted, networkless setup writes the dependency volume.
       // Every agent/check/review container receives it read-only.
       await this.docker(["volume", "create", n.dependencies], abort.signal);
+      if (runtime === "java-gradle") {
+        await this.docker(["volume", "create", n.gradle], abort.signal);
+        await this.docker(
+          ["volume", "create", n.gradleWorkspace],
+          abort.signal,
+        );
+        // New Docker volumes are root-owned. Copy source into a run-private
+        // workspace and initialize the cache before Gradle runs unprivileged.
+        await this.docker(
+          [
+            "run",
+            "--rm",
+            "--name",
+            n.container,
+            "--network",
+            "none",
+            "--user",
+            "root",
+            "--cap-drop=ALL",
+            "--cap-add=CHOWN",
+            "--security-opt",
+            "no-new-privileges",
+            "--mount",
+            `type=volume,src=${n.gradle},dst=/gradle-cache`,
+            "--mount",
+            `type=volume,src=${n.gradleWorkspace},dst=/prep-workspace`,
+            "--mount",
+            `type=bind,src=${checkout},dst=/source,readonly`,
+            image,
+            "sh",
+            "-c",
+            "tar -C /source --exclude=.git --exclude=./.git -cf - . | tar -C /prep-workspace -xf - && chown -R pwuser:pwuser /gradle-cache /prep-workspace",
+          ],
+          abort.signal,
+          120000,
+        );
+      }
+      if (runtime === "java-gradle" && !planning) {
+        // Resolve compile and test runtime classpaths without executing tests.
+        // This runs unprivileged in the run-private source copy; no host home,
+        // credentials, Docker socket, or runner network is shared.
+        await this.docker(
+          [
+            "run",
+            "--rm",
+            "--name",
+            n.container,
+            "--network",
+            "bridge",
+            "--user",
+            "pwuser",
+            "--cap-drop=ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--mount",
+            `type=volume,src=${n.gradleWorkspace},dst=/workspace`,
+            "--mount",
+            `type=volume,src=${n.gradle},dst=/gradle-cache`,
+            "--env",
+            "GRADLE_USER_HOME=/gradle-cache",
+            image,
+            "sh",
+            "-c",
+            gradlePreparationCommand,
+          ],
+          abort.signal,
+          600000,
+        );
+      }
       await this.docker(
         [
           "run",
@@ -562,8 +732,29 @@ export class RunnerManager {
         connection: ReturnType<ConnectionVault["get"]>;
         token: string;
         broker?: Awaited<ReturnType<typeof startBroker>>;
+        gitDirectory: string;
+        // Linked worktrees have a .git file, whereas the isolated stages below
+        // have a .git directory. Only the linked worktree needs a synthetic
+        // gitfile pointing at its sanitized metadata mount.
+        gitFile?: string;
       };
-      const mainTarget: Target = { names: n, checkout, connection, token: "" };
+      // A linked worktree shares its source .git/config. Agents need Git context
+      // but must never see user remotes or credential helper settings, so mount a
+      // fresh local metadata clone with its origin removed instead.
+      const containerMetadata = join(area, "container-git");
+      await cloneStage(checkout, containerMetadata, profile.baseCommit);
+      const containerGitFile = join(area, "container.git");
+      await writeFile(containerGitFile, "gitdir: /roopre-agent-git\n", {
+        mode: 0o600,
+      });
+      const mainTarget: Target = {
+        names: n,
+        checkout,
+        connection,
+        token: "",
+        gitDirectory: join(containerMetadata, ".git"),
+        gitFile: containerGitFile,
+      };
       const secrets = new Set<string>([connection.key]);
       const redact = (text: string) => {
         for (const secret of secrets)
@@ -659,9 +850,25 @@ export class RunnerManager {
             "--mount",
             `type=bind,src=${target.checkout},dst=/workspace${readonly ? ",readonly" : ""}`,
             "--mount",
-            `type=bind,src=${join(target.checkout, ".git")},dst=/workspace/.git,readonly`,
+            target.gitFile
+              ? `type=bind,src=${target.gitFile},dst=/workspace/.git,readonly`
+              : `type=bind,src=${target.gitDirectory},dst=/workspace/.git,readonly`,
+            ...(target.gitFile
+              ? [
+                  "--mount",
+                  `type=bind,src=${target.gitDirectory},dst=/roopre-agent-git,readonly`,
+                ]
+              : []),
             "--mount",
             `type=volume,src=${n.dependencies},dst=/workspace/node_modules,readonly,volume-nocopy`,
+            ...(runtime === "java-gradle"
+              ? [
+                  "--mount",
+                  `type=volume,src=${n.gradle},dst=/locked-gradle,readonly,volume-nocopy`,
+                  "--env",
+                  "GRADLE_USER_HOME=/tmp/roopre-gradle",
+                ]
+              : []),
             "--tmpfs",
             "/tmp:rw,nosuid,size=512m",
             "--tmpfs",
@@ -675,8 +882,9 @@ export class RunnerManager {
             "--env",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
             image,
-            "sleep",
-            "infinity",
+            "sh",
+            "-c",
+            `${runtime === "java-gradle" ? "mkdir -p /tmp/roopre-gradle && cp -a /locked-gradle/. /tmp/roopre-gradle/ && " : ""}exec sleep infinity`,
           ],
           abort.signal,
         );
@@ -921,12 +1129,15 @@ export class RunnerManager {
               checkout: join(area, `agent-${suffix}`),
               connection: this.vault.get(assignment.connectionId),
               token: "",
+              gitDirectory: "",
             };
             workers[index] = target;
             await cloneStage(checkout, target.checkout, snapshot.commit);
-            await copyFile(
-              join(checkout, ".git/info/exclude"),
-              join(target.checkout, ".git/info/exclude"),
+            target.gitDirectory = join(target.checkout, ".git");
+            await writeFile(
+              join(target.checkout, ".git", "info", "exclude"),
+              runnerIgnoredPaths,
+              { mode: 0o600 },
             );
             await this.docker(
               [

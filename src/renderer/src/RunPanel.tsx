@@ -743,10 +743,38 @@ export default function RunPanel({
                             실행 취소
                           </button>
                         )}
+                        {current.status === "ready_for_merge" &&
+                          current.runtime?.profile.gitHost &&
+                          !current.runtime.delivery && (
+                            <button
+                              disabled={!connected || busy || !window.roopre}
+                              onClick={() =>
+                                void act(() =>
+                                  window.roopre!.deliverRun({
+                                    runId: current.id,
+                                    title: feature.title,
+                                    body: `Roopre verified run ${current.id}.\n\nDesign ${current.designId} passed fixed checks and independent review.`,
+                                  }),
+                                )
+                              }
+                            >
+                              원격 branch 게시 · Draft PR/MR
+                            </button>
+                          )}
                         <p>
-                          {current.status === "ready_for_merge"
-                            ? "결과 검토 후 기존 병합 절차를 따르세요. 자동 병합하지 않습니다."
-                            : "재시도·취소는 최신 실행에 적용됩니다."}
+                          {current.runtime?.delivery?.url ? (
+                            <a
+                              href={current.runtime.delivery.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Draft PR/MR 열기
+                            </a>
+                          ) : current.status === "ready_for_merge" ? (
+                            "결과 검토 후 원격 전달을 선택하거나 기존 병합 절차를 따르세요. 자동 병합하지 않습니다."
+                          ) : (
+                            "재시도·취소는 최신 실행에 적용됩니다."
+                          )}
                         </p>
                       </section>
                     )}

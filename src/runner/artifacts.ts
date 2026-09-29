@@ -31,7 +31,7 @@ export async function collectArtifacts(
       if (entry.isDirectory()) await scan(child, depth + 1);
       else if (
         entry.isFile() &&
-        /\.(png|webm|zip|json|html)$/.test(entry.name)
+        /\.(png|webm|zip|json|html|xml)$/.test(entry.name)
       ) {
         signal?.throwIfAborted();
         const size = (await lstat(child)).size;
@@ -58,6 +58,8 @@ export async function collectArtifacts(
     ".roopre-artifacts",
     "test-results",
     "playwright-report",
+    "build/reports",
+    "build/test-results",
   ]) {
     const path = join(checkout, dir);
     try {

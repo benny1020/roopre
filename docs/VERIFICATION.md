@@ -316,3 +316,16 @@ Orca 앱 자체, 실제 유료 모델·사람 승인, 장시간 운영·배포�
 1440px 다크 상담과 1024px 라이트 기억 편집을 직접 렌더링해 확인했다. Inspector의 내부 스크롤과 입력 영역, 출처·저장 범위·읽기 전용 안내를 점검했고, 브라우저 시나리오에서 해당 화면의 axe 검사를 수행했다. 대표 캡처는 `artifacts/conversation-dark-1440.png`, `artifacts/memory-light-1024.png`, `artifacts/conversation-native-rendered-compose.png`다. 이는 전체 접근성 인증이 아니다.
 
 모델 응답은 fixture다. 잘못된 JSON·429·비밀이 들어 있는 실패 메시지와 abort 형태의 합성 오류를 확인했으며, 합성 timeout 오류 검사를 실제 60초 경과 검증으로 해석하지 않는다. Native 검사는 실제 IPC로 pending을 만든 뒤 fixture 앱만 SIGKILL하고 다시 열어 `interrupted`, 예약 공간 해제, provider 자동 재호출 없음까지 확인한다. 실제 유료 모델의 답변 품질·gateway 호환성·사용자 본인 인증·장시간 운영·서명/공증·Mac App Store 심사는 미검증이다. 로컬 패키지 통과를 공개 배포 완료나 심사 적합성 보증으로 표현하지 않는다.
+
+## Git host 연결과 worktree 실행 — 2026-09-28
+
+[고정 설계와 구현 승인](design/GIT-HOST-INTEGRATION-APPROVAL.md)에 따라 GitHub/GitHub Enterprise·GitLab/사내 GitLab 연결과 원격 전달 경계를 추가했다. 모델 연결과 Git host access token은 서로 다른 macOS 암호화 vault에 보관한다. remote parser는 HTTPS·`git@host:path`·`ssh://git@host/path`와 GitLab subgroup을 처리하고 credential/query/fragment/HTTP remote를 거절한다.
+
+실행 checkout은 이제 고정 base commit에서 feature/run/attempt별 Git worktree와 branch를 만든다. container에는 worktree Git metadata와 common Git directory를 읽기 전용으로 제공하고, 실행 중 pushurl을 무효화한다. 결과가 `ready_for_merge`가 된 뒤에만 사용자가 원격 전달을 선택할 수 있다. 이때 local head·고정 base·원격 branch SHA를 확인하고 force push 없이 branch를 게시한다. GitHub/GitLab 연결이 있으면 Draft PR/MR 응답의 head/base SHA를 재확인한다. 사람 merge, host pipeline, 실제 회사 host/token은 이 검증에 포함하지 않는다.
+
+- `pnpm check`: 형식·문서 hash·타입·Electron build와 단위/DB **129개 통과**. Git remote parser, 암호화 vault의 token 비노출, GitHub/GitLab fixture API의 provider path와 SHA snapshot을 포함한다.
+- `pnpm test:web`: **41개 통과**. 기존 설정·프로젝트 문맥·연결 복구·다크/라이트/1024px 접근성 회귀를 확인했다. host IPC가 없는 웹 미리보기에서는 안전하게 읽기 안내만 표시한다.
+- `pnpm test:runner`: 실제 Docker 실행기 **4개 통과**. worktree 기반 메인 checkout, 병렬 fan-in, 고정 검사·읽기 전용 리뷰·commit 근거와 cleanup을 포함한다. Claude는 fixture이며 실제 모델 호출은 하지 않았다.
+- `pnpm test:desktop`: 빌드된 Electron의 신규 온보딩·재시작 **1개 통과**. `pnpm check:mac`도 임시 Apple Silicon 앱의 포함 파일·의존성·security fuse·코드서명 무결성을 통과했다. ZIP, Developer ID 서명, 공증은 수행하지 않았다.
+
+로컬 앱을 띄워 실제 화면 점검도 시도했지만 당시 macOS 세션이 잠겨 자동 화면 접근을 할 수 없었다. 따라서 새 Git host 입력 화면의 실제 사용자 창 육안 점검과 실제 GitHub/GitLab disposable repository E2E는 아직 남아 있다. 이번 구현은 외부 토큰·회사 프로젝트를 호출하지 않았다.

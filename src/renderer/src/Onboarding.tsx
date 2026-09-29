@@ -5,7 +5,12 @@ import type { BootstrapStatus } from "../../shared/onboarding";
 import { onboardingSteps } from "../../shared/onboarding";
 import { workflowIssues } from "../../shared/harness";
 import type { Snapshot } from "../../shared/contracts";
-import type { ConnectionInfo } from "../../shared/runtime";
+import {
+  defaultChecksForRuntime,
+  runnerImageForRuntime,
+  type ConnectionInfo,
+  type ProjectRuntime,
+} from "../../shared/runtime";
 import icon from "../../../resources/icon.png";
 import "./style.css";
 const titles = [
@@ -93,29 +98,15 @@ function Onboarding({
   const [name, setName] = useState(initial?.name ?? "");
   const [path, setPath] = useState(initial?.path ?? "");
   const [branch, setBranch] = useState(initial?.branch ?? "main");
+  const [runtime, setRuntime] = useState<ProjectRuntime>(
+    initial?.runtime ?? "node",
+  );
   const [budget, setBudget] = useState(initial?.budget ?? "1");
   const [projectInstructions, setProjectInstructions] = useState(
     initial?.projectInstructions ?? "",
   );
   const [checks, setChecks] = useState(
-    initial?.checks ??
-      JSON.stringify(
-        [
-          {
-            name: "typecheck",
-            argv: ["pnpm", "run", "typecheck"],
-            timeoutSeconds: 120,
-          },
-          { name: "test", argv: ["pnpm", "test"], timeoutSeconds: 300 },
-          {
-            name: "e2e",
-            argv: ["pnpm", "exec", "playwright", "test"],
-            timeoutSeconds: 600,
-          },
-        ],
-        null,
-        2,
-      ),
+    initial?.checks ?? JSON.stringify(defaultChecksForRuntime("node"), null, 2),
   );
   const [title, setTitle] = useState(initial?.title ?? "");
   const [requirements, setRequirements] = useState(initial?.requirements ?? "");
@@ -160,6 +151,7 @@ function Onboarding({
     name,
     path,
     branch,
+    runtime,
     budget,
     checks,
     projectInstructions,
@@ -460,6 +452,7 @@ function Onboarding({
                         if (p?.executionProfile) {
                           setConnectionId(p.executionProfile.connectionId);
                           setBudget(String(p.executionProfile.budgetUsd));
+                          setRuntime(p.executionProfile.runtime ?? "node");
                           setChecks(
                             JSON.stringify(p.executionProfile.checks, null, 2),
                           );
@@ -490,6 +483,14 @@ function Onboarding({
                           if (repo) {
                             setPath(repo.path);
                             setBranch(repo.branch || "main");
+                            setRuntime(repo.runtime);
+                            setChecks(
+                              JSON.stringify(
+                                defaultChecksForRuntime(repo.runtime),
+                                null,
+                                2,
+                              ),
+                            );
                             if (!name)
                               setName(repo.path.split("/").at(-1) ?? "");
                           }
@@ -523,6 +524,20 @@ function Onboarding({
                       </select>
                     </label>
                     <label className="field">
+                      프로젝트 런타임
+                      <select
+                        value={runtime}
+                        onChange={(e) =>
+                          setRuntime(e.target.value as ProjectRuntime)
+                        }
+                      >
+                        <option value="node">Node.js / 웹</option>
+                        <option value="java-gradle">
+                          Java · Gradle / Spring Boot
+                        </option>
+                      </select>
+                    </label>
+                    <label className="field">
                       실행당 추정 예산 (USD)
                       <input
                         type="number"
@@ -541,8 +556,9 @@ function Onboarding({
                     />
                   </label>
                   <p className="muted">
-                    지원하는 Node 단일 패키지 저장소의 실제 명령에 맞게
-                    수정하세요. e2e를 포함해 승인된 명령을 고정 실행합니다.
+                    {runtime === "java-gradle"
+                      ? "Java 21·Gradle 8 기준 classes와 test 명령을 제안합니다. Spring Boot 통합 검사는 test task에 포함하세요."
+                      : "Node 프로젝트의 실제 명령에 맞게 수정하세요. e2e를 포함해 승인된 명령을 고정 실행합니다."}
                   </p>
                   <label className="field">
                     프로젝트 Markdown 지침
@@ -594,12 +610,13 @@ function Onboarding({
                           baseCommit: "0".repeat(40),
                           connectionId,
                           connectionVersion: 1,
-                          image: "roopre-runner:0.2",
+                          image: runnerImageForRuntime(runtime),
                           checks: parsed,
-                          webRequired: true,
+                          webRequired: runtime === "node",
                           budgetUsd: Number(budget),
                           timeoutMinutes: 60,
                           repairLimit: 1,
+                          runtime,
                         });
                         await api.command({
                           type: "update_project_policy",
