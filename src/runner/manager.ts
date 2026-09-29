@@ -678,7 +678,7 @@ export class RunnerManager {
             "gradle",
             "--no-daemon",
             "--console=plain",
-            "testClasses",
+            "test",
           ],
           abort.signal,
           600000,
