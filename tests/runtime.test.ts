@@ -666,7 +666,7 @@ test("scheduler permits a second isolated feature in the same project by default
   await runner.stop();
 });
 
-test("scheduler round-robins queued projects before taking another project run", async () => {
+test("scheduler keeps its project order when a just-run project leaves the queue", async () => {
   const { w, f, review } = fixture();
   apply(w, "jun", review, {
     authentication: "macos-owner",
@@ -678,10 +678,18 @@ test("scheduler round-robins queued projects before taking another project run",
     designId: review.designId,
   });
   const first = w.runs[0];
+  const laterSameProject = structuredClone(first);
+  laterSameProject.id = "run-aaaaaaaa-cccc";
+  w.runs.push(laterSameProject);
   for (const [projectId, featureId, runId] of [
     ["second-project", "second-feature", "run-aaaaaaaa-dddd"],
     ["third-project", "third-feature", "run-aaaaaaaa-eeee"],
   ]) {
+    const project = structuredClone(
+      w.projects.find((candidate) => candidate.id === f.projectId)!,
+    );
+    project.id = projectId;
+    w.projects.push(project);
     const feature = structuredClone(f);
     feature.id = featureId;
     feature.projectId = projectId;
@@ -705,7 +713,11 @@ test("scheduler round-robins queued projects before taking another project run",
   const selected: string[] = [];
   runner.execute = async (id) => {
     selected.push(id);
+    const run = w.runs.find((candidate) => candidate.id === id)!;
+    run.status = "completed";
+    run.runtime!.terminationConfirmed = true;
   };
+  await (runner as unknown as { tick: () => Promise<void> }).tick();
   await (runner as unknown as { tick: () => Promise<void> }).tick();
   await (runner as unknown as { tick: () => Promise<void> }).tick();
   await (runner as unknown as { tick: () => Promise<void> }).tick();
@@ -713,6 +725,7 @@ test("scheduler round-robins queued projects before taking another project run",
     first.id,
     "run-aaaaaaaa-dddd",
     "run-aaaaaaaa-eeee",
+    "run-aaaaaaaa-cccc",
   ]);
   await runner.stop();
 });

@@ -323,19 +323,30 @@ export class RunnerManager {
             capacity.maxConcurrentRunsPerProject
         );
       });
-      const projects = [
+      const candidateProjects = [
         ...new Set(
           queued.map(
             (r) => w.features.find((f) => f.id === r.featureId)!.projectId,
           ),
         ),
       ];
+      // Keep the cursor on a stable project ring. Restricting the ring to only
+      // queued projects makes a just-finished project disappear and can let an
+      // earlier project leapfrog the next project in the round-robin order.
+      const projectRing = [
+        ...w.projects.map((project) => project.id),
+        ...candidateProjects.filter(
+          (projectId) =>
+            !w.projects.some((project) => project.id === projectId),
+        ),
+      ];
       const cursor = this.scheduleCursor
-        ? projects.indexOf(this.scheduleCursor)
+        ? projectRing.indexOf(this.scheduleCursor)
         : -1;
-      const orderedProjects = projects
+      const orderedProjects = projectRing
         .slice(cursor + 1)
-        .concat(projects.slice(0, cursor + 1));
+        .concat(projectRing.slice(0, cursor + 1))
+        .filter((projectId) => candidateProjects.includes(projectId));
       const run = orderedProjects
         .map((projectId) =>
           queued.find(
