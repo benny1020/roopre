@@ -10,6 +10,7 @@ import {
 } from "../src/shared/runtime.ts";
 import {
   discoverRunnerConfigPaths,
+  gradlePreparationCommand,
   isProtectedRunnerPath,
   isRootRunnerConfig,
 } from "../src/runner/manager.ts";
@@ -42,6 +43,13 @@ test("detects Gradle and Spring Boot repositories and provides fixed Java checks
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("resolves Gradle test runtime dependencies without executing baseline tests", () => {
+  assert.match(gradlePreparationCommand, /testRuntimeClasspath/);
+  assert.match(gradlePreparationCommand, /testCompileClasspath/);
+  assert.match(gradlePreparationCommand, /roopre-resolve\.gradle help/);
+  assert.doesNotMatch(gradlePreparationCommand, /\bgradle\b[^\n]*\btest\b/);
 });
 
 test("protects Gradle build configuration and wrapper metadata from agent changes", () => {

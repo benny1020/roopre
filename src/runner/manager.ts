@@ -94,6 +94,22 @@ export async function discoverRunnerConfigPaths(checkout: string) {
   return [...paths];
 }
 
+const gradleClasspathInitScript = `gradle.projectsEvaluated {
+  gradle.rootProject.allprojects { project ->
+    ["compileClasspath", "runtimeClasspath", "annotationProcessor", "testCompileClasspath", "testRuntimeClasspath", "testAnnotationProcessor"].each { name ->
+      def configuration = project.configurations.findByName(name)
+      if (configuration != null && configuration.canBeResolved) configuration.resolve()
+    }
+  }
+}`;
+
+export const gradlePreparationCommand = [
+  "cat > /tmp/roopre-resolve.gradle <<'EOF'",
+  gradleClasspathInitScript,
+  "EOF",
+  "exec gradle --no-daemon --console=plain -I /tmp/roopre-resolve.gradle help",
+].join("\n");
+
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
   private stopping = false;
@@ -652,9 +668,9 @@ export class RunnerManager {
         );
       }
       if (runtime === "java-gradle" && !planning) {
-        // Gradle configuration can resolve public dependencies, so run it once
-        // unprivileged in the run-private source copy. No host home, credentials,
-        // Docker socket, or runner network is shared.
+        // Resolve compile and test runtime classpaths without executing tests.
+        // This runs unprivileged in the run-private source copy; no host home,
+        // credentials, Docker socket, or runner network is shared.
         await this.docker(
           [
             "run",
@@ -675,10 +691,9 @@ export class RunnerManager {
             "--env",
             "GRADLE_USER_HOME=/gradle-cache",
             image,
-            "gradle",
-            "--no-daemon",
-            "--console=plain",
-            "test",
+            "sh",
+            "-c",
+            gradlePreparationCommand,
           ],
           abort.signal,
           600000,
