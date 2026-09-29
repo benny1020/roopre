@@ -193,7 +193,10 @@ test(
             checked: [...sections],
             decision: "approve",
           },
-          { authentication: "macos-owner", binding: approvalBinding(w, f) },
+          {
+            authentication: "app-confirmation",
+            binding: approvalBinding(w, f),
+          },
         );
         const id = (
           await send({

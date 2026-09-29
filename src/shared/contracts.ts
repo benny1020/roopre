@@ -58,7 +58,8 @@ export type Decision = {
   decision: "approve" | "request_changes" | "withdraw";
   checked: string[];
   binding?: string;
-  authentication?: "macos-owner";
+  // macos-owner is retained so older persisted local workspaces remain usable.
+  authentication?: "app-confirmation" | "macos-owner";
   at: string;
 };
 export type Design = {
@@ -145,6 +146,9 @@ export type Gate = {
 };
 export type Snapshot = Workspace & {
   gates: Record<string, Gate>;
+  // Current, feature-scoped approval contract. The renderer must send this
+  // value back only after a human explicitly confirms the displayed report.
+  approvalBindings?: Record<string, string>;
   sequence: number;
   mode: "development-fixture" | "local-owner";
   runnerConnected: boolean;
@@ -268,6 +272,7 @@ export const commandSchema = z.discriminatedUnion("type", [
     designId: id,
     decision: z.enum(["approve", "request_changes", "withdraw"]),
     checked: z.array(z.enum(sections)),
+    confirmationBinding: z.string().length(64).optional(),
   }),
   z.object({ type: z.literal("queue_run"), ...featureId, designId: id }),
   z.object({ type: z.literal("cancel_run"), runId: id }),
@@ -298,7 +303,11 @@ export type Command = z.infer<typeof commandSchema>;
 export function latestDesign(feature: Feature) {
   return feature.designs.at(-1);
 }
-export function gate(workspace: Workspace, feature: Feature): Gate {
+export function gate(
+  workspace: Workspace,
+  feature: Feature,
+  currentApprovalBinding?: string,
+): Gate {
   const design = latestDesign(feature);
   if (!design)
     return {
@@ -352,8 +361,10 @@ export function gate(workspace: Workspace, feature: Feature): Gate {
       (d) =>
         d.actorId === project.ownerId &&
         d.decision === "approve" &&
-        d.authentication === "macos-owner" &&
-        d.binding,
+        (d.authentication === "app-confirmation" ||
+          d.authentication === "macos-owner") &&
+        d.binding &&
+        (!currentApprovalBinding || d.binding === currentApprovalBinding),
     )
   )
     reasons.push("사용자 본인의 설계 승인이 필요합니다.");

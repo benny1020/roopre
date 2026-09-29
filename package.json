@@ -39,7 +39,7 @@
     "pr:prepare": "tsx config/scripts/pr-workflow.ts prepare",
     "pr:publish": "tsx config/scripts/pr-workflow.ts publish",
     "pr:check": "tsx config/scripts/pr-workflow.ts check",
-    "pr:merge": "pnpm build:native && tsx config/scripts/pr-workflow.ts merge",
+    "pr:merge": "tsx config/scripts/pr-workflow.ts merge",
     "harness:validate": "tsx config/scripts/harness.ts validate",
     "harness:lock": "tsx config/scripts/harness.ts lock",
     "harness:schema": "tsx config/scripts/harness.ts schema",

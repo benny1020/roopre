@@ -10,9 +10,11 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { _electron as electron, expect } from "@playwright/test";
 import { databaseUrl } from "../src/database/store.ts";
+import { Store } from "../src/database/store.ts";
+import { ownerFixture } from "./fixtures/workspace.ts";
 
 test(
-  "conversation native: real IPC persists a fixture-provider consultation across restart and reports DB recovery",
+  "real IPC records app confirmation, rejects stale reports, and persists a fixture consultation across restart",
   { timeout: 120000 },
   async () => {
     const upstream = new URL(databaseUrl);
@@ -37,6 +39,7 @@ test(
       client.pipe(target).pipe(client);
     });
     let application: Awaited<ReturnType<typeof electron.launch>> | undefined;
+    let fixtureStore: Store | undefined;
     try {
       await pool.query(`CREATE SCHEMA ${schema}`);
       proxy.listen(0, "127.0.0.1");
@@ -47,6 +50,69 @@ test(
       url.hostname = "127.0.0.1";
       url.port = String(address.port);
       url.searchParams.set("options", `-c search_path=${schema}`);
+      // This preloads a test-only execution profile through the domain. It is
+      // only a state fixture for the approval IPC test; no Docker run occurs.
+      fixtureStore = new Store(
+        "roopre-owner-v02",
+        url.href,
+        "local-owner",
+        ownerFixture,
+      );
+      await fixtureStore.init();
+      await fixtureStore.execute("owner", randomUUID(), {
+        type: "configure_execution",
+        projectId: "first-project",
+        profile: {
+          repositoryPath: "/fixture/no-execution",
+          baseBranch: "main",
+          baseCommit: "a".repeat(40),
+          connectionId: "00000000-0000-4000-8000-000000000070",
+          connectionVersion: 1,
+          image: "fixture/no-execution:latest",
+          checks: [
+            {
+              name: "typecheck",
+              argv: ["pnpm", "typecheck"],
+              timeoutSeconds: 60,
+            },
+            { name: "test", argv: ["pnpm", "test"], timeoutSeconds: 60 },
+          ],
+          webRequired: false,
+          budgetUsd: 2,
+          timeoutMinutes: 10,
+          repairLimit: 1,
+        },
+      });
+      const fixtureFeature = await fixtureStore.execute("owner", randomUUID(), {
+        type: "create_feature",
+        projectId: "first-project",
+        title: "Approval IPC fixture",
+        template: "feature",
+        requirements: "AC01 records an explicit app confirmation.",
+      });
+      const body = [
+        "## 요구사항\nAC01 records an explicit app confirmation.",
+        "## 구조\nThe desktop process verifies the displayed report binding.",
+        "## API·데이터\nThe review command includes the current confirmation binding.",
+        "## 예외 상황\nA changed report rejects the stale binding.",
+        "## 변경 영향\nOnly this fixture approval is affected.",
+        "## 검증 계획\nIPC records app-confirmation and rejects stale input.",
+        "## 적용·복구\nThis test fixture creates no execution and needs no rollback.",
+      ].join("\n\n");
+      await fixtureStore.execute("owner", randomUUID(), {
+        type: "save_draft",
+        featureId: fixtureFeature.entityId!,
+        expectedRevision: 0,
+        requirements: "AC01 records an explicit app confirmation.",
+        body,
+      });
+      await fixtureStore.execute("owner", randomUUID(), {
+        type: "publish_design",
+        featureId: fixtureFeature.entityId!,
+        expectedRevision: 1,
+      });
+      await fixtureStore.close();
+      fixtureStore = undefined;
       const fixtureEndpoint = "https://conversation-fixture.invalid";
       const delayedProvider = join(root, "delay-provider");
       const providerRequests = join(root, "provider-requests.log");
@@ -82,131 +148,185 @@ await import(${JSON.stringify(pathToFileURL(resolve("out/main/index.js")).href)}
       await page
         .getByRole("button", { name: "나중에 · 앱 열기", exact: true })
         .click();
-      const created = await page.evaluate(async (fixtureEndpoint) => {
+      await page.evaluate(async (featureId) => {
         const api = (globalThis as any).roopre;
-        const project = await api.command({
-          type: "create_project",
-          name: "Conversation fixture",
-          description: "native IPC fixture",
+        let snapshot = await api.snapshot();
+        const feature = snapshot.features.find(
+          (item: any) => item.id === featureId,
+        );
+        const design = feature.designs.at(-1);
+        const binding = snapshot.approvalBindings?.[featureId];
+        if (!binding) throw Error("approval binding was not exposed");
+        await api.command({
+          type: "review",
+          featureId,
+          designId: design.id,
+          decision: "approve",
+          checked: [],
+          confirmationBinding: binding,
+        });
+        snapshot = await api.snapshot();
+        const decision = snapshot.features
+          .find((item: any) => item.id === featureId)
+          .designs.at(-1).decisions[0];
+        if (decision?.authentication !== "app-confirmation")
+          throw Error("app confirmation was not persisted");
+        await api.command({
+          type: "update_project_policy",
+          projectId: "first-project",
+          instructions: "The design report changed after the first approval.",
+          requiredChecks: ["typecheck", "test", "review"],
           reviewerIds: ["owner"],
         });
-        const feature = await api.command({
-          type: "create_feature",
-          projectId: project.entityId,
-          title: "Fixture feature",
-          template: "feature",
-          requirements: "Consultation persists.",
-        });
-        let snapshot = await api.snapshot();
-        const agentId = "00000000-0000-4000-8000-000000000071";
-        const connections = await api.saveConnection({
-          name: "Fixture Messages",
-          endpoint: fixtureEndpoint,
-          auth: "api-key",
-          model: "fixture-model",
-          key: "fixture-only-key",
-        });
-        const connectionId = connections[0].id;
-        const tested = await api.testConnection(connectionId);
-        if (tested[0]?.testStatus !== "passed")
-          throw Error("fixture connection did not pass");
-        snapshot = await api.snapshot();
-        const implementationId = "00000000-0000-4000-8000-000000000072";
-        const reviewerId = "00000000-0000-4000-8000-000000000074";
-        await api.command({
-          type: "save_agent",
-          expectedRevision: 0,
-          agent: {
-            id: agentId,
-            revision: 1,
-            name: "Fixture consultant",
-            description: "Read-only fixture",
-            capability: "read-only",
-            connectionId,
-            connectionVersion: 1,
-            markdown: "Read-only consultation.",
-            archived: false,
-          },
-        });
-        await api.command({
-          type: "save_agent",
-          expectedRevision: 0,
-          agent: {
-            id: implementationId,
-            revision: 1,
-            name: "Fixture implementer",
-            description: "Required fixture implementation role",
-            capability: "implementation",
-            connectionId,
-            connectionVersion: 1,
-            markdown: "Implement only approved fixture work.",
-            archived: false,
-          },
-        });
-        await api.command({
-          type: "save_agent",
-          expectedRevision: 0,
-          agent: {
-            id: reviewerId,
-            revision: 1,
-            name: "Fixture reviewer",
-            description: "Required fixture review role",
-            capability: "read-only",
-            connectionId,
-            connectionVersion: 1,
-            markdown: "Review fixture work.",
-            archived: false,
-          },
-        });
-        await api.command({
-          type: "save_workflow",
-          projectId: project.entityId,
-          expectedRevision: 0,
-          workflow: {
-            revision: 1,
-            instructions: {
-              requirements: "Fixture requirements context.",
-              design: "Fixture design context.",
-              implementation: "Fixture implementation context.",
-              verification: "Fixture verification context.",
-              review: "Fixture review context.",
+        let staleRejected = false;
+        try {
+          await api.command({
+            type: "review",
+            featureId,
+            designId: design.id,
+            decision: "approve",
+            checked: [],
+            confirmationBinding: binding,
+          });
+        } catch {
+          staleRejected = true;
+        }
+        if (!staleRejected) throw Error("stale approval binding was accepted");
+      }, fixtureFeature.entityId);
+      const created = await page.evaluate(
+        async (input) => {
+          const api = (globalThis as any).roopre;
+          const project = await api.command({
+            type: "create_project",
+            name: "Conversation fixture",
+            description: "native IPC fixture",
+            reviewerIds: ["owner"],
+          });
+          const feature = await api.command({
+            type: "create_feature",
+            projectId: project.entityId,
+            title: "Fixture feature",
+            template: "feature",
+            requirements: "Consultation persists.",
+          });
+          let snapshot = await api.snapshot();
+          const agentId = "00000000-0000-4000-8000-000000000071";
+          const connections = await api.saveConnection({
+            name: "Fixture Messages",
+            endpoint: input.fixtureEndpoint,
+            auth: "api-key",
+            model: "fixture-model",
+            key: "fixture-only-key",
+          });
+          const connectionId = connections[0].id;
+          const tested = await api.testConnection(connectionId);
+          if (tested[0]?.testStatus !== "passed")
+            throw Error("fixture connection did not pass");
+          snapshot = await api.snapshot();
+          const implementationId = "00000000-0000-4000-8000-000000000072";
+          const reviewerId = "00000000-0000-4000-8000-000000000074";
+          await api.command({
+            type: "save_agent",
+            expectedRevision: 0,
+            agent: {
+              id: agentId,
+              revision: 1,
+              name: "Fixture consultant",
+              description: "Read-only fixture",
+              capability: "read-only",
+              connectionId,
+              connectionVersion: 1,
+              markdown: "Read-only consultation.",
+              archived: false,
             },
-            assignments: [
-              {
-                id: "00000000-0000-4000-8000-000000000075",
-                agentId,
-                stage: "requirements",
-                required: true,
+          });
+          await api.command({
+            type: "save_agent",
+            expectedRevision: 0,
+            agent: {
+              id: implementationId,
+              revision: 1,
+              name: "Fixture implementer",
+              description: "Required fixture implementation role",
+              capability: "implementation",
+              connectionId,
+              connectionVersion: 1,
+              markdown: "Implement only approved fixture work.",
+              archived: false,
+            },
+          });
+          await api.command({
+            type: "save_agent",
+            expectedRevision: 0,
+            agent: {
+              id: reviewerId,
+              revision: 1,
+              name: "Fixture reviewer",
+              description: "Required fixture review role",
+              capability: "read-only",
+              connectionId,
+              connectionVersion: 1,
+              markdown: "Review fixture work.",
+              archived: false,
+            },
+          });
+          await api.command({
+            type: "save_workflow",
+            projectId: project.entityId,
+            expectedRevision: 0,
+            workflow: {
+              revision: 1,
+              instructions: {
+                requirements: "Fixture requirements context.",
+                design: "Fixture design context.",
+                implementation: "Fixture implementation context.",
+                verification: "Fixture verification context.",
+                review: "Fixture review context.",
               },
-              {
-                id: "00000000-0000-4000-8000-000000000076",
-                agentId: implementationId,
-                stage: "implementation",
-                required: true,
-              },
-              {
-                id: "00000000-0000-4000-8000-000000000077",
-                agentId: reviewerId,
-                stage: "review",
-                required: true,
-              },
-            ],
-          },
-        });
-        snapshot = await api.snapshot();
-        const scope = {
-          workspaceId: snapshot.teamId,
-          projectId: project.entityId,
-          agentDefinitionId: agentId,
-          featureId: feature.entityId,
-        };
-        const pending = await api.conversations.sendTurn({
-          scope,
-          requestId: "00000000-0000-4000-8000-000000000073",
-          message: "What is persisted?",
-        });
-        return { scope, threadId: pending.thread.id, turnId: pending.turn.id };
-      }, fixtureEndpoint);
+              assignments: [
+                {
+                  id: "00000000-0000-4000-8000-000000000075",
+                  agentId,
+                  stage: "requirements",
+                  required: true,
+                },
+                {
+                  id: "00000000-0000-4000-8000-000000000076",
+                  agentId: implementationId,
+                  stage: "implementation",
+                  required: true,
+                },
+                {
+                  id: "00000000-0000-4000-8000-000000000077",
+                  agentId: reviewerId,
+                  stage: "review",
+                  required: true,
+                },
+              ],
+            },
+          });
+          snapshot = await api.snapshot();
+          const scope = {
+            workspaceId: snapshot.teamId,
+            projectId: project.entityId,
+            agentDefinitionId: agentId,
+            featureId: feature.entityId,
+          };
+          const pending = await api.conversations.sendTurn({
+            scope,
+            requestId: "00000000-0000-4000-8000-000000000073",
+            message: "What is persisted?",
+          });
+          return {
+            scope,
+            threadId: pending.thread.id,
+            turnId: pending.turn.id,
+          };
+        },
+        {
+          fixtureEndpoint,
+        },
+      );
       await expect
         .poll(
           () =>
@@ -336,6 +456,7 @@ await import(${JSON.stringify(pathToFileURL(resolve("out/main/index.js")).href)}
       assert.equal(restored[0].answer, "fixture consultation answer");
     } finally {
       await application?.close().catch(() => {});
+      await fixtureStore?.close().catch(() => {});
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve) => proxy.close(() => resolve())).catch(
         () => {},

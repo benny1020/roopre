@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { assertConfirmedHead } from "../config/review/merge.ts";
 import {
   assertCurrent,
   assertMergeReady,
@@ -50,7 +51,7 @@ test("PR gate permits only the reviewed PR/head/base and never equates review wi
     { baseRefName: "other" },
   ])
     assert.throws(() => assertCurrent({ ...pr, ...patch }, report));
-  // The gate intentionally returns no approval token; native authentication is separate.
+  // A successful review does not replace explicit merge confirmation.
   assert.equal(assertMergeReady(pr, report), undefined);
   assert.throws(() =>
     reportSchema.parse({ ...report, reviewedBy: "implementation_agent" }),
@@ -113,8 +114,22 @@ test("PR gate rejects blocking findings, failed evidence, unknown conflicts and 
   );
 });
 
-// Test ordering without invoking macOS authentication or mutating GitHub.
-test("cancelled human authentication cannot mark ready or merge", async () => {
+test("merge requires an explicit full matching head confirmation", () => {
+  assert.doesNotThrow(() =>
+    assertConfirmedHead(report.headSha, ["--confirm-head", report.headSha]),
+  );
+  for (const args of [
+    [],
+    ["--yes"],
+    ["--confirm-head", report.headSha.slice(0, 12)],
+    ["--confirm-head", "c".repeat(40)],
+    ["--confirm-head", report.headSha, "extra"],
+  ])
+    assert.throws(() => assertConfirmedHead(report.headSha, args));
+});
+
+// Test ordering without mutating GitHub.
+test("missing confirmation cannot mark ready or merge", async () => {
   const { approveAndMerge } = await import("../config/review/merge.ts");
   let mutated = false;
   await assert.rejects(
@@ -122,7 +137,7 @@ test("cancelled human authentication cannot mark ready or merge", async () => {
       snapshot: async () => pr,
       publication: async () => {},
       approve: async () => {
-        throw Error("cancelled");
+        assertConfirmedHead(pr.headRefOid, []);
       },
       ready: async () => {
         mutated = true;
@@ -131,7 +146,7 @@ test("cancelled human authentication cannot mark ready or merge", async () => {
         mutated = true;
       },
     }),
-    /cancelled/,
+    /confirm-head/,
   );
   assert.equal(mutated, false);
 });

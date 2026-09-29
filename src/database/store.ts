@@ -5,6 +5,7 @@ import { emptyWorkspace } from "./initial.ts";
 import { initConversationTables } from "./conversations.ts";
 import { canonicalSourceRef } from "../shared/memory.ts";
 import { assertMemoryMutationAllowed } from "../domain/memory.ts";
+import { approvalBinding } from "../domain/runtime.ts";
 import {
   gate,
   type Workspace,
@@ -96,7 +97,19 @@ export class Store {
       ...state,
       sequence: Number(row.sequence),
       gates: Object.fromEntries(
-        state.features.map((f) => [f.id, gate(state, f)]),
+        state.features.map((f) => [
+          f.id,
+          gate(
+            state,
+            f,
+            f.designs.length ? approvalBinding(state, f) : undefined,
+          ),
+        ]),
+      ),
+      approvalBindings: Object.fromEntries(
+        state.features
+          .filter((f) => f.designs.length > 0)
+          .map((f) => [f.id, approvalBinding(state, f)]),
       ),
       mode: this.mode,
       runnerConnected: this.mode === "local-owner",
@@ -106,7 +119,10 @@ export class Store {
     actorId: string,
     requestId: string,
     command: Command,
-    proof?: { binding: string; authentication: "macos-owner" },
+    proof?: {
+      binding: string;
+      authentication: "app-confirmation" | "macos-owner";
+    },
   ) {
     const client = await this.pool.connect();
     try {

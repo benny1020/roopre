@@ -66,22 +66,32 @@ function fixture() {
     },
   };
 }
-test("owner approval requires a native proof tied to current immutable contract", () => {
+test("owner approval requires an app confirmation tied to the current immutable contract", () => {
   const { w, f, review } = fixture();
-  assert.throws(() => apply(w, "jun", review), /본인 확인/);
+  assert.throws(() => apply(w, "jun", review), /앱에서 승인/);
   assert.throws(() => apply(w, "agent", review), /에이전트/);
   assert.throws(
     () =>
       apply(w, "jun", review, {
-        authentication: "macos-owner",
+        authentication: "app-confirmation",
         binding: "forged",
       }),
-    /본인 확인/,
+    /앱에서 승인/,
   );
-  apply(w, "jun", review, {
-    authentication: "macos-owner",
-    binding: approvalBinding(w, f),
-  });
+  apply(
+    w,
+    "jun",
+    { ...review, checked: [] },
+    {
+      authentication: "app-confirmation",
+      binding: approvalBinding(w, f),
+    },
+  );
+  assert.equal(
+    f.designs.at(-1)!.decisions[0].authentication,
+    "app-confirmation",
+  );
+  assert.deepEqual(f.designs.at(-1)!.decisions[0].checked, []);
   assert.equal(gate(w, f).eligible, true);
   apply(w, "jun", {
     type: "queue_run",
@@ -92,6 +102,18 @@ test("owner approval requires a native proof tied to current immutable contract"
   assert.deepEqual(w.runs[0].runtime!.capacity, defaultExecutionCapacity);
   apply(w, "jun", { ...review, decision: "withdraw" });
   assert.equal(w.runs[0].status, "blocked");
+});
+test("gate accepts a persisted legacy macOS-owner approval with the current binding", () => {
+  const { w, f } = fixture();
+  f.designs.at(-1)!.decisions.push({
+    actorId: "jun",
+    decision: "approve",
+    checked: [...sections],
+    authentication: "macos-owner",
+    binding: approvalBinding(w, f),
+    at: new Date().toISOString(),
+  });
+  assert.equal(gate(w, f).eligible, true);
 });
 test("owner configures bounded execution capacity and each run snapshots stage fan-out", () => {
   const { w, f, review } = fixture();
@@ -124,7 +146,7 @@ test("owner configures bounded execution capacity and each run snapshots stage f
     false,
   );
   apply(w, "jun", review, {
-    authentication: "macos-owner",
+    authentication: "app-confirmation",
     binding: approvalBinding(w, f),
   });
   apply(w, "jun", {
@@ -139,7 +161,7 @@ test("owner configures bounded execution capacity and each run snapshots stage f
 test("profile mutation cannot reuse authenticated approval, or weaken required checks", () => {
   const { w, f, review } = fixture();
   const proof = {
-    authentication: "macos-owner" as const,
+    authentication: "app-confirmation" as const,
     binding: approvalBinding(w, f),
   };
   apply(w, "jun", review, proof);
@@ -158,7 +180,7 @@ test("profile mutation cannot reuse authenticated approval, or weaken required c
     profile: { ...profile, budgetUsd: 3 },
   });
   assert.equal(gate(w, f).eligible, false);
-  assert.throws(() => apply(w, "jun", review, proof), /본인 확인/);
+  assert.throws(() => apply(w, "jun", review, proof), /앱에서 승인/);
   assert.throws(
     () =>
       apply(w, "jun", {
@@ -172,7 +194,7 @@ test("profile mutation cannot reuse authenticated approval, or weaken required c
 test("project rule changes invalidate only that project; team rules invalidate all", () => {
   const { w, f, review } = fixture();
   apply(w, "jun", review, {
-    authentication: "macos-owner",
+    authentication: "app-confirmation",
     binding: approvalBinding(w, f),
   });
   apply(w, "jun", {
@@ -195,7 +217,7 @@ test("project rule changes invalidate only that project; team rules invalidate a
   });
   assert.equal(gate(w, f).eligible, false);
 });
-test("native owner cannot remove its required approval or publish without AC evidence contract", () => {
+test("local owner cannot remove its required approval or publish without AC evidence contract", () => {
   const { w, f } = fixture();
   assert.throws(
     () =>
@@ -257,7 +279,7 @@ test("new team/project checks block old execution profiles at publish, approval 
     assert.throws(
       () =>
         apply(w, "jun", review, {
-          authentication: "macos-owner",
+          authentication: "app-confirmation",
           binding: approvalBinding(w, f),
         }),
       /security/,
@@ -289,7 +311,7 @@ test("new team/project checks block old execution profiles at publish, approval 
       w,
       "jun",
       { ...review, designId: f.designs.at(-1)!.id },
-      { authentication: "macos-owner", binding: approvalBinding(w, f) },
+      { authentication: "app-confirmation", binding: approvalBinding(w, f) },
     );
     apply(w, "jun", {
       type: "queue_run",
@@ -457,7 +479,7 @@ test("owner PostgreSQL storage does not expose an HTTP approval bypass", async (
           decision: "approve",
           checked: sections,
           binding: "forged",
-          authentication: "macos-owner",
+          authentication: "app-confirmation",
         },
       },
     });
@@ -544,7 +566,7 @@ test("an unconfirmed prior container occupies the project slot even after failur
     maxConcurrentRunsPerProject: 1,
   };
   apply(w, "jun", review, {
-    authentication: "macos-owner",
+    authentication: "app-confirmation",
     binding: approvalBinding(w, f),
   });
   apply(w, "jun", {
@@ -583,7 +605,7 @@ test("scheduler skips an occupied project's queue when its project limit is one"
     maxConcurrentRunsPerProject: 1,
   };
   apply(w, "jun", review, {
-    authentication: "macos-owner",
+    authentication: "app-confirmation",
     binding: approvalBinding(w, f),
   });
   apply(w, "jun", {
@@ -630,7 +652,7 @@ test("scheduler skips an occupied project's queue when its project limit is one"
 test("scheduler permits a second isolated feature in the same project by default", async () => {
   const { w, f, review } = fixture();
   apply(w, "jun", review, {
-    authentication: "macos-owner",
+    authentication: "app-confirmation",
     binding: approvalBinding(w, f),
   });
   apply(w, "jun", {
@@ -669,7 +691,7 @@ test("scheduler permits a second isolated feature in the same project by default
 test("scheduler keeps its project order when a just-run project leaves the queue", async () => {
   const { w, f, review } = fixture();
   apply(w, "jun", review, {
-    authentication: "macos-owner",
+    authentication: "app-confirmation",
     binding: approvalBinding(w, f),
   });
   apply(w, "jun", {
@@ -770,7 +792,7 @@ test("a new product workspace has no sample projects or reviewers and reopening 
 function scheduledFixture() {
   const { w, f, review } = fixture();
   apply(w, "jun", review, {
-    authentication: "macos-owner",
+    authentication: "app-confirmation",
     binding: approvalBinding(w, f),
   });
   apply(w, "jun", {

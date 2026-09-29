@@ -24,7 +24,7 @@ DB 접속 주소는 `DEVFLOW_DATABASE_URL`로 덮어쓸 수 있다. 기본값은
 
 ## v0.2 실행 환경과 검사
 
-- `pnpm build:native`: macOS 본인 인증 helper 컴파일. 실제 인증 성공 검사는 사람이 앱에서 수행한다.
+- `pnpm build:native`: 기존 배포 호환용 native helper 컴파일. 현재 앱의 설계 승인과 PR 머지는 OS 본인 인증을 사용하지 않는다.
 - `pnpm runner:image`: 고정 Claude Code/Playwright, Java 21·Gradle 8.14.5 Docker 이미지를 준비한다. Gradle 프로젝트의 기본 검사는 `gradle --no-daemon classes`, `gradle --no-daemon test`이며 자세한 격리·호환성 기준은 [Java · Gradle 실행](JAVA-GRADLE.md)을 따른다.
 - `pnpm test:runner`: 실제 Docker, 임시 Git 저장소와 PostgreSQL workspace를 사용한다. Claude는 명시적인 fixture로 대체하며 과금 모델 호출을 하지 않는다.
 - `pnpm exec playwright install chromium` 후 `pnpm test:web`: headless Chromium에서 실제 renderer/DB의 사용자 흐름을 확인한다. IPC transport는 테스트용 대체이므로 native 인증/Keychain 검증과 다르다.

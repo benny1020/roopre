@@ -166,7 +166,7 @@ test(
           decision: "approve",
         },
         {
-          authentication: "macos-owner",
+          authentication: "app-confirmation",
           binding: approvalBinding(state, feature),
         },
       );
@@ -271,7 +271,7 @@ test(
           decision: "approve",
         },
         {
-          authentication: "macos-owner",
+          authentication: "app-confirmation",
           binding: approvalBinding(state, feature),
         },
       );
@@ -387,7 +387,7 @@ test(
           decision: "approve",
         },
         {
-          authentication: "macos-owner",
+          authentication: "app-confirmation",
           binding: approvalBinding(state, feature),
         },
       );
@@ -512,7 +512,7 @@ test(
           checked: [...sections],
         },
         {
-          authentication: "macos-owner",
+          authentication: "app-confirmation",
           binding: approvalBinding(state, feature),
         },
       );
@@ -574,7 +574,7 @@ test(
           checked: [...sections],
         },
         {
-          authentication: "macos-owner",
+          authentication: "app-confirmation",
           binding: approvalBinding(state, feature),
         },
       );
@@ -708,7 +708,7 @@ test(
           checked: [...sections],
         },
         {
-          authentication: "macos-owner",
+          authentication: "app-confirmation",
           binding: approvalBinding(state, feature),
         },
       );

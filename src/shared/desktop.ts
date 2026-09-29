@@ -72,7 +72,9 @@ export interface DesktopAPI {
   diagnostics: () => Promise<{
     docker: boolean;
     image: boolean;
-    approvalHelper: boolean;
+    // Compatibility signal for existing renderer builds; native authentication
+    // is no longer part of product approval.
+    approvalHelper?: boolean;
     message: string;
   }>;
   revealArtifact: (runId: string, index: number) => Promise<void>;
