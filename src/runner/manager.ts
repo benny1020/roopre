@@ -4,7 +4,6 @@ import {
   cloneStage,
   integrateStage,
 } from "./parallel.ts";
-import { stageConcurrency } from "../shared/stage-execution.ts";
 import { profileOf } from "../shared/harness-package.ts";
 import { z } from "zod";
 import { sections } from "../shared/contracts.ts";
@@ -23,7 +22,11 @@ import {
 import { join, resolve } from "node:path";
 import type { Store } from "../database/store.ts";
 import type { ConnectionVault } from "../main/connections/vault.ts";
-import { activeStatuses, type Evidence } from "../shared/runtime.ts";
+import {
+  activeStatuses,
+  executionCapacityOf,
+  type Evidence,
+} from "../shared/runtime.ts";
 import { gate, type Run, type Workspace } from "../shared/contracts.ts";
 import { approvalBinding, policyBinding } from "../domain/runtime.ts";
 import { command, git } from "./process.ts";
@@ -118,6 +121,7 @@ export class RunnerManager {
   private recoveryJobs = new Map<string, Promise<void>>();
   private active = new Map<string, AbortController>();
   private jobs = new Map<string, Promise<void>>();
+  private scheduleCursor?: string;
   constructor(
     private store: Store,
     private vault: ConnectionVault,
@@ -298,21 +302,64 @@ export class RunnerManager {
       const occupied = w.runs.filter(
         (r) => this.active.has(r.id) || occupiesSlot(r),
       );
-      if (occupied.length >= 2) return;
-      const projectIds = new Set(
-        occupied.map(
-          (r) => w.features.find((f) => f.id === r.featureId)?.projectId,
-        ),
-      );
-      const run = w.runs.find(
-        (r) =>
-          r.runtime &&
-          r.status === "queued" &&
-          !projectIds.has(
-            w.features.find((f) => f.id === r.featureId)!.projectId,
+      const capacity = executionCapacityOf(w.executionCapacity);
+      if (occupied.length >= capacity.maxConcurrentRuns) return;
+      const projectCounts = new Map<string, number>();
+      for (const active of occupied) {
+        const projectId = w.features.find(
+          (f) => f.id === active.featureId,
+        )?.projectId;
+        if (projectId)
+          projectCounts.set(projectId, (projectCounts.get(projectId) ?? 0) + 1);
+      }
+      const queued = w.runs.filter((r) => {
+        if (!r.runtime || r.status !== "queued") return false;
+        const projectId = w.features.find(
+          (f) => f.id === r.featureId,
+        )?.projectId;
+        return (
+          !!projectId &&
+          (projectCounts.get(projectId) ?? 0) <
+            capacity.maxConcurrentRunsPerProject
+        );
+      });
+      const candidateProjects = [
+        ...new Set(
+          queued.map(
+            (r) => w.features.find((f) => f.id === r.featureId)!.projectId,
           ),
-      );
+        ),
+      ];
+      // Keep the cursor on a stable project ring. Restricting the ring to only
+      // queued projects makes a just-finished project disappear and can let an
+      // earlier project leapfrog the next project in the round-robin order.
+      const projectRing = [
+        ...w.projects.map((project) => project.id),
+        ...candidateProjects.filter(
+          (projectId) =>
+            !w.projects.some((project) => project.id === projectId),
+        ),
+      ];
+      const cursor = this.scheduleCursor
+        ? projectRing.indexOf(this.scheduleCursor)
+        : -1;
+      const orderedProjects = projectRing
+        .slice(cursor + 1)
+        .concat(projectRing.slice(0, cursor + 1))
+        .filter((projectId) => candidateProjects.includes(projectId));
+      const run = orderedProjects
+        .map((projectId) =>
+          queued.find(
+            (candidate) =>
+              w.features.find((f) => f.id === candidate.featureId)!
+                .projectId === projectId,
+          ),
+        )
+        .find(Boolean);
       if (run) {
+        this.scheduleCursor = w.features.find(
+          (f) => f.id === run.featureId,
+        )!.projectId;
         const controller = new AbortController();
         this.active.set(run.id, controller);
         const job = this.execute(run.id, controller)
@@ -388,13 +435,14 @@ export class RunnerManager {
       if (!r?.runtime || r.status !== "queued") return;
       const f = w.features.find((f) => f.id === r.featureId)!;
       const running = w.runs.filter((x) => x.id !== id && occupiesSlot(x));
+      const capacity = executionCapacityOf(w.executionCapacity);
       if (
-        running.length >= 2 ||
-        running.some(
+        running.length >= capacity.maxConcurrentRuns ||
+        running.filter(
           (x) =>
             w.features.find((f) => f.id === x.featureId)?.projectId ===
             f.projectId,
-        )
+        ).length >= capacity.maxConcurrentRunsPerProject
       )
         return;
       r.status = "preparing";
@@ -414,6 +462,9 @@ export class RunnerManager {
     try {
       const { r, f, w } = await this.valid(id);
       const profile = r.runtime!.profile;
+      const maxAgentsPerStage = executionCapacityOf(
+        r.runtime!.capacity,
+      ).maxAgentsPerStage;
       const standard = w.projects.find((p) => p.id === f.projectId)?.harness;
       const scope =
         standard &&
@@ -1100,9 +1151,9 @@ export class RunnerManager {
         const batchBudgets = new Map<number, Promise<number>>();
         const results = await runBatches(
           assignments,
-          stageConcurrency,
+          maxAgentsPerStage,
           async (assignment, index, count) => {
-            const batch = Math.floor(index / stageConcurrency);
+            const batch = Math.floor(index / maxAgentsPerStage);
             if (!batchBudgets.has(batch))
               batchBudgets.set(
                 batch,

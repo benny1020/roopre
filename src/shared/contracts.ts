@@ -14,8 +14,10 @@ import {
 import { z } from "zod";
 import {
   profileSchema,
+  executionCapacitySchema,
   executionProfileIssues,
   type ExecutionProfile,
+  type ExecutionCapacity,
   type RuntimeDetails,
   type RuntimeStatus,
 } from "./runtime.ts";
@@ -130,6 +132,8 @@ export type Workspace = {
   features: Feature[];
   runs: Run[];
   policies: Policy[];
+  // Legacy local workspaces omit this. The runner resolves a safe default.
+  executionCapacity?: ExecutionCapacity;
 };
 export type Gate = {
   eligible: boolean;
@@ -210,6 +214,11 @@ export const commandSchema = z.discriminatedUnion("type", [
     type: z.literal("configure_execution"),
     projectId: id,
     profile: profileSchema,
+  }),
+  z.object({
+    type: z.literal("configure_execution_capacity"),
+    expectedRevision: z.number().int().nonnegative(),
+    capacity: executionCapacitySchema,
   }),
   z.object({
     type: z.literal("create_project"),

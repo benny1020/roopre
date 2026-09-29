@@ -15,7 +15,11 @@ import {
   freezeHarnessMemory,
   validateMemoryMutation,
 } from "./memory.ts";
-import { activeStatuses, executionProfileIssues } from "../shared/runtime.ts";
+import {
+  activeStatuses,
+  executionCapacityOf,
+  executionProfileIssues,
+} from "../shared/runtime.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalSourceRef } from "../shared/memory.ts";
 import {
@@ -360,6 +364,7 @@ export function apply(
           harness: freezeHarnessMemory(harness!),
           agents: [],
           profile: structuredClone(p.executionProfile),
+          capacity: executionCapacityOf(w.executionCapacity),
           binding: policyBinding(w, f!),
           attempt: 0,
           costUsd: 0,
@@ -399,6 +404,21 @@ export function apply(
       p.executionProfile = c.profile;
       for (const f of w.features.filter((f) => f.projectId === p.id))
         if (latestDesign(f)) latestDesign(f)!.decisions = [];
+      break;
+    }
+    case "configure_execution_capacity": {
+      requireThat(
+        w.mode === "local-owner" && actor.role === "admin",
+        "forbidden",
+        "맥 앱 소유자만 동시 실행 정책을 설정할 수 있습니다.",
+        403,
+      );
+      requireThat(
+        w.revision === c.expectedRevision,
+        "revision_conflict",
+        "실행 정책이 변경됐습니다. 최신 상태를 확인하세요.",
+      );
+      w.executionCapacity = executionCapacityOf(c.capacity);
       break;
     }
     case "create_project": {
@@ -698,6 +718,7 @@ export function apply(
                   );
                   return resolved ? freezeHarnessMemory(resolved) : undefined;
                 })(),
+                capacity: executionCapacityOf(w.executionCapacity),
                 agents: [],
                 binding: approvalBinding(w, f!),
                 attempt: 0,

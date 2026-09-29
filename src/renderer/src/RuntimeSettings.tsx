@@ -2,10 +2,12 @@ import { useEffect, useState, useRef } from "react";
 import type { Snapshot } from "../../shared/contracts";
 import {
   defaultChecksForRuntime,
+  executionCapacityOf,
   runnerImageForRuntime,
   standardSteps,
   type ConnectionInfo,
   type ExecutionProfile,
+  type ExecutionCapacity,
   type ProjectRuntime,
 } from "../../shared/runtime";
 import type {
@@ -72,6 +74,9 @@ export default function RuntimeSettings({
   const [checks, setChecks] = useState(JSON.stringify(defaults, null, 2));
   const [web, setWeb] = useState(true);
   const [runtime, setRuntime] = useState<ProjectRuntime>("node");
+  const [capacity, setCapacity] = useState<ExecutionCapacity>(() =>
+    executionCapacityOf(snapshot.executionCapacity),
+  );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -113,6 +118,9 @@ export default function RuntimeSettings({
     setRemote(p?.gitHost?.remote);
     setGitConnectionId(p?.gitHost?.connectionId ?? "");
   }, [projectId, JSON.stringify(project?.executionProfile)]);
+  useEffect(() => {
+    setCapacity(executionCapacityOf(snapshot.executionCapacity));
+  }, [JSON.stringify(snapshot.executionCapacity)]);
   return (
     <div className="content-page runtime-settings">
       <div className="page-heading">
@@ -155,6 +163,101 @@ export default function RuntimeSettings({
         </section>
       ) : (
         <>
+          <section className="runtime-card execution-capacity-card">
+            <div className="runtime-section-heading">
+              <div>
+                <h2>동시 실행 정책</h2>
+                <p>
+                  실행기 자원을 나누되, 같은 프로젝트의 기능도 독립 worktree로
+                  함께 진행합니다.
+                </p>
+              </div>
+              <span className="host-state">
+                최대 {capacity.maxConcurrentRuns} 실행 · 프로젝트당{" "}
+                {capacity.maxConcurrentRunsPerProject}
+              </span>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void act(async () => {
+                  await desktop.command({
+                    type: "configure_execution_capacity",
+                    expectedRevision: snapshot.revision,
+                    capacity,
+                  });
+                  await onSaved();
+                  setMessage(
+                    "동시 실행 정책을 저장했습니다. 진행 중인 실행은 유지하고 다음 실행부터 반영합니다.",
+                  );
+                });
+              }}
+            >
+              <div className="runtime-grid">
+                <label className="field">
+                  전체 동시 실행
+                  <input
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={capacity.maxConcurrentRuns}
+                    onChange={(e) => {
+                      const maxConcurrentRuns = Number(e.target.value);
+                      setCapacity((current) => ({
+                        ...current,
+                        maxConcurrentRuns,
+                        maxConcurrentRunsPerProject: Math.min(
+                          current.maxConcurrentRunsPerProject,
+                          maxConcurrentRuns,
+                        ),
+                      }));
+                    }}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  프로젝트당 동시 실행
+                  <input
+                    type="number"
+                    min="1"
+                    max={capacity.maxConcurrentRuns}
+                    value={capacity.maxConcurrentRunsPerProject}
+                    onChange={(e) =>
+                      setCapacity((current) => ({
+                        ...current,
+                        maxConcurrentRunsPerProject: Number(e.target.value),
+                      }))
+                    }
+                    required
+                  />
+                </label>
+                <label className="field">
+                  단계 안 병렬 에이전트
+                  <input
+                    type="number"
+                    min="1"
+                    max="4"
+                    value={capacity.maxAgentsPerStage}
+                    onChange={(e) =>
+                      setCapacity((current) => ({
+                        ...current,
+                        maxAgentsPerStage: Number(e.target.value),
+                      }))
+                    }
+                    required
+                  />
+                </label>
+              </div>
+              <button className="primary" disabled={busy}>
+                동시 실행 정책 저장
+              </button>
+              <p className="muted">
+                기본값은 전체 3개·프로젝트당 2개·단계당 3개입니다. 실행 수를
+                낮춰도 이미 시작한 작업은 중단하지 않습니다. 메모리와 Docker
+                상태를 보며 조절하세요.
+              </p>
+            </form>
+          </section>
           <section
             className="runtime-card"
             ref={connectionSection}

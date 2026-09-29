@@ -1,5 +1,5 @@
 import type { Snapshot } from "../../shared/contracts";
-import { activeStatuses } from "../../shared/runtime";
+import { activeStatuses, executionCapacityOf } from "../../shared/runtime";
 import { runNames } from "./workspace/presentation";
 import { Empty } from "./workspace/Controls";
 import { ArrowUpRight } from "lucide-react";
@@ -11,13 +11,18 @@ export default function RunOverview({
   onSelect: (id: string, runId: string) => void;
 }) {
   const runs = snapshot.runs.slice().reverse();
+  const capacity = executionCapacityOf(snapshot.executionCapacity);
   return (
     <div className="content-page execution-overview">
       <div className="page-heading">
         <div>
           <div className="eyebrow">전체 프로젝트 · 실행기</div>
           <h1>실행 현황</h1>
-          <p>프로젝트 간 최대 2개 동시 실행 · 같은 프로젝트는 순차 실행</p>
+          <p>
+            전체 최대 {capacity.maxConcurrentRuns}개 · 프로젝트당 최대{" "}
+            {capacity.maxConcurrentRunsPerProject}개 동시 실행 · 단계당 최대{" "}
+            {capacity.maxAgentsPerStage}개 에이전트 병렬
+          </p>
         </div>
         <span className="work-state active">
           <i />

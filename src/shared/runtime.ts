@@ -7,6 +7,32 @@ export type RepositoryRuntime = {
   runtime: ProjectRuntime;
   framework?: "spring-boot";
 };
+export const executionCapacitySchema = z
+  .object({
+    maxConcurrentRuns: z.number().int().min(1).max(6),
+    maxConcurrentRunsPerProject: z.number().int().min(1).max(4),
+    maxAgentsPerStage: z.number().int().min(1).max(4),
+  })
+  .refine(
+    (value) => value.maxConcurrentRunsPerProject <= value.maxConcurrentRuns,
+    {
+      message: "프로젝트당 실행 수는 전체 실행 수를 넘을 수 없습니다.",
+      path: ["maxConcurrentRunsPerProject"],
+    },
+  );
+export type ExecutionCapacity = z.infer<typeof executionCapacitySchema>;
+export const defaultExecutionCapacity: ExecutionCapacity = {
+  maxConcurrentRuns: 3,
+  maxConcurrentRunsPerProject: 2,
+  maxAgentsPerStage: 3,
+};
+export function executionCapacityOf(value?: Partial<ExecutionCapacity>) {
+  const parsed = executionCapacitySchema.safeParse({
+    ...defaultExecutionCapacity,
+    ...value,
+  });
+  return parsed.success ? parsed.data : defaultExecutionCapacity;
+}
 const nodeChecks = [
   {
     name: "typecheck",
@@ -114,6 +140,7 @@ export type RuntimeDetails = {
   harness?: ResolvedHarness;
   agents?: AgentExecution[];
   profile: ExecutionProfile;
+  capacity?: ExecutionCapacity;
   binding: string;
   attempt: number;
   lease?: string;

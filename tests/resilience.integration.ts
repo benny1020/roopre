@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { Store, databaseUrl } from "../src/database/store.ts";
 import { ownerFixture } from "./fixtures/workspace.ts";
 import { sections, type Command } from "../src/shared/contracts.ts";
+import { defaultExecutionCapacity } from "../src/shared/runtime.ts";
 import { approvalBinding } from "../src/domain/runtime.ts";
 import { RunnerManager } from "../src/runner/manager.ts";
 import type { ConnectionVault } from "../src/main/connections/vault.ts";
@@ -128,6 +129,15 @@ test(
     };
     try {
       await store.init();
+      await send({
+        type: "configure_execution_capacity",
+        expectedRevision: (await store.read("owner")).revision,
+        capacity: {
+          ...defaultExecutionCapacity,
+          maxConcurrentRuns: 2,
+          maxConcurrentRunsPerProject: 1,
+        },
+      });
       proxy.listen(0, "127.0.0.1");
       await once(proxy, "listening");
       await writeFile(

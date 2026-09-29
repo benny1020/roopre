@@ -1,4 +1,5 @@
 import type { Workspace } from "../shared/contracts.ts";
+import { defaultExecutionCapacity } from "../shared/runtime.ts";
 
 // Product initialization contains only the real local owner and mandatory
 // defaults. Projects, features, approvals and executions come from the user.
@@ -16,6 +17,7 @@ export function emptyWorkspace(
     projects: [],
     features: [],
     runs: [],
+    executionCapacity: { ...defaultExecutionCapacity },
     policies: [
       {
         version: 1,
