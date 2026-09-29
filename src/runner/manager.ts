@@ -20,7 +20,7 @@ import {
   readdir,
   rm,
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type { Store } from "../database/store.ts";
 import type { ConnectionVault } from "../main/connections/vault.ts";
 import { activeStatuses, type Evidence } from "../shared/runtime.ts";
@@ -45,9 +45,6 @@ export const isProtectedRunnerPath = (path: string) =>
   /(^|\/)(tests?|__tests__|scripts|config|\.github|gradle)\/|\.(test|spec)\.[a-z]+$|(^|\/)(package\.json|pnpm-lock\.yaml|package-lock\.json|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|gradle\.properties|tsconfig|eslint|vitest|playwright)/.test(
     path,
   );
-
-const isGradleBuildPath = (path: string) =>
-  /(^|\/)build\.gradle(?:\.kts)?$/.test(path);
 
 export async function discoverRunnerConfigPaths(checkout: string) {
   const paths = new Set<string>();
@@ -129,6 +126,7 @@ export class RunnerManager {
       network: `roopre-net-${id}`,
       dependencies: `roopre-deps-${id}`,
       gradle: `roopre-gradle-${id}`,
+      gradleWorkspace: `roopre-gradle-workspace-${id}`,
     };
   }
   private async removeContainers(names: string[]) {
@@ -181,6 +179,9 @@ export class RunnerManager {
       timeout: 10000,
     });
     await command("docker", ["volume", "rm", n.gradle], { timeout: 10000 });
+    await command("docker", ["volume", "rm", n.gradleWorkspace], {
+      timeout: 10000,
+    });
     await command(
       "docker",
       ["image", "rm", `roopre-deps-${id}:latest`, `roopre-base-${id}:locked`],
@@ -584,18 +585,6 @@ export class RunnerManager {
       const setup = join(area, "setup");
       await mkdir(setup);
       const runtime = profile.runtime ?? "node";
-      const gradleBuildDirectories =
-        runtime === "java-gradle"
-          ? [
-              ...new Set(
-                (await discoverRunnerConfigPaths(checkout))
-                  .filter(isGradleBuildPath)
-                  .map(dirname),
-              ),
-            ]
-          : [];
-      if (runtime === "java-gradle" && !gradleBuildDirectories.length)
-        gradleBuildDirectories.push(".");
       let hasManifest = false;
       for (const file of [
         "package.json",
@@ -627,8 +616,12 @@ export class RunnerManager {
       await this.docker(["volume", "create", n.dependencies], abort.signal);
       if (runtime === "java-gradle") {
         await this.docker(["volume", "create", n.gradle], abort.signal);
-        // New Docker volumes are root-owned. Prepare only the run-private cache
-        // before the unprivileged Gradle process is allowed to resolve dependencies.
+        await this.docker(
+          ["volume", "create", n.gradleWorkspace],
+          abort.signal,
+        );
+        // New Docker volumes are root-owned. Copy source into a run-private
+        // workspace and initialize the cache before Gradle runs unprivileged.
         await this.docker(
           [
             "run",
@@ -645,19 +638,23 @@ export class RunnerManager {
             "no-new-privileges",
             "--mount",
             `type=volume,src=${n.gradle},dst=/gradle-cache`,
+            "--mount",
+            `type=volume,src=${n.gradleWorkspace},dst=/prep-workspace`,
+            "--mount",
+            `type=bind,src=${checkout},dst=/source,readonly`,
             image,
             "sh",
             "-c",
-            "mkdir -p /gradle-cache && chown -R pwuser:pwuser /gradle-cache",
+            "tar -C /source --exclude=.git --exclude=./.git -cf - . | tar -C /prep-workspace -xf - && chown -R pwuser:pwuser /gradle-cache /prep-workspace",
           ],
           abort.signal,
           120000,
         );
       }
       if (runtime === "java-gradle" && !planning) {
-        // Gradle configuration can resolve the project's public dependencies, so
-        // do it once as an unprivileged setup user. The source is read-only and
-        // no host home, credentials, Docker socket, or runner network is shared.
+        // Gradle configuration can resolve public dependencies, so run it once
+        // unprivileged in the run-private source copy. No host home, credentials,
+        // Docker socket, or runner network is shared.
         await this.docker(
           [
             "run",
@@ -672,15 +669,9 @@ export class RunnerManager {
             "--security-opt",
             "no-new-privileges",
             "--mount",
-            `type=bind,src=${checkout},dst=/workspace,readonly`,
+            `type=volume,src=${n.gradleWorkspace},dst=/workspace`,
             "--mount",
             `type=volume,src=${n.gradle},dst=/gradle-cache`,
-            "--tmpfs",
-            "/workspace/.gradle:rw,nosuid,size=512m,mode=1777",
-            ...gradleBuildDirectories.flatMap((directory) => [
-              "--tmpfs",
-              `/workspace${directory === "." ? "" : `/${directory}`}/build:rw,nosuid,size=512m,mode=1777`,
-            ]),
             "--env",
             "GRADLE_USER_HOME=/gradle-cache",
             image,
