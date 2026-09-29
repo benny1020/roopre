@@ -27,7 +27,12 @@ import {
   executionCapacityOf,
   type Evidence,
 } from "../shared/runtime.ts";
-import { gate, type Run, type Workspace } from "../shared/contracts.ts";
+import {
+  gate,
+  latestDesign,
+  type Run,
+  type Workspace,
+} from "../shared/contracts.ts";
 import { approvalBinding, policyBinding } from "../domain/runtime.ts";
 import { command, git } from "./process.ts";
 import { startBroker } from "./broker.ts";
@@ -401,7 +406,8 @@ export class RunnerManager {
       (planning
         ? r.runtime.binding !== policyBinding(w, f) ||
           r.runtime.draftRevision !== f.draft.revision
-        : !gate(w, f, approvalBinding(w, f)).eligible ||
+        : !latestDesign(f) ||
+          !gate(w, f, approvalBinding(w, f)).eligible ||
           r.runtime.binding !== approvalBinding(w, f))
     )
       throw Error("설계·지침·초안 또는 승인 계약이 바뀌었습니다.");
@@ -1579,6 +1585,7 @@ export class RunnerManager {
           if (
             abort.signal.aborted ||
             ["cancelled", "blocked"].includes(r.status) ||
+            !latestDesign(f) ||
             !gate(w, f, approvalBinding(w, f)).eligible ||
             r.runtime!.binding !== approvalBinding(w, f)
           )
@@ -1637,6 +1644,7 @@ export class RunnerManager {
         !old.runtime ||
         old.runtime.terminationConfirmed !== true ||
         !["failed", "interrupted"].includes(old.status) ||
+        !latestDesign(f) ||
         !gate(w, f, approvalBinding(w, f)).eligible ||
         old.runtime.binding !== approvalBinding(w, f)
       )
@@ -1686,6 +1694,7 @@ export class RunnerManager {
     if (r.runtime.kind === "planning")
       throw Error("계획 작업은 최신 초안에서 새로 요청하세요.");
     if (
+      !latestDesign(f) ||
       !gate(w, f, approvalBinding(w, f)).eligible ||
       r.runtime.binding !== approvalBinding(w, f)
     )

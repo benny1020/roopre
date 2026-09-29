@@ -115,6 +115,31 @@ test("gate accepts a persisted legacy macOS-owner approval with the current bind
   });
   assert.equal(gate(w, f).eligible, true);
 });
+test("unrelated mutations block a legacy run on a draft-only feature without computing an approval binding", () => {
+  const w = seed();
+  const draftOnly = w.features.find((feature) => feature.designs.length === 0)!;
+  w.runs.push({
+    id: "legacy-draft-only-run",
+    featureId: draftOnly.id,
+    designId: "missing-design",
+    status: "queued",
+    reason: "legacy fixture",
+    policyVersion: w.policies.at(-1)!.version,
+    effectivePolicy: "legacy fixture",
+    actorId: "jun",
+    at: new Date().toISOString(),
+  });
+  assert.doesNotThrow(() =>
+    apply(w, "jun", {
+      type: "create_feature",
+      projectId: "commerce",
+      title: "Unrelated feature",
+      template: "feature",
+      requirements: "AC01 does not evaluate the draft-only run binding.",
+    }),
+  );
+  assert.equal(w.runs[0].status, "blocked");
+});
 test("owner configures bounded execution capacity and each run snapshots stage fan-out", () => {
   const { w, f, review } = fixture();
   const capacity = {

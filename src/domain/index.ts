@@ -876,6 +876,7 @@ export function apply(
       continue;
     }
     if (
+      !latestDesign(feature) ||
       !gate(w, feature, approvalBinding(w, feature)).eligible ||
       run.designId !== latestDesign(feature)?.id ||
       run.policyVersion !== w.policies.at(-1)!.version
