@@ -20,7 +20,7 @@ import {
   readdir,
   rm,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { Store } from "../database/store.ts";
 import type { ConnectionVault } from "../main/connections/vault.ts";
 import { activeStatuses, type Evidence } from "../shared/runtime.ts";
@@ -46,10 +46,24 @@ export const isProtectedRunnerPath = (path: string) =>
     path,
   );
 
+const isGradleBuildPath = (path: string) =>
+  /(^|\/)build\.gradle(?:\.kts)?$/.test(path);
+
 export async function discoverRunnerConfigPaths(checkout: string) {
-  const paths = new Set((await readdir(checkout)).filter(isRootRunnerConfig));
-  const scanGradle = async (relative: string, depth: number): Promise<void> => {
-    if (depth > 6 || paths.size >= 1000) return;
+  const paths = new Set<string>();
+  const ignoredDirectories = new Set([
+    ".git",
+    ".gradle",
+    "build",
+    "node_modules",
+    ".roopre-artifacts",
+    "playwright-report",
+    "test-results",
+  ]);
+  const hasGradleDirectory = (path: string) =>
+    path.split("/").includes("gradle");
+  const scan = async (relative: string, depth: number): Promise<void> => {
+    if (depth > 8 || paths.size >= 1000) return;
     const absolute = join(checkout, relative);
     let stat;
     try {
@@ -58,7 +72,8 @@ export async function discoverRunnerConfigPaths(checkout: string) {
       return;
     }
     if (stat.isSymbolicLink() || stat.isFile()) {
-      paths.add(relative);
+      if (isRootRunnerConfig(relative) || hasGradleDirectory(relative))
+        paths.add(relative);
       return;
     }
     if (!stat.isDirectory()) return;
@@ -71,11 +86,14 @@ export async function discoverRunnerConfigPaths(checkout: string) {
     for (const entry of entries) {
       if (paths.size >= 1000) break;
       const path = join(relative, entry.name);
-      if (entry.isSymbolicLink() || entry.isFile()) paths.add(path);
-      else if (entry.isDirectory()) await scanGradle(path, depth + 1);
+      if (entry.isSymbolicLink() || entry.isFile()) {
+        if (isRootRunnerConfig(entry.name) || hasGradleDirectory(path))
+          paths.add(path);
+      } else if (entry.isDirectory() && !ignoredDirectories.has(entry.name))
+        await scan(path, depth + 1);
     }
   };
-  await scanGradle("gradle", 0);
+  await scan(".", 0);
   return [...paths];
 }
 
@@ -566,6 +584,18 @@ export class RunnerManager {
       const setup = join(area, "setup");
       await mkdir(setup);
       const runtime = profile.runtime ?? "node";
+      const gradleBuildDirectories =
+        runtime === "java-gradle"
+          ? [
+              ...new Set(
+                (await discoverRunnerConfigPaths(checkout))
+                  .filter(isGradleBuildPath)
+                  .map(dirname),
+              ),
+            ]
+          : [];
+      if (runtime === "java-gradle" && !gradleBuildDirectories.length)
+        gradleBuildDirectories.push(".");
       let hasManifest = false;
       for (const file of [
         "package.json",
@@ -647,8 +677,10 @@ export class RunnerManager {
             `type=volume,src=${n.gradle},dst=/gradle-cache`,
             "--tmpfs",
             "/workspace/.gradle:rw,nosuid,size=512m,mode=1777",
-            "--tmpfs",
-            "/workspace/build:rw,nosuid,size=512m,mode=1777",
+            ...gradleBuildDirectories.flatMap((directory) => [
+              "--tmpfs",
+              `/workspace${directory === "." ? "" : `/${directory}`}/build:rw,nosuid,size=512m,mode=1777`,
+            ]),
             "--env",
             "GRADLE_USER_HOME=/gradle-cache",
             image,

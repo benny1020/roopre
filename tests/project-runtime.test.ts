@@ -67,12 +67,15 @@ test("discovers new Gradle convention files without following symlinks", async (
   try {
     await writeFile(join(root, "settings.gradle.kts"), "");
     await writeFile(join(root, "build.gradle.kts"), "");
+    await mkdir(join(root, "app"), { recursive: true });
+    await writeFile(join(root, "app", "build.gradle.kts"), "");
     await mkdir(join(root, "gradle", "init"), { recursive: true });
     await writeFile(join(root, "gradle", "init", "quality.gradle.kts"), "");
     outside = await mkdtemp(join(tmpdir(), "roopre-gradle-outside-"));
     await writeFile(join(outside, "secret.gradle.kts"), "");
     await symlink(outside, join(root, "gradle", "init", "external"));
     assert.deepEqual((await discoverRunnerConfigPaths(root)).sort(), [
+      "app/build.gradle.kts",
       "build.gradle.kts",
       "gradle/init/external",
       "gradle/init/quality.gradle.kts",
