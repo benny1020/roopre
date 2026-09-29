@@ -1,6 +1,45 @@
 import type { ResolvedHarness, AgentExecution } from "./harness.ts";
 import { z } from "zod";
 import { gitHostBindingSchema } from "./git-host.ts";
+export const projectRuntimeSchema = z.enum(["node", "java-gradle"]);
+export type ProjectRuntime = z.infer<typeof projectRuntimeSchema>;
+export type RepositoryRuntime = {
+  runtime: ProjectRuntime;
+  framework?: "spring-boot";
+};
+const nodeChecks = [
+  {
+    name: "typecheck",
+    argv: ["pnpm", "run", "typecheck"],
+    timeoutSeconds: 120,
+  },
+  { name: "test", argv: ["pnpm", "test"], timeoutSeconds: 300 },
+  {
+    name: "e2e",
+    argv: ["pnpm", "exec", "playwright", "test"],
+    timeoutSeconds: 600,
+  },
+] as const;
+const javaGradleChecks = [
+  {
+    name: "typecheck",
+    argv: ["gradle", "--no-daemon", "classes"],
+    timeoutSeconds: 600,
+  },
+  {
+    name: "test",
+    argv: ["gradle", "--no-daemon", "test"],
+    timeoutSeconds: 900,
+  },
+] as const;
+export function defaultChecksForRuntime(runtime: ProjectRuntime) {
+  return structuredClone(
+    runtime === "java-gradle" ? javaGradleChecks : nodeChecks,
+  );
+}
+export function runnerImageForRuntime(_runtime: ProjectRuntime) {
+  return "roopre-runner:0.3";
+}
 export const checkSchema = z.object({
   name: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
   argv: z.array(z.string().min(1).max(500)).min(1).max(30),
@@ -18,6 +57,7 @@ export const profileSchema = z.object({
   budgetUsd: z.number().positive().max(1000),
   timeoutMinutes: z.number().int().min(1).max(240),
   repairLimit: z.number().int().min(0).max(3),
+  runtime: projectRuntimeSchema.optional(),
   gitHost: gitHostBindingSchema.optional(),
 });
 export type ExecutionProfile = z.infer<typeof profileSchema>;

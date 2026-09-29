@@ -50,6 +50,27 @@ test("archived test evidence survives retries and rejects symlinks, traversal an
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("Gradle HTML and JUnit XML reports are retained as execution evidence", async () => {
+  const root = await mkdtemp(join(tmpdir(), "roopre-gradle-evidence-"));
+  try {
+    const reports = join(root, "build", "reports", "tests", "test");
+    const results = join(root, "build", "test-results", "test");
+    await mkdir(reports, { recursive: true });
+    await mkdir(results, { recursive: true });
+    await writeFile(join(reports, "index.html"), "<html>passed</html>");
+    await writeFile(join(results, "TEST-example.xml"), "<testsuite />");
+    assert.deepEqual(
+      (await collectArtifacts(root, 1)).map((file) => file.path).sort(),
+      [
+        "build/reports/tests/test/index.html",
+        "build/test-results/test/TEST-example.xml",
+      ],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 test("terminated commands cannot report success even if their signal handler exits zero", async () => {
   const abort = new AbortController();
   const result = await command(

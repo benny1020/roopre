@@ -345,7 +345,7 @@ export class Bootstrap {
     this.stage = "격리 실행 이미지 준비";
     const image = await this.run(
       "docker",
-      ["image", "inspect", "roopre-runner:0.2"],
+      ["image", "inspect", "roopre-runner:0.3"],
       { signal, timeout: 10000 },
     );
     if (image.code !== 0) {
@@ -358,7 +358,14 @@ export class Bootstrap {
         { mode: 0o600 },
       );
       await this.docker(
-        ["build", "-t", "roopre-runner:0.2", context],
+        [
+          "build",
+          "-t",
+          "roopre-runner:0.3",
+          "-t",
+          "roopre-runner:0.2",
+          context,
+        ],
         signal,
         900000,
       );

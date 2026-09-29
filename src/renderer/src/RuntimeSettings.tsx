@@ -1,28 +1,19 @@
 import { useEffect, useState, useRef } from "react";
 import type { Snapshot } from "../../shared/contracts";
 import {
+  defaultChecksForRuntime,
+  runnerImageForRuntime,
   standardSteps,
   type ConnectionInfo,
   type ExecutionProfile,
+  type ProjectRuntime,
 } from "../../shared/runtime";
 import type {
   GitHostConnectionInfo,
   GitHostKind,
   GitRemote,
 } from "../../shared/git-host";
-const defaults = [
-  {
-    name: "typecheck",
-    argv: ["pnpm", "run", "typecheck"],
-    timeoutSeconds: 120,
-  },
-  { name: "test", argv: ["pnpm", "test"], timeoutSeconds: 300 },
-  {
-    name: "e2e",
-    argv: ["pnpm", "exec", "playwright", "test"],
-    timeoutSeconds: 600,
-  },
-];
+const defaults = defaultChecksForRuntime("node");
 export default function RuntimeSettings({
   snapshot,
   initialProjectId,
@@ -80,6 +71,7 @@ export default function RuntimeSettings({
   const [minutes, setMinutes] = useState(60);
   const [checks, setChecks] = useState(JSON.stringify(defaults, null, 2));
   const [web, setWeb] = useState(true);
+  const [runtime, setRuntime] = useState<ProjectRuntime>("node");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -117,6 +109,7 @@ export default function RuntimeSettings({
     setMinutes(p?.timeoutMinutes ?? 60);
     setChecks(JSON.stringify(p?.checks ?? defaults, null, 2));
     setWeb(p?.webRequired ?? true);
+    setRuntime(p?.runtime ?? "node");
     setRemote(p?.gitHost?.remote);
     setGitConnectionId(p?.gitHost?.connectionId ?? "");
   }, [projectId, JSON.stringify(project?.executionProfile)]);
@@ -493,12 +486,13 @@ export default function RuntimeSettings({
                     baseCommit: "0".repeat(40),
                     connectionId,
                     connectionVersion: 1,
-                    image: "roopre-runner:0.2",
+                    image: runnerImageForRuntime(runtime),
                     checks: JSON.parse(checks),
                     webRequired: web,
                     budgetUsd: Number(budget),
                     timeoutMinutes: minutes,
                     repairLimit: 2,
+                    runtime,
                     ...(remote
                       ? {
                           gitHost: {
@@ -562,6 +556,17 @@ export default function RuntimeSettings({
                         if (r) {
                           setPath(r.path);
                           setBranch(r.branch || "main");
+                          setRuntime(r.runtime);
+                          if (!project?.executionProfile) {
+                            setChecks(
+                              JSON.stringify(
+                                defaultChecksForRuntime(r.runtime),
+                                null,
+                                2,
+                              ),
+                            );
+                            setWeb(r.runtime === "node");
+                          }
                           setRemote(r.remote);
                           if (!r.remote) setGitConnectionId("");
                         }
@@ -578,6 +583,20 @@ export default function RuntimeSettings({
                     onChange={(e) => setBranch(e.target.value)}
                     required
                   />
+                </label>
+                <label className="field">
+                  프로젝트 런타임
+                  <select
+                    value={runtime}
+                    onChange={(e) =>
+                      setRuntime(e.target.value as ProjectRuntime)
+                    }
+                  >
+                    <option value="node">Node.js / 웹</option>
+                    <option value="java-gradle">
+                      Java · Gradle / Spring Boot
+                    </option>
+                  </select>
                 </label>
                 {remote && (
                   <label className="field">
@@ -642,10 +661,26 @@ export default function RuntimeSettings({
                   onChange={(e) => setChecks(e.target.value)}
                 />
               </label>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setChecks(
+                    JSON.stringify(defaultChecksForRuntime(runtime), null, 2),
+                  );
+                  if (runtime === "java-gradle") setWeb(false);
+                }}
+              >
+                {runtime === "java-gradle"
+                  ? "Gradle 기본 검사 적용"
+                  : "Node 기본 검사 적용"}
+              </button>
               <p className="muted">
-                필수 typecheck·test와 선택한 e2e 명령이 통과해야 합니다. 별도 AI
-                리뷰는 자동 적용됩니다. gateway의 실제 청구액은 추정 예산과 다를
-                수 있습니다.
+                {runtime === "java-gradle"
+                  ? "Java 21·Gradle 8 실행 환경에서 classes와 test를 고정 검사합니다. Spring Boot 통합 검사는 프로젝트의 test task에 포함하세요."
+                  : "필수 typecheck·test와 선택한 e2e 명령이 통과해야 합니다."}{" "}
+                별도 AI 리뷰는 자동 적용됩니다. gateway의 실제 청구액은 추정
+                예산과 다를 수 있습니다.
               </p>
               <button
                 className="primary"

@@ -34,7 +34,7 @@ const occupiesSlot = (r: Run) =>
   (activeStatuses.includes(r.status) && r.status !== "queued");
 
 const runnerIgnoredPaths =
-  "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n";
+  "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n.gradle/\nbuild/\n";
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
   private stopping = false;
@@ -66,6 +66,7 @@ export class RunnerManager {
       proxy: `roopre-proxy-${id}`,
       network: `roopre-net-${id}`,
       dependencies: `roopre-deps-${id}`,
+      gradle: `roopre-gradle-${id}`,
     };
   }
   private async removeContainers(names: string[]) {
@@ -117,6 +118,7 @@ export class RunnerManager {
     await command("docker", ["volume", "rm", n.dependencies], {
       timeout: 10000,
     });
+    await command("docker", ["volume", "rm", n.gradle], { timeout: 10000 });
     await command(
       "docker",
       ["image", "rm", `roopre-deps-${id}:latest`, `roopre-base-${id}:locked`],
@@ -527,6 +529,7 @@ export class RunnerManager {
       // Dependency preparation is deterministic and separate from the agent. No host home/config is mounted.
       const setup = join(area, "setup");
       await mkdir(setup);
+      const runtime = profile.runtime ?? "node";
       let hasManifest = false;
       for (const file of [
         "package.json",
@@ -556,6 +559,41 @@ export class RunnerManager {
       // Only this trusted, networkless setup writes the dependency volume.
       // Every agent/check/review container receives it read-only.
       await this.docker(["volume", "create", n.dependencies], abort.signal);
+      if (runtime === "java-gradle")
+        await this.docker(["volume", "create", n.gradle], abort.signal);
+      if (runtime === "java-gradle" && !planning) {
+        // Gradle configuration can resolve the project's public dependencies, so
+        // do it once as an unprivileged setup user. The source is read-only and
+        // no host home, credentials, Docker socket, or runner network is shared.
+        await this.docker(
+          [
+            "run",
+            "--rm",
+            "--name",
+            n.container,
+            "--network",
+            "bridge",
+            "--user",
+            "pwuser",
+            "--cap-drop=ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--mount",
+            `type=bind,src=${checkout},dst=/workspace,readonly`,
+            "--mount",
+            `type=volume,src=${n.gradle},dst=/gradle-cache`,
+            "--env",
+            "GRADLE_USER_HOME=/gradle-cache",
+            image,
+            "gradle",
+            "--no-daemon",
+            "--console=plain",
+            "testClasses",
+          ],
+          abort.signal,
+          600000,
+        );
+      }
       await this.docker(
         [
           "run",
@@ -718,6 +756,14 @@ export class RunnerManager {
               : []),
             "--mount",
             `type=volume,src=${n.dependencies},dst=/workspace/node_modules,readonly,volume-nocopy`,
+            ...(runtime === "java-gradle"
+              ? [
+                  "--mount",
+                  `type=volume,src=${n.gradle},dst=/locked-gradle,readonly,volume-nocopy`,
+                  "--env",
+                  "GRADLE_USER_HOME=/tmp/roopre-gradle",
+                ]
+              : []),
             "--tmpfs",
             "/tmp:rw,nosuid,size=512m",
             "--tmpfs",
@@ -731,8 +777,9 @@ export class RunnerManager {
             "--env",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
             image,
-            "sleep",
-            "infinity",
+            "sh",
+            "-c",
+            `${runtime === "java-gradle" ? "mkdir -p /tmp/roopre-gradle && cp -a /locked-gradle/. /tmp/roopre-gradle/ && " : ""}exec sleep infinity`,
           ],
           abort.signal,
         );

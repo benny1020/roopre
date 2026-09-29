@@ -39,6 +39,7 @@ import { RunnerManager } from "../runner/manager.ts";
 import { command, git } from "../runner/process.ts";
 import { trustedRenderer } from "./security.ts";
 import { ConversationService } from "./conversations/service.ts";
+import { detectRepositoryRuntime } from "./project-runtime.ts";
 import { interruptPendingConversations } from "../database/conversations.ts";
 import {
   conversationScopeSchema,
@@ -547,6 +548,7 @@ export async function installDesktop() {
               path,
               branch: await git(path, "branch", "--show-current"),
               commit: await git(path, "rev-parse", "HEAD"),
+              ...(await detectRepositoryRuntime(path)),
               ...(remote ? { remote } : {}),
             };
             break;
@@ -561,6 +563,9 @@ export async function installDesktop() {
               "rev-parse",
               "--show-toplevel",
             );
+            p.runtime = (
+              await detectRepositoryRuntime(p.repositoryPath)
+            ).runtime;
             p.baseCommit = await git(
               p.repositoryPath,
               "rev-parse",
@@ -743,7 +748,7 @@ export async function installDesktop() {
             ).catch(() => ({ code: 1 }));
             const image = await command(
               "docker",
-              ["image", "inspect", "roopre-runner:0.2"],
+              ["image", "inspect", "roopre-runner:0.3"],
               { timeout: 6000 },
             ).catch(() => ({ code: 1 }));
             value = {

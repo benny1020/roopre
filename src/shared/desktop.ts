@@ -6,6 +6,7 @@ import type {
   ConnectionInput,
   ConnectionInfo,
   ExecutionProfile,
+  RepositoryRuntime,
 } from "./runtime";
 import type {
   GitHostConnectionInfo,
@@ -55,12 +56,15 @@ export interface DesktopAPI {
   ) => Promise<GitHostConnectionInfo[]>;
   removeGitHostConnection: (id: string) => Promise<GitHostConnectionInfo[]>;
   testGitHostConnection: (id: string) => Promise<GitHostConnectionInfo[]>;
-  chooseRepository: () => Promise<{
-    path: string;
-    branch: string;
-    commit: string;
-    remote?: GitRemote;
-  } | null>;
+  chooseRepository: () => Promise<
+    | ({
+        path: string;
+        branch: string;
+        commit: string;
+        remote?: GitRemote;
+      } & RepositoryRuntime)
+    | null
+  >;
   configureProject: (
     projectId: string,
     profile: ExecutionProfile,
