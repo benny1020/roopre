@@ -35,6 +35,17 @@ const occupiesSlot = (r: Run) =>
 
 const runnerIgnoredPaths =
   "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n.gradle/\nbuild/\n";
+
+export const isRootRunnerConfig = (path: string) =>
+  /^(package\.json$|pnpm-lock\.yaml$|package-lock\.json$|build\.gradle(?:\.kts)?$|settings\.gradle(?:\.kts)?$|gradle\.properties$|\.gitignore$|\.npmrc$|\.pnpmfile\.[cm]?js$|\.yarnrc|\.eslintrc|\.babelrc|tsconfig|eslint|vitest|playwright|(?:babel|jest|vite|webpack|rollup|next|svelte|postcss|tailwind)\.config\.)/.test(
+    path,
+  );
+
+export const isProtectedRunnerPath = (path: string) =>
+  /(^|\/)(tests?|__tests__|scripts|config|\.github|gradle)\/|\.(test|spec)\.[a-z]+$|^(package\.json|pnpm-lock\.yaml|package-lock\.json|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|gradle\.properties|tsconfig|eslint|vitest|playwright)/.test(
+    path,
+  );
+
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
   private stopping = false;
@@ -445,27 +456,19 @@ export class RunnerManager {
         r.runtime!.worktree = checkout;
         r.runtime!.branch = branch;
       });
-      const rootConfig =
-        /^(package\.json$|pnpm-lock\.yaml$|package-lock\.json$|\.gitignore$|\.npmrc$|\.pnpmfile\.[cm]?js$|\.yarnrc|\.eslintrc|\.babelrc|tsconfig|eslint|vitest|playwright|(?:babel|jest|vite|webpack|rollup|next|svelte|postcss|tailwind)\.config\.)/;
       const tracked = await git(checkout, "ls-files", "-z");
       if (tracked.includes("\uFFFD"))
         throw Error(
           "UTF-8 파일 이름만 지원합니다. 저장소 파일 이름을 확인하세요.",
         );
-      const protectedPaths = tracked
-        .split("\0")
-        .filter((p) =>
-          /(^|\/)(tests?|__tests__|scripts|config|\.github)\/|\.(test|spec)\.[a-z]+$|^(package\.json|pnpm-lock\.yaml|package-lock\.json|tsconfig|eslint|vitest|playwright)/.test(
-            p,
-          ),
-        );
+      const protectedPaths = tracked.split("\0").filter(isProtectedRunnerPath);
       const fingerprint = async () => {
         const h = createHash("sha256");
         // New root configuration can redirect pnpm/npm or suppress tests too.
         const paths = [
           ...new Set([
             ...protectedPaths,
-            ...(await readdir(checkout)).filter((p) => rootConfig.test(p)),
+            ...(await readdir(checkout)).filter(isRootRunnerConfig),
           ]),
         ].sort();
         for (const p of paths) {
@@ -559,8 +562,34 @@ export class RunnerManager {
       // Only this trusted, networkless setup writes the dependency volume.
       // Every agent/check/review container receives it read-only.
       await this.docker(["volume", "create", n.dependencies], abort.signal);
-      if (runtime === "java-gradle")
+      if (runtime === "java-gradle") {
         await this.docker(["volume", "create", n.gradle], abort.signal);
+        // New Docker volumes are root-owned. Prepare only the run-private cache
+        // before the unprivileged Gradle process is allowed to resolve dependencies.
+        await this.docker(
+          [
+            "run",
+            "--rm",
+            "--name",
+            n.container,
+            "--network",
+            "none",
+            "--user",
+            "root",
+            "--cap-drop=ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--mount",
+            `type=volume,src=${n.gradle},dst=/gradle-cache`,
+            image,
+            "sh",
+            "-c",
+            "mkdir -p /gradle-cache && chown -R pwuser:pwuser /gradle-cache",
+          ],
+          abort.signal,
+          120000,
+        );
+      }
       if (runtime === "java-gradle" && !planning) {
         // Gradle configuration can resolve the project's public dependencies, so
         // do it once as an unprivileged setup user. The source is read-only and
@@ -582,6 +611,10 @@ export class RunnerManager {
             `type=bind,src=${checkout},dst=/workspace,readonly`,
             "--mount",
             `type=volume,src=${n.gradle},dst=/gradle-cache`,
+            "--tmpfs",
+            "/workspace/.gradle:rw,nosuid,size=512m,mode=1777",
+            "--tmpfs",
+            "/workspace/build:rw,nosuid,size=512m,mode=1777",
             "--env",
             "GRADLE_USER_HOME=/gradle-cache",
             image,

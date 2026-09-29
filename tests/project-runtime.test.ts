@@ -8,6 +8,10 @@ import {
   defaultChecksForRuntime,
   runnerImageForRuntime,
 } from "../src/shared/runtime.ts";
+import {
+  isProtectedRunnerPath,
+  isRootRunnerConfig,
+} from "../src/runner/manager.ts";
 
 test("detects Gradle and Spring Boot repositories and provides fixed Java checks", async () => {
   const root = await mkdtemp(join(tmpdir(), "roopre-runtime-"));
@@ -37,4 +41,20 @@ test("detects Gradle and Spring Boot repositories and provides fixed Java checks
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("protects Gradle build configuration and wrapper metadata from agent changes", () => {
+  for (const path of [
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/wrapper/gradle-wrapper.properties",
+    "gradle/libs.versions.toml",
+  ])
+    assert.equal(isProtectedRunnerPath(path), true, path);
+  assert.equal(isRootRunnerConfig("build.gradle.kts"), true);
+  assert.equal(isRootRunnerConfig("settings.gradle"), true);
+  assert.equal(isProtectedRunnerPath("src/main/java/App.java"), false);
 });
