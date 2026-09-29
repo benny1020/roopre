@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { detectRepositoryRuntime } from "../src/main/project-runtime.ts";
@@ -9,6 +9,7 @@ import {
   runnerImageForRuntime,
 } from "../src/shared/runtime.ts";
 import {
+  discoverRunnerConfigPaths,
   isProtectedRunnerPath,
   isRootRunnerConfig,
 } from "../src/runner/manager.ts";
@@ -52,9 +53,35 @@ test("protects Gradle build configuration and wrapper metadata from agent change
     "gradle.properties",
     "gradle/wrapper/gradle-wrapper.properties",
     "gradle/libs.versions.toml",
+    "app/build.gradle.kts",
   ])
     assert.equal(isProtectedRunnerPath(path), true, path);
   assert.equal(isRootRunnerConfig("build.gradle.kts"), true);
   assert.equal(isRootRunnerConfig("settings.gradle"), true);
   assert.equal(isProtectedRunnerPath("src/main/java/App.java"), false);
+});
+
+test("discovers new Gradle convention files without following symlinks", async () => {
+  const root = await mkdtemp(join(tmpdir(), "roopre-gradle-config-"));
+  let outside: string | undefined;
+  try {
+    await writeFile(join(root, "settings.gradle.kts"), "");
+    await writeFile(join(root, "build.gradle.kts"), "");
+    await mkdir(join(root, "gradle", "init"), { recursive: true });
+    await writeFile(join(root, "gradle", "init", "quality.gradle.kts"), "");
+    outside = await mkdtemp(join(tmpdir(), "roopre-gradle-outside-"));
+    await writeFile(join(outside, "secret.gradle.kts"), "");
+    await symlink(outside, join(root, "gradle", "init", "external"));
+    assert.deepEqual((await discoverRunnerConfigPaths(root)).sort(), [
+      "build.gradle.kts",
+      "gradle/init/external",
+      "gradle/init/quality.gradle.kts",
+      "settings.gradle.kts",
+    ]);
+  } finally {
+    await Promise.all([
+      rm(root, { recursive: true, force: true }),
+      ...(outside ? [rm(outside, { recursive: true, force: true })] : []),
+    ]);
+  }
 });

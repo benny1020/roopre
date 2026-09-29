@@ -42,9 +42,42 @@ export const isRootRunnerConfig = (path: string) =>
   );
 
 export const isProtectedRunnerPath = (path: string) =>
-  /(^|\/)(tests?|__tests__|scripts|config|\.github|gradle)\/|\.(test|spec)\.[a-z]+$|^(package\.json|pnpm-lock\.yaml|package-lock\.json|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|gradle\.properties|tsconfig|eslint|vitest|playwright)/.test(
+  /(^|\/)(tests?|__tests__|scripts|config|\.github|gradle)\/|\.(test|spec)\.[a-z]+$|(^|\/)(package\.json|pnpm-lock\.yaml|package-lock\.json|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|gradle\.properties|tsconfig|eslint|vitest|playwright)/.test(
     path,
   );
+
+export async function discoverRunnerConfigPaths(checkout: string) {
+  const paths = new Set((await readdir(checkout)).filter(isRootRunnerConfig));
+  const scanGradle = async (relative: string, depth: number): Promise<void> => {
+    if (depth > 6 || paths.size >= 1000) return;
+    const absolute = join(checkout, relative);
+    let stat;
+    try {
+      stat = await lstat(absolute);
+    } catch {
+      return;
+    }
+    if (stat.isSymbolicLink() || stat.isFile()) {
+      paths.add(relative);
+      return;
+    }
+    if (!stat.isDirectory()) return;
+    let entries;
+    try {
+      entries = await readdir(absolute, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (paths.size >= 1000) break;
+      const path = join(relative, entry.name);
+      if (entry.isSymbolicLink() || entry.isFile()) paths.add(path);
+      else if (entry.isDirectory()) await scanGradle(path, depth + 1);
+    }
+  };
+  await scanGradle("gradle", 0);
+  return [...paths];
+}
 
 export class RunnerManager {
   private timer?: ReturnType<typeof setInterval>;
@@ -468,7 +501,7 @@ export class RunnerManager {
         const paths = [
           ...new Set([
             ...protectedPaths,
-            ...(await readdir(checkout)).filter(isRootRunnerConfig),
+            ...(await discoverRunnerConfigPaths(checkout)),
           ]),
         ].sort();
         for (const p of paths) {
@@ -577,6 +610,7 @@ export class RunnerManager {
             "--user",
             "root",
             "--cap-drop=ALL",
+            "--cap-add=CHOWN",
             "--security-opt",
             "no-new-privileges",
             "--mount",
