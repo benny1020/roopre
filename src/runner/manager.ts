@@ -1296,7 +1296,7 @@ export class RunnerManager {
             draft: ReturnType<typeof parseDraft>;
           }[] = [];
           const prompt = () =>
-            `Read the repository without running code. Do not approve or implement. Return ONLY JSON {"requirements":"...", "body":"..."}. Write a concise, plain-language design report under these required headings: ${sections.map((s) => "## " + s).join(", ")}. Cover the decision summary, changed scope and files, exceptions or unresolved questions, AC and testing, and rollback. Requirements must identify AC01 etc.\nCurrent requirements: ${draft.requirements}\nCurrent design: ${draft.body}`;
+            `Read the repository without running code. Refine requirements and design. Do not approve or implement. Return ONLY JSON {"requirements":"...", "body":"..."}. Write a concise, plain-language design report under these required headings: ${sections.map((s) => "## " + s).join(", ")}. Cover the decision summary, changed scope and files, exceptions or unresolved questions, AC and testing, and rollback. Requirements must identify AC01 etc.\nCurrent requirements: ${draft.requirements}\nCurrent design: ${draft.body}`;
           await runStage(planAgents, prompt, true, async (a, result) => {
             try {
               const next = parseDraft(result.output);
