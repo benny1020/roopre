@@ -398,6 +398,9 @@ await import(${JSON.stringify(pathToFileURL(resolve("out/main/index.js")).href)}
       await rm(delayedProvider, { force: true });
       application = await launch();
       page = await application.firstWindow();
+      await page.waitForFunction(
+        async () => (await (globalThis as any).roopre.bootstrap()).connected,
+      );
       await expect
         .poll(
           () =>
