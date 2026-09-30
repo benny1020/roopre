@@ -813,6 +813,10 @@ export default function App() {
               snapshot={snapshot}
               connected={connected}
               onOpen={(featureId, destination) => {
+                // Home rows always describe the current feature state. Clear a
+                // prior evidence inspection so this action cannot reopen an
+                // older run selected in the detail workspace.
+                localStorage.removeItem(`ade:run:${featureId}`);
                 saveLocal(
                   `tab:${featureId}`,
                   destination === "design" ? "design" : "execution",

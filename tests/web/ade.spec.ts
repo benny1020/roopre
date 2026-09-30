@@ -158,6 +158,14 @@ test("home explains the full development flow before exposing advanced control",
   });
   await axe(page);
 
+  await page.evaluate(
+    ({ featureId, runId }) =>
+      localStorage.setItem(`ade:run:${featureId}`, runId),
+    {
+      featureId: state.features[0].id,
+      runId: "ade-run-previous",
+    },
+  );
   await page.locator(".project-flow-row").first().click();
   await expect(
     page.getByRole("heading", { name: state.features[0].title, exact: true }),
@@ -170,6 +178,33 @@ test("home explains the full development flow before exposing advanced control",
   await expect(
     page.getByRole("tab", { name: "규칙", exact: true }),
   ).toBeVisible();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
+});
+
+test("home agent rows always open the current run", async ({ page }) => {
+  const active = adeFixture();
+  await prepareHome(page, active);
+  await page.evaluate(
+    ({ featureId, runId }) =>
+      localStorage.setItem(`ade:run:${featureId}`, runId),
+    { featureId: active.features[0].id, runId: "ade-run-previous" },
+  );
+  await page.locator(".agent-activity-row").first().click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
+});
+
+test("home decision rows always open the current run", async ({ page }) => {
+  const decision = adeFixture();
+  decision.runs.at(-1)!.status = "ready_for_merge";
+  decision.runs.at(-1)!.runtime!.terminationConfirmed = true;
+  await prepareHome(page, decision);
+  await page.evaluate(
+    ({ featureId, runId }) =>
+      localStorage.setItem(`ade:run:${featureId}`, runId),
+    { featureId: decision.features[0].id, runId: "ade-run-previous" },
+  );
+  await page.locator(".home-work-row").first().click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
 });
 
 test("local owner confirms the displayed design without a checklist", async ({
