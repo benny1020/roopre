@@ -310,7 +310,10 @@ test("execution profile edits survive periodic refresh and overview explains cap
   await page
     .getByRole("button", { name: "동시 실행 정책 저장", exact: true })
     .click();
-  await page.getByRole("button", { name: /^에이전트/ }).click();
+  await page
+    .getByRole("navigation", { name: "주요 화면" })
+    .getByRole("button", { name: "에이전트", exact: true })
+    .click();
   await expect(page.getByText("전체 최대 4개", { exact: false })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "아직 실행한 작업이 없습니다" }),
