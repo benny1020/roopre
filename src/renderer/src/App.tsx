@@ -11,13 +11,14 @@ import RuntimeSettings from "./RuntimeSettings";
 import RunPanel from "./RunPanel";
 import RunOverview from "./RunOverview";
 import PortfolioOverview from "./PortfolioOverview";
+import WorkspaceHome, { FlowRail } from "./WorkspaceHome";
 import { activeStatuses } from "../../shared/runtime";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  ArrowUpRight,
   Bell,
+  Bot,
   Check,
   CheckCheck,
   ChevronDown,
@@ -26,7 +27,7 @@ import {
   CircleDot,
   Clock3,
   FileText,
-  Inbox,
+  House,
   MessageSquare,
   PanelLeft,
   Play,
@@ -247,8 +248,7 @@ export default function App() {
     if (!snapshot || defaultEntryApplied.current) return;
     defaultEntryApplied.current = true;
     if (hadSavedLocation.current) return;
-    if (snapshot.projects.length > 1) setScope("portfolio");
-    else if (snapshot.projects.length === 1) setScope(snapshot.projects[0].id);
+    setScope("inbox");
   }, [snapshot]);
   useEffect(() => {
     const timer = window.setInterval(() => setPortfolioNow(Date.now()), 1000);
@@ -306,13 +306,8 @@ export default function App() {
   const feature = snapshot?.features.find((f) => f.id === selected);
   const me = snapshot?.people.find((p) => p.id === actor);
   const inboxCount =
-    snapshot?.features.filter(
-      (f) =>
-        latestDesign(f)?.reviewers.includes(actor) &&
-        !latestDesign(f)?.decisions.some(
-          (d) => d.actorId === actor && d.decision === "approve",
-        ),
-    ).length || 0;
+    snapshot?.features.filter((f) => workState(snapshot, f).attention).length ||
+    0;
   const project = snapshot?.projects.find((p) => p.id === scope);
   const visible =
     snapshot?.features.filter(
@@ -434,7 +429,7 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) {
         e.preventDefault();
         if (modal || search) return;
-        navigate(e.key === "1" ? "inbox" : e.key === "2" ? "all" : "policies");
+        navigate(e.key === "1" ? "inbox" : e.key === "2" ? "all" : "queued");
       }
     };
     window.addEventListener("keydown", key);
@@ -507,7 +502,7 @@ export default function App() {
             <img className="team-mark" src={appIcon} alt="루프리" />
             <div>
               <strong>roopre</strong>
-              <small>Development workspace</small>
+              <small>개발 흐름</small>
             </div>
           </div>
           <button className="search-button" onClick={() => setSearch(true)}>
@@ -516,33 +511,21 @@ export default function App() {
           <nav aria-label="주요 화면">
             <Nav
               active={scope === "inbox" && !selected}
-              icon={<Inbox size={17} />}
-              label="내 할 일"
+              icon={<House size={17} />}
+              label="홈"
               count={inboxCount}
               onClick={() => navigate("inbox")}
             />
             <Nav
               active={scope === "all" && !selected}
               icon={<PanelLeft size={17} />}
-              label="전체 작업"
+              label="작업"
               onClick={() => navigate("all")}
             />
             <Nav
-              active={scope === "portfolio" && !selected}
-              icon={<PanelLeft size={17} />}
-              label="전역 관제"
-              onClick={() => navigate("portfolio")}
-            />
-            <Nav
-              active={scope === "blocked" && !selected}
-              icon={<AlertCircle size={17} />}
-              label="확인 필요한 작업"
-              onClick={() => navigate("blocked")}
-            />
-            <Nav
               active={scope === "queued" && !selected}
-              icon={<Clock3 size={17} />}
-              label={window.roopre ? "실행 현황" : "실행 대기"}
+              icon={<Bot size={17} />}
+              label="에이전트"
               count={
                 snapshot?.runs.filter((r) => activeStatuses.includes(r.status))
                   .length
@@ -825,6 +808,28 @@ export default function App() {
                 </div>
               </div>
             </div>
+          ) : scope === "inbox" ? (
+            <WorkspaceHome
+              snapshot={snapshot}
+              connected={connected}
+              onOpen={(featureId, destination) => {
+                // Home rows always describe the current feature state. Clear a
+                // prior evidence inspection so this action cannot reopen an
+                // older run selected in the detail workspace.
+                localStorage.removeItem(`ade:run:${featureId}`);
+                saveLocal(
+                  `tab:${featureId}`,
+                  destination === "design" ? "design" : "execution",
+                );
+                setDetailRunId(null);
+                setDetailTab(destination === "design" ? "design" : "execution");
+                setSelected(featureId);
+              }}
+              onProject={(projectId) => navigate(projectId)}
+              onPortfolio={() => navigate("portfolio")}
+              onRuns={() => navigate("queued")}
+              onCreate={() => setModal("feature")}
+            />
           ) : (
             <>
               <div className="page-heading">
@@ -836,8 +841,7 @@ export default function App() {
                     {project?.name ||
                       (
                         {
-                          inbox: "내 할 일",
-                          all: "전체 작업",
+                          all: "모든 작업",
                           blocked: "확인 필요한 작업",
                           queued: "실행 대기",
                         } as Record<string, string>
@@ -1300,44 +1304,25 @@ function FeatureView({
           <h1>{f.title}</h1>
           <p title={f.draft.requirements}>{f.draft.requirements}</p>
         </div>
-        <span className="owner">
-          <span className="avatar tiny">
-            {snapshot.people.find((p) => p.id === f.authorId)?.name.slice(0, 1)}
-          </span>
-          {
-            snapshot.people
-              .find((p) => p.id === f.authorId)
-              ?.name.split(" ·")[0]
-          }
-        </span>
       </div>
       <div className="work-context">
-        <div className="phase-track" aria-label="개발 단계">
-          {phases.map((label, index) => (
-            <React.Fragment key={label}>
-              {index > 0 && <ChevronRight size={12} />}
-              <span
-                aria-current={state.phase === index ? "step" : undefined}
-                className={state.phase === index ? "current" : ""}
-              >
-                <span className="phase-number">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                {label}
-              </span>
-            </React.Fragment>
-          ))}
-        </div>
+        <FlowRail state={state} />
         <button
-          className="next-action"
+          className={`next-action ${state.tone}`}
           title={state.next}
           onClick={() =>
             setTab(state.phase >= 2 || g.eligible ? "execution" : "design")
           }
         >
-          <span className="actor-label">{state.actor}</span>
+          <span className="actor-label">
+            {state.actor === "HUMAN"
+              ? "내가 할 일"
+              : state.actor === "AGENT"
+                ? "에이전트 작업"
+                : "시스템 확인"}
+          </span>
           <span>{state.next}</span>
-          <ArrowUpRight size={13} />
+          <ArrowRight size={13} />
         </button>
       </div>
       <Tabs
@@ -1353,16 +1338,16 @@ function FeatureView({
             id: "design",
             label: (
               <>
-                설계·리뷰{" "}
+                계획{" "}
                 {g.blockers > 0 && (
                   <span className="tab-counter">{g.blockers}</span>
                 )}
               </>
             ),
           },
-          { id: "requirements", label: "요구사항" },
-          { id: "execution", label: "실행·결과" },
-          { id: "policy", label: "적용 지침" },
+          { id: "requirements", label: "요구사항 편집" },
+          { id: "execution", label: "개발·검증" },
+          { id: "policy", label: "규칙" },
         ]}
       />
       {tab === "design" ? (

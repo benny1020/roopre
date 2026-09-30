@@ -179,7 +179,7 @@ test(
       await expect(
         page.getByRole("heading", { name: "첫 사용자 동선 확인", exact: true }),
       ).toBeVisible();
-      await page.getByRole("tab", { name: "실행·결과", exact: true }).click();
+      await page.getByRole("tab", { name: "개발·검증", exact: true }).click();
       await expect(
         page.getByRole("button", { name: "개발 시작", exact: true }),
       ).toBeDisabled();

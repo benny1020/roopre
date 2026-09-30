@@ -119,9 +119,12 @@ test(
         (feature: any) => feature.projectId === gamma.id,
       );
 
-      await page
-        .getByRole("button", { name: "전역 관제", exact: true })
-        .click();
+      await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+      const commandSearch = page.getByRole("combobox", {
+        name: "명령과 작업 검색",
+      });
+      await commandSearch.fill("전역 관제");
+      await commandSearch.press("Enter");
       await expect(
         page.getByRole("heading", { name: "전역 관제", exact: true }),
       ).toBeVisible();
@@ -159,9 +162,9 @@ test(
       await expect(
         page.getByRole("heading", { name: "Gamma portal 기능", exact: true }),
       ).toBeVisible();
-      await page.getByRole("tab", { name: "실행·결과", exact: true }).click();
+      await page.getByRole("tab", { name: "개발·검증", exact: true }).click();
       await expect(
-        page.getByRole("tab", { name: "실행·결과", exact: true }),
+        page.getByRole("tab", { name: "개발·검증", exact: true }),
       ).toHaveAttribute("aria-selected", "true");
       await page
         .getByRole("button", { name: "기능 목록으로", exact: true })

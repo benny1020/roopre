@@ -80,6 +80,13 @@ async function axe(page: Page) {
   ).toEqual([]);
 }
 
+async function openPortfolio(page: Page) {
+  await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+  const search = page.getByRole("combobox", { name: "명령과 작업 검색" });
+  await search.fill("전역 관제");
+  await search.press("Enter");
+}
+
 function simpleApprovalState() {
   const snapshot = adeFixture();
   const feature = snapshot.features[0];
@@ -92,6 +99,113 @@ function simpleApprovalState() {
   };
   return { snapshot, feature, design };
 }
+
+async function prepareHome(page: Page, state = adeFixture()) {
+  await page.addInitScript((state) => {
+    (globalThis as any).roopre = {
+      snapshot: async () => state,
+      connections: async () => [],
+      command: async () => {
+        throw Error("No mutation in home fixture");
+      },
+      runAction: async () => {
+        throw Error("No run action in home fixture");
+      },
+      revealArtifact: async () => undefined,
+    };
+    localStorage.setItem("theme", JSON.stringify("dark"));
+  }, state);
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "개발 흐름", exact: true }),
+  ).toBeVisible();
+}
+
+test("home explains the full development flow before exposing advanced control", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  await prepareHome(page, state);
+
+  const primary = page.getByRole("navigation", { name: "주요 화면" });
+  await expect(primary.getByRole("button")).toHaveCount(3);
+  await expect(primary.getByRole("button").nth(0)).toContainText("홈");
+  await expect(primary.getByRole("button").nth(1)).toContainText("작업");
+  await expect(primary.getByRole("button").nth(2)).toContainText("에이전트");
+  await expect(page.getByRole("heading", { name: "지금 볼 것" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "에이전트 작업" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "프로젝트 흐름" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /전체 관제/ })).toBeVisible();
+  await expect(
+    page.locator(".project-flow-row").first().locator(".flow-step"),
+  ).toHaveCount(3);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({
+    path: "artifacts/flow-home-dark.png",
+    fullPage: true,
+  });
+  await axe(page);
+  await page.getByLabel("화면 테마").selectOption("light");
+  await page.setViewportSize({ width: 1024, height: 760 });
+  await page.screenshot({
+    path: "artifacts/flow-home-light-1024.png",
+    fullPage: true,
+  });
+  await axe(page);
+
+  await page.evaluate(
+    ({ featureId, runId }) =>
+      localStorage.setItem(`ade:run:${featureId}`, runId),
+    {
+      featureId: state.features[0].id,
+      runId: "ade-run-previous",
+    },
+  );
+  await page.locator(".project-flow-row").first().click();
+  await expect(
+    page.getByRole("heading", { name: state.features[0].title, exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".work-context .flow-step")).toHaveCount(3);
+  await expect(page.getByRole("tab", { name: /^계획/ })).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "개발·검증", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "규칙", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
+});
+
+test("home agent rows always open the current run", async ({ page }) => {
+  const active = adeFixture();
+  await prepareHome(page, active);
+  await page.evaluate(
+    ({ featureId, runId }) =>
+      localStorage.setItem(`ade:run:${featureId}`, runId),
+    { featureId: active.features[0].id, runId: "ade-run-previous" },
+  );
+  await page.locator(".agent-activity-row").first().click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
+});
+
+test("home decision rows always open the current run", async ({ page }) => {
+  const decision = adeFixture();
+  decision.runs.at(-1)!.status = "ready_for_merge";
+  decision.runs.at(-1)!.runtime!.terminationConfirmed = true;
+  await prepareHome(page, decision);
+  await page.evaluate(
+    ({ featureId, runId }) =>
+      localStorage.setItem(`ade:run:${featureId}`, runId),
+    { featureId: decision.features[0].id, runId: "ade-run-previous" },
+  );
+  await page.locator(".home-work-row").first().click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
+});
 
 test("local owner confirms the displayed design without a checklist", async ({
   page,
@@ -106,7 +220,7 @@ test("local owner confirms the displayed design without a checklist", async ({
       return {};
     };
   });
-  await page.getByRole("tab", { name: /설계·리뷰/ }).click();
+  await page.getByRole("tab", { name: /계획/ }).click();
   await expect(page.getByLabel("설계 검토 보고서")).toContainText("변경 영향");
   await expect(page.getByLabel("설계 검토 보고서")).toContainText("검증 계획");
   await expect(page.getByText("설계 검토 체크리스트")).toHaveCount(0);
@@ -154,7 +268,7 @@ test("local confirmation keeps blocker and old-version protections", async ({
   });
   snapshot.gates[feature.id] = gate(snapshot, feature);
   await prepare(page, snapshot);
-  await page.getByRole("tab", { name: /설계·리뷰/ }).click();
+  await page.getByRole("tab", { name: /계획/ }).click();
   await expect(
     page.getByRole("button", { name: `설계 v${newer.number} 승인` }),
   ).toBeDisabled();
@@ -177,7 +291,7 @@ test("local confirmation shows a save error without losing the displayed report"
       throw Error("확인 정보가 변경되었습니다. 최신 설계를 다시 확인하세요.");
     };
   });
-  await page.getByRole("tab", { name: /설계·리뷰/ }).click();
+  await page.getByRole("tab", { name: /계획/ }).click();
   await page
     .getByRole("button", { name: `설계 v${design.number} 승인` })
     .click();
@@ -230,7 +344,7 @@ test("portfolio is read-only, separates queued work from active agents, and stay
   current.status = "queued";
   current.runtime!.costReported = false;
   await prepare(page, portfolio);
-  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await openPortfolio(page);
   await expect(
     page.getByRole("heading", { name: "전역 관제", exact: true }),
   ).toBeVisible();
@@ -356,7 +470,7 @@ test("conversation scopes keep drafts and delayed replies with their selected fe
         }),
     };
   });
-  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await openPortfolio(page);
   await page
     .getByRole("button", { name: state.features[0].title, exact: false })
     .last()
@@ -495,7 +609,7 @@ test("execution-seat consultation keeps the selected assignment when one agent h
       deleteThread: async () => {},
     };
   });
-  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await openPortfolio(page);
   await page
     .getByRole("button", { name: "역할별 운영 맵", exact: true })
     .click();
@@ -609,7 +723,7 @@ test("answer memory uses its conversation source and requires user confirmation"
       deleteThread: async () => {},
     };
   }, agentId);
-  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await openPortfolio(page);
   await page
     .getByRole("button", { name: state.features[0].title, exact: false })
     .last()
@@ -699,7 +813,7 @@ test("memory edit preserves source and shows revision conflicts", async ({
       throw Error("상태가 변경됐습니다. 최신 기억을 확인하세요.");
     };
   });
-  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await openPortfolio(page);
   await page
     .getByRole("button", { name: state.features[0].title, exact: false })
     .last()
@@ -766,7 +880,7 @@ test("conversation deletion can atomically deactivate selected derived memories"
     updatedAt: new Date().toISOString(),
   };
   await prepare(page, state, { thread, turns: [] });
-  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await openPortfolio(page);
   await page
     .getByRole("button", { name: state.features[0].title, exact: false })
     .last()
@@ -842,7 +956,7 @@ test("archived agents retain readable consultation history but cannot send", asy
     updatedAt: new Date().toISOString(),
   };
   await prepare(page, state, { thread, turns: [turn] });
-  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await openPortfolio(page);
   await page
     .getByRole("button", { name: state.features[0].title, exact: false })
     .last()
@@ -932,18 +1046,15 @@ test("portfolio command, view, exact historical run, and back navigation preserv
   await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
   await page.getByLabel("실행 선택").selectOption("ade-run-previous");
   await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
+  await page.locator(".detail-tabs").getByRole("tab", { name: /계획/ }).click();
   await page
     .locator(".detail-tabs")
-    .getByRole("tab", { name: /설계·리뷰/ })
-    .click();
-  await page
-    .locator(".detail-tabs")
-    .getByRole("tab", { name: /실행·결과/ })
+    .getByRole("tab", { name: /개발·검증/ })
     .click();
   await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
   await page.keyboard.press("Meta+[");
   await expect(
-    page.locator(".detail-tabs").getByRole("tab", { name: /설계·리뷰/ }),
+    page.locator(".detail-tabs").getByRole("tab", { name: /계획/ }),
   ).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Meta+]");
   await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
@@ -974,7 +1085,7 @@ test("workroom labels stale, stopping and residual execution cards without activ
   stopping.runtime!.heartbeat = new Date().toISOString();
   state.runs.push(stopping);
   await prepare(page, state);
-  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await openPortfolio(page);
   await page
     .getByRole("button", { name: "에이전트 작업실", exact: true })
     .click();
@@ -1048,7 +1159,7 @@ test("workroom keeps several real execution desks visible across stages", async 
     execution("ade-run-review", state.features[2].id, "review"),
   );
   await prepare(page, state);
-  await page.getByRole("button", { name: "전역 관제", exact: true }).click();
+  await openPortfolio(page);
   await page
     .getByRole("button", { name: "에이전트 작업실", exact: true })
     .click();
@@ -1152,7 +1263,7 @@ test("pane keyboard controls, accessible light/dark layouts and compact viewport
   await expect(
     page.getByRole("complementary", { name: "에이전트 상태" }),
   ).toHaveCount(0);
-  await page.getByRole("tab", { name: /설계·리뷰/ }).click();
+  await page.getByRole("tab", { name: /계획/ }).click();
   await page.getByRole("separator", { name: "리뷰 패널 너비" }).focus();
   await page.keyboard.press("Home");
   await expect(
@@ -1160,10 +1271,10 @@ test("pane keyboard controls, accessible light/dark layouts and compact viewport
   ).toHaveAttribute("aria-valuenow", "280");
   await axe(page);
   await page.screenshot({ path: "artifacts/ade-design-compact.png" });
-  await page.getByRole("tab", { name: /설계·리뷰/ }).focus();
+  await page.getByRole("tab", { name: /계획/ }).focus();
   await page.keyboard.press("ArrowRight");
   await expect(
-    page.getByRole("tab", { name: "요구사항", exact: true }),
+    page.getByRole("tab", { name: "요구사항 편집", exact: true }),
   ).toBeFocused();
 });
 
@@ -1204,13 +1315,16 @@ test("review presents real acceptance evidence, overview preserves selected hist
   ).toBeVisible();
   await axe(page);
   await page.screenshot({ path: "artifacts/ade-review-dark.png" });
-  await page.getByRole("button", { name: /실행 현황/ }).click();
+  await page
+    .getByRole("navigation", { name: "주요 화면" })
+    .getByRole("button", { name: "에이전트", exact: true })
+    .click();
   await page
     .locator(".run-table-row")
     .filter({ has: page.locator(".work-state", { hasText: /^실패$/ }) })
     .click();
   await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-previous");
-  await page.getByRole("button", { name: /전체 작업/ }).click();
+  await page.getByRole("button", { name: /^작업$/ }).click();
   await axe(page);
   await page.screenshot({ path: "artifacts/ade-overview-dark.png" });
   await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
@@ -1794,7 +1908,7 @@ test("execution setup keeps the feature project across settings and returns to t
     page.getByRole("heading", { name: "두 번째 프로젝트의 기능", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("tab", { name: "실행·결과", exact: true }),
+    page.getByRole("tab", { name: "개발·검증", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await page
     .getByRole("button", { name: "개발 흐름 설정", exact: true })
@@ -1805,23 +1919,15 @@ test("execution setup keeps the feature project across settings and returns to t
   await page
     .getByRole("button", { name: "작업으로 돌아가기", exact: true })
     .click();
-  // Keyboard navigation must preserve the latest feature, including after returning.
+  // The simplified global shortcut opens live agent work and history returns to the task.
   await page.keyboard.press("Control+3");
   await expect(
-    page.getByRole("combobox", { name: "설정할 프로젝트", exact: true }),
-  ).toHaveValue(project.id);
-  await page
-    .getByRole("button", { name: "작업으로 돌아가기", exact: true })
-    .click();
-  await expect(setup).toBeVisible();
-  await page.keyboard.press("Meta+3");
+    page.getByRole("heading", { name: "실행 현황", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Meta+[");
   await expect(
-    page.getByRole("combobox", { name: "설정할 프로젝트", exact: true }),
-  ).toHaveValue(project.id);
-  await page
-    .getByRole("button", { name: "작업으로 돌아가기", exact: true })
-    .click();
-  await expect(setup).toBeVisible();
+    page.getByRole("heading", { name: "두 번째 프로젝트의 기능", exact: true }),
+  ).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 700 });
   await page.getByLabel("화면 테마").selectOption("light");
   await axe(page);
@@ -1929,7 +2035,7 @@ test("workspace history restores filters and feature context without hijacking i
 }) => {
   const snapshot = adeFixture();
   await prepare(page, snapshot);
-  await page.getByRole("button", { name: "전체 작업", exact: true }).click();
+  await page.getByRole("button", { name: "작업", exact: true }).click();
   await page.getByPlaceholder("기능 검색").fill("remember this filter");
   await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
   const search = page.getByRole("combobox", { name: "명령과 작업 검색" });
@@ -1962,7 +2068,7 @@ test("workspace history restores filters and feature context without hijacking i
   await expect(page.getByPlaceholder("기능 검색")).toHaveValue(
     "remember this filter",
   );
-  await page.getByRole("button", { name: /^실행 현황/ }).click();
+  await page.getByRole("button", { name: /^에이전트/ }).click();
   await expect(
     page.getByRole("button", { name: "다음 작업으로", exact: true }),
   ).toBeDisabled();

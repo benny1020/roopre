@@ -88,7 +88,7 @@ test(
       await page
         .getByRole("button", { name: "기능 만들기", exact: true })
         .click();
-      await page.getByRole("tab", { name: "실행·결과", exact: true }).click();
+      await page.getByRole("tab", { name: "개발·검증", exact: true }).click();
       await expect(
         page.getByRole("button", { name: "개발 시작", exact: true }),
       ).toBeDisabled();
@@ -108,9 +108,10 @@ test(
       await page
         .getByRole("button", { name: "설계 작성·검토로 이동", exact: true })
         .click();
-      await expect(
-        page.getByRole("tab", { name: /설계·리뷰/ }),
-      ).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("tab", { name: /계획/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
       await page.getByRole("button", { name: "설정", exact: true }).click();
       await page
         .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })

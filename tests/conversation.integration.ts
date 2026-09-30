@@ -356,9 +356,12 @@ await import(${JSON.stringify(pathToFileURL(resolve("out/main/index.js")).href)}
       assert.equal(completed.status, "completed", completed.error);
       assert.equal(completed.answer, "fixture consultation answer");
       assert.deepEqual(completed.usage, { inputTokens: 7, outputTokens: 5 });
-      await page
-        .getByRole("button", { name: "전역 관제", exact: true })
-        .click();
+      await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+      const commandSearch = page.getByRole("combobox", {
+        name: "명령과 작업 검색",
+      });
+      await commandSearch.fill("전역 관제");
+      await commandSearch.press("Enter");
       await page
         .getByRole("button", { name: /Fixture feature/ })
         .first()

@@ -70,7 +70,7 @@ test.describe("fresh installation", () => {
     await expect(
       page.getByRole("button", { name: "실행 프로필 저장" }),
     ).toBeDisabled();
-    await page.getByRole("button", { name: /^내 할 일/ }).click();
+    await page.getByRole("button", { name: /^홈/ }).click();
     await page
       .getByRole("button", { name: "프로젝트 만들기", exact: true })
       .click();
@@ -256,7 +256,7 @@ test("project and feature persist while unapproved execution stays blocked", asy
     .getByLabel("목표와 완료 기준", { exact: true })
     .fill("AC01 unapproved work cannot start");
   await page.getByRole("button", { name: "기능 만들기", exact: true }).click();
-  await page.getByRole("tab", { name: "실행·결과", exact: true }).click();
+  await page.getByRole("tab", { name: "개발·검증", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "개발 시작", exact: true }),
   ).toBeDisabled();
@@ -310,7 +310,10 @@ test("execution profile edits survive periodic refresh and overview explains cap
   await page
     .getByRole("button", { name: "동시 실행 정책 저장", exact: true })
     .click();
-  await page.getByRole("button", { name: /^실행 현황/ }).click();
+  await page
+    .getByRole("navigation", { name: "주요 화면" })
+    .getByRole("button", { name: "에이전트", exact: true })
+    .click();
   await expect(page.getByText("전체 최대 4개", { exact: false })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "아직 실행한 작업이 없습니다" }),
