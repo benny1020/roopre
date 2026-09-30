@@ -448,6 +448,9 @@ await import(${JSON.stringify(pathToFileURL(resolve("out/main/index.js")).href)}
       await application.close();
       application = await launch();
       page = await application.firstWindow();
+      await page.waitForFunction(
+        async () => (await (globalThis as any).roopre.bootstrap()).connected,
+      );
       const restored = await page.evaluate(async (created) => {
         const api = (globalThis as any).roopre;
         return api.conversations.listTurns({
