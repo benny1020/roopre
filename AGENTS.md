@@ -25,5 +25,7 @@
 
 - 모든 PR 생성/수정 후 `docs/PR-REVIEW-PROCESS.md`를 따르고 `agents/pr-reviewer.md`를 읽은 별도 리뷰 전담 에이전트를 호출한다. 이 절은 전담 sub-agent 사용 지시다. 구현 담당이 자기 보고서로 대체하지 않는다.
 - PR 번호와 정확한 head/base를 고정한다. 차단 지적 수정 → 검사 → 새 커밋 전담 재리뷰를 반복한다. 기존 결과나 승인으로 새 커밋을 머지하지 않는다.
-- 보고서를 PR에 게시하고 `pnpm pr:check`가 통과한 뒤 사용자에게 결과를 보고한다. `pnpm pr:merge`는 macOS 본인 승인 이후에만 머지한다. 리뷰 에이전트/CI가 승인·머지를 대신하지 않는다.
+- 보고서를 PR에 게시하고 `pnpm pr:check`가 통과한 뒤 사용자에게 결과를 보고한다. `pnpm pr:merge`는 사용자 승인 또는 기존 머지 위임을 확인한 진행 담당이 `--confirm-head <전체 SHA>`로 확인한 뒤 머지한다. 리뷰 에이전트/CI가 승인·머지를 대신하지 않는다.
 - 현재 GitHub 요금제는 이 private repo의 branch protection을 지원하지 않는다. 서버 강제가 활성화됐다고 주장하지 않으며 직접 `gh pr merge --admin`, auto-merge, main push로 절차를 우회하지 않는다.
+
+- 최신 사용자 요청에 따라 [간단 승인 계약](docs/design/SIMPLE-CONFIRMATION.md)을 적용한다. 앱의 설계 승인은 보고서를 읽고 버튼으로 확인하며 macOS 본인 인증과 항목별 체크박스는 요구하지 않는다. 설계·정책 binding, 사람의 명시적 승인, 에이전트 승인 금지는 유지한다. 이 요청은 이전 문서의 OS 인증 요구를 대체한다.

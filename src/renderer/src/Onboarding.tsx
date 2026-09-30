@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import App from "./App";
 import HarnessPanel from "./HarnessPanel";
 import type { BootstrapStatus } from "../../shared/onboarding";
@@ -110,6 +110,9 @@ function Onboarding({
   );
   const [title, setTitle] = useState(initial?.title ?? "");
   const [requirements, setRequirements] = useState(initial?.requirements ?? "");
+  const autosaveTimer = useRef<number | undefined>(undefined);
+  const autosaveQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const navigating = useRef(false);
   const step =
     status.progress.dismissed && !status.connected
       ? "environment"
@@ -159,33 +162,76 @@ function Onboarding({
     requirements,
   };
   const draftJson = JSON.stringify(draft);
+  const progressRef = useRef(status.progress);
+  const draftRef = useRef(draft);
+  progressRef.current = status.progress;
+  draftRef.current = draft;
+  const enqueueAutosave = () => {
+    const progress = progressRef.current;
+    const currentDraft = draftRef.current;
+    const save = autosaveQueue.current
+      .catch(() => undefined)
+      .then(() => api.onboarding({ ...progress, draft: currentDraft }));
+    autosaveQueue.current = save;
+    void save.catch((e) => setError(e.message));
+  };
+  const cancelAutosave = async () => {
+    if (autosaveTimer.current) {
+      clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = undefined;
+    }
+    // A debounce callback may already have started when the user changes
+    // steps. Finish that write before storing the newer navigation state.
+    await autosaveQueue.current.catch(() => undefined);
+  };
   useEffect(() => {
     const timer = setTimeout(() => {
-      void api
-        .onboarding({ ...status.progress, draft })
-        .catch((e) => setError(e.message));
+      if (autosaveTimer.current === timer) autosaveTimer.current = undefined;
+      if (!navigating.current) enqueueAutosave();
     }, 500);
-    return () => clearTimeout(timer);
+    autosaveTimer.current = timer;
+    return () => {
+      clearTimeout(timer);
+      if (autosaveTimer.current === timer) autosaveTimer.current = undefined;
+    };
   }, [draftJson, status.progress.step, status.progress.dismissed]);
   const advance = async (i: number) => {
-    update(
-      await api.onboarding({
-        version: 1,
-        step: onboardingSteps[i],
-        draft,
-        dismissed: false,
-      }),
-    );
+    navigating.current = true;
+    await cancelAutosave();
+    const progress = {
+      version: 1 as const,
+      step: onboardingSteps[i],
+      draft,
+      dismissed: false,
+    };
+    progressRef.current = progress;
+    let saved = false;
+    try {
+      update(await api.onboarding(progress));
+      saved = true;
+    } finally {
+      navigating.current = false;
+      if (!saved) progressRef.current = status.progress;
+    }
   };
   const finish = async () => {
-    update(
-      await api.onboarding({
-        version: 1,
-        step: "requirements",
-        draft,
-        dismissed: true,
-      }),
-    );
+    navigating.current = true;
+    await cancelAutosave();
+    const progress = {
+      version: 1 as const,
+      step: "requirements" as const,
+      draft,
+      dismissed: true,
+    };
+    progressRef.current = progress;
+    let saved = false;
+    try {
+      update(await api.onboarding(progress));
+      saved = true;
+    } finally {
+      navigating.current = false;
+      if (!saved) progressRef.current = status.progress;
+    }
   };
   const theme = (value: string) => {
     localStorage.setItem("theme", JSON.stringify(value));

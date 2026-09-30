@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { adeFixture, patch } from "../fixtures/ade";
+import { gate } from "../../src/shared/contracts";
 const state = adeFixture();
 async function prepare(page: Page, state = adeFixture(), conversation?: any) {
   await page.addInitScript(
@@ -78,6 +79,114 @@ async function axe(page: Page) {
     })),
   ).toEqual([]);
 }
+
+function simpleApprovalState() {
+  const snapshot = adeFixture();
+  const feature = snapshot.features[0];
+  const design = feature.designs.at(-1)!;
+  design.reviewers = ["owner"];
+  feature.threads = [];
+  snapshot.gates[feature.id] = gate(snapshot, feature);
+  snapshot.approvalBindings = {
+    [feature.id]: "b".repeat(64),
+  };
+  return { snapshot, feature, design };
+}
+
+test("local owner confirms the displayed design without a checklist", async ({
+  page,
+}) => {
+  const { snapshot, feature, design } = simpleApprovalState();
+  await prepare(page, snapshot);
+  await page.evaluate(() => {
+    const w = globalThis as any;
+    w.__reviewCommands = [];
+    w.roopre.command = async (command: unknown) => {
+      w.__reviewCommands.push(command);
+      return {};
+    };
+  });
+  await page.getByRole("tab", { name: /설계·리뷰/ }).click();
+  await expect(page.getByLabel("설계 검토 보고서")).toContainText("변경 영향");
+  await expect(page.getByLabel("설계 검토 보고서")).toContainText("검증 계획");
+  await expect(page.getByText("설계 검토 체크리스트")).toHaveCount(0);
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await page.screenshot({ path: "artifacts/ade-simple-confirmation-dark.png" });
+  await page.getByLabel("화면 테마").selectOption("light");
+  await page.screenshot({
+    path: "artifacts/ade-simple-confirmation-light.png",
+  });
+  await page
+    .getByRole("button", { name: `설계 v${design.number} 승인` })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => (globalThis as any).__reviewCommands))
+    .toEqual([
+      {
+        type: "review",
+        featureId: feature.id,
+        designId: design.id,
+        decision: "approve",
+        checked: [],
+        confirmationBinding: "b".repeat(64),
+      },
+    ]);
+  await axe(page);
+});
+
+test("local confirmation keeps blocker and old-version protections", async ({
+  page,
+}) => {
+  const { snapshot, feature, design } = simpleApprovalState();
+  const newer = { ...structuredClone(design), id: "newer-design", number: 2 };
+  feature.designs.push(newer);
+  feature.threads.push({
+    id: "blocking-review",
+    designId: newer.id,
+    section: "예외 상황",
+    quote: "",
+    authorId: "owner",
+    body: "차단 사유",
+    blocking: true,
+    status: "open",
+    replies: [],
+    at: new Date().toISOString(),
+  });
+  snapshot.gates[feature.id] = gate(snapshot, feature);
+  await prepare(page, snapshot);
+  await page.getByRole("tab", { name: /설계·리뷰/ }).click();
+  await expect(
+    page.getByRole("button", { name: `설계 v${newer.number} 승인` }),
+  ).toBeDisabled();
+  await page.getByLabel("설계 버전").selectOption(design.id);
+  await expect(
+    page.getByText("이전 버전입니다. 승인과 의견은 최신 설계에서 작성하세요."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /설계 v1 승인/ })).toHaveCount(
+    0,
+  );
+});
+
+test("local confirmation shows a save error without losing the displayed report", async ({
+  page,
+}) => {
+  const { snapshot, design } = simpleApprovalState();
+  await prepare(page, snapshot);
+  await page.evaluate(() => {
+    (globalThis as any).roopre.command = async () => {
+      throw Error("확인 정보가 변경되었습니다. 최신 설계를 다시 확인하세요.");
+    };
+  });
+  await page.getByRole("tab", { name: /설계·리뷰/ }).click();
+  await page
+    .getByRole("button", { name: `설계 v${design.number} 승인` })
+    .click();
+  await expect(
+    page.getByText("확인 정보가 변경되었습니다. 최신 설계를 다시 확인하세요."),
+  ).toBeVisible();
+  await expect(page.getByLabel("설계 검토 보고서")).toContainText("검증 계획");
+});
+
 test("run-specific diff rejects stale responses, checks retain attempt identity, artifacts dispatch", async ({
   page,
 }) => {

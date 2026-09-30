@@ -10,8 +10,7 @@ import {
   type ReviewReport,
   type PullRequest,
 } from "../review/policy.ts";
-import { approveAndMerge } from "../review/merge.ts";
-import { authenticateOwner } from "../../src/main/approval/native.ts";
+import { approveAndMerge, assertConfirmedHead } from "../review/merge.ts";
 const root = resolve(import.meta.dirname, "../..");
 const run = (exe: string, args: string[], input?: string) =>
   execFileSync(exe, args, {
@@ -58,7 +57,7 @@ async function published(r: ReviewReport) {
     throw Error("원격 리뷰 기록이 변경되거나 삭제됐습니다.");
   return receipt;
 }
-const [action, arg] = process.argv.slice(2);
+const [action, arg, ...confirmationArgs] = process.argv.slice(2);
 if (action === "prepare") {
   if (!/^[1-9]\d*$/.test(arg ?? ""))
     throw Error("사용법: pnpm pr:prepare <PR 번호>");
@@ -123,17 +122,13 @@ if (action === "prepare") {
       `PR #${pr.number} ${pr.url}\n리뷰: ${receipt.url}\n검사 통과 · 사용자 머지 승인 대기 · ${pr.headRefOid}`,
     );
     if (action === "merge") {
-      if (process.platform !== "darwin")
-        throw Error("머지는 macOS 본인 승인 환경에서 수행하세요.");
-      // No CI/reviewer may call this. Authentication is the user's merge approval.
+      // Explicit confirmation after review; this is not OS identity verification.
+      // CI/reviewers do not invoke merge. User-delegated operators may confirm.
       const result = await approveAndMerge(report, {
         snapshot: async () => snapshot(report.pr),
         publication: () => published(report),
         approve: async (current) =>
-          authenticateOwner(
-            join(root, "resources/bin/roopre-approve"),
-            `루프리 PR #${current.number} (${current.headRefOid.slice(0, 12)})을 main에 머지하도록 승인`,
-          ),
+          assertConfirmedHead(current.headRefOid, confirmationArgs),
         ready: async () => {
           run("gh", ["pr", "ready", String(report.pr), "--repo", repo]);
         },
@@ -158,7 +153,7 @@ if (action === "prepare") {
             headSha: report.headSha,
             baseSha: report.baseSha,
             at: new Date().toISOString(),
-            approval: "macos-owner",
+            approval: "explicit-head-confirmation",
             url: result.url,
           },
           null,

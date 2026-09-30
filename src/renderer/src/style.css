@@ -1096,6 +1096,40 @@ kbd {
 .review-checklist .checkbox {
   margin: 9px 0;
 }
+.design-review-report {
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.design-review-report h4 {
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+.design-review-report > .muted {
+  font-size: 10px;
+  line-height: 1.45;
+  margin-bottom: 13px;
+}
+.design-review-report > section {
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+}
+.design-review-report > section > strong {
+  display: block;
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+.design-review-report .report-markdown p,
+.design-review-report .report-markdown li {
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.design-review-report .report-markdown ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
 .review-footer {
   padding: 14px 18px;
   border-top: 1px solid var(--line);

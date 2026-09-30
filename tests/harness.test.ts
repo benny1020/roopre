@@ -200,7 +200,7 @@ test("referenced definition changes stop queued work and invalidate owner approv
       decision: "approve",
       checked: [...sections],
     },
-    { binding: approvalBinding(w, f), authentication: "macos-owner" },
+    { binding: approvalBinding(w, f), authentication: "app-confirmation" },
   );
   apply(w, "owner", {
     type: "queue_run",

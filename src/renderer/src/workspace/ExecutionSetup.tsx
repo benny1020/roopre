@@ -98,7 +98,7 @@ export default function ExecutionSetup({
       run: () => onSetup(project.harness ? "harness" : "agents"),
     },
     {
-      name: "설계 검토와 본인 승인",
+      name: "설계 검토와 승인",
       done: gate.eligible,
       detail: gate.eligible
         ? "현재 설계 승인 조건을 충족했습니다. 실행 시작 시 다시 검사합니다."

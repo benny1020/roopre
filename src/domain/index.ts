@@ -82,7 +82,10 @@ export function apply(
   w: Workspace,
   actorId: string,
   c: Command,
-  proof?: { binding: string; authentication: "macos-owner" },
+  proof?: {
+    binding: string;
+    authentication: "app-confirmation" | "macos-owner";
+  },
 ): { featureId?: string; entityId?: string } {
   const actor = person(w, actorId);
   requireThat(
@@ -624,10 +627,10 @@ export function apply(
           ]);
           requireThat(!issues.length, "missing_checks", issues.join(" "));
           requireThat(
-            proof?.authentication === "macos-owner" &&
+            proof?.authentication === "app-confirmation" &&
               proof.binding === approvalBinding(w, f!),
-            "owner_auth_required",
-            "이 설계에 대해 macOS 본인 확인을 완료하세요.",
+            "confirmation_required",
+            "설계 보고서를 읽고 앱에서 승인을 확인하세요.",
             403,
           );
           requireThat(
@@ -641,11 +644,12 @@ export function apply(
           "policy_changed",
           "지침이 변경되어 새 설계 게시가 필요합니다.",
         );
-        requireThat(
-          sections.every((s) => c.checked.includes(s)),
-          "checklist_incomplete",
-          "검토 항목 7개를 모두 확인하세요.",
-        );
+        if (w.mode !== "local-owner")
+          requireThat(
+            sections.every((s) => c.checked.includes(s)),
+            "checklist_incomplete",
+            "검토 항목 7개를 모두 확인하세요.",
+          );
         requireThat(
           !f!.threads.some((t) => t.blocking && t.status !== "resolved"),
           "unresolved_threads",
@@ -684,7 +688,7 @@ export function apply(
           "stale_approval",
           "승인 계약이 일치하지 않습니다.",
         );
-      const g = gate(w, f!);
+      const g = gate(w, f!, approvalBinding(w, f!));
       requireThat(g.eligible, "design_gate", g.reasons.join(" "));
       requireThat(
         !w.runs.some(
@@ -872,7 +876,8 @@ export function apply(
       continue;
     }
     if (
-      !gate(w, feature).eligible ||
+      !latestDesign(feature) ||
+      !gate(w, feature, approvalBinding(w, feature)).eligible ||
       run.designId !== latestDesign(feature)?.id ||
       run.policyVersion !== w.policies.at(-1)!.version
     ) {

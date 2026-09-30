@@ -623,7 +623,7 @@ export default function App() {
                 <span>
                   프로젝트 소유자
                   <br />
-                  <small>macOS 본인 승인</small>
+                  <small>설계 검토 및 승인</small>
                 </span>
               </div>
             ) : (
@@ -632,7 +632,7 @@ export default function App() {
                 <span>
                   로컬 미리보기
                   <br />
-                  <small>실제 실행·승인은 맥 앱에서</small>
+                  <small>설계와 검토 상태를 확인합니다.</small>
                 </span>
               </div>
             )}
@@ -1189,6 +1189,10 @@ function FeatureView({
   const [version, setVersion] = useState(latest?.id || "");
   const d = f.designs.find((d) => d.id === version) || latest;
   const isLatest = d?.id === latest?.id;
+  // The main process creates this from the displayed design and policy
+  // snapshot. The renderer never creates or reuses a proof locally.
+  const confirmationBinding = snapshot.approvalBindings?.[f.id] || "";
+  const simpleLocalApproval = snapshot.mode === "local-owner";
   const [compare, setCompare] = useState(false);
   const [checked, setChecked] = useState<(typeof sections)[number][]>(() =>
     readLocal(`checks:${actor}:${latest?.id}`, []),
@@ -1563,6 +1567,9 @@ function FeatureView({
               })}
             </div>
             <div className="review-scroll">
+              {reviewer && isLatest && d && !edit && simpleLocalApproval && (
+                <DesignReviewReport design={d} />
+              )}
               <div className="thread-heading">
                 <strong>
                   리뷰 의견{" "}
@@ -1686,7 +1693,7 @@ function FeatureView({
                   </div>
                 </div>
               )}
-              {reviewer && isLatest && d && !edit && (
+              {reviewer && isLatest && d && !edit && !simpleLocalApproval && (
                 <div className="review-checklist">
                   <h4>
                     설계 검토 체크리스트 <span>{checked.length}/7</span>
@@ -1730,7 +1737,7 @@ function FeatureView({
                             featureId: f.id,
                             designId: d.id,
                             decision: "request_changes",
-                            checked,
+                            checked: simpleLocalApproval ? [] : checked,
                           }),
                         "수정 요청을 보냈습니다.",
                       )
@@ -1750,7 +1757,7 @@ function FeatureView({
                               featureId: f.id,
                               designId: d.id,
                               decision: "withdraw",
-                              checked,
+                              checked: simpleLocalApproval ? [] : checked,
                             }),
                           "승인을 철회했습니다.",
                         )
@@ -1764,7 +1771,8 @@ function FeatureView({
                       disabled={
                         !connected ||
                         busy ||
-                        checked.length !== 7 ||
+                        (!simpleLocalApproval && checked.length !== 7) ||
+                        (simpleLocalApproval && !confirmationBinding) ||
                         g.blockers > 0
                       }
                       onClick={() =>
@@ -1775,13 +1783,17 @@ function FeatureView({
                               featureId: f.id,
                               designId: d.id,
                               decision: "approve",
-                              checked,
+                              checked: simpleLocalApproval ? [] : checked,
+                              ...(simpleLocalApproval
+                                ? { confirmationBinding }
+                                : {}),
                             }),
                           `설계 v${d.number}을 승인했습니다.`,
                         )
                       }
                     >
-                      <ShieldCheck size={15} />v{d.number} 승인
+                      <ShieldCheck size={15} />
+                      설계 v{d.number} 승인
                     </button>
                   )}
                 </div>
@@ -1984,6 +1996,71 @@ function FeatureView({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function designSection(body: string, title: (typeof sections)[number]) {
+  const block = body
+    .split(/^## /m)
+    .find((candidate) => candidate.startsWith(`${title}\n`));
+  return block?.split("\n").slice(1).join("\n").trim() || "";
+}
+
+function DesignReviewReport({ design }: { design: Design }) {
+  const report = [
+    ["요구사항", design.requirements],
+    ["예외 상황", designSection(design.body, "예외 상황")],
+    ["변경 영향", designSection(design.body, "변경 영향")],
+    ["검증 계획", designSection(design.body, "검증 계획")],
+  ] as const;
+  return (
+    <section className="design-review-report" aria-label="설계 검토 보고서">
+      <h4>설계 검토 보고서</h4>
+      <p className="muted">게시된 설계 원문에서 확인할 내용입니다.</p>
+      {report.map(([title, body]) =>
+        body ? (
+          <section key={title}>
+            <strong>{title}</strong>
+            <ReportMarkdown body={body} />
+          </section>
+        ) : null,
+      )}
+    </section>
+  );
+}
+
+function ReportMarkdown({ body }: { body: string }) {
+  const inline = (text: string) => {
+    const parts = text.split("**");
+    return parts.map((part, index) =>
+      index % 2 ? <strong key={index}>{part}</strong> : part,
+    );
+  };
+  return (
+    <div className="report-markdown">
+      {body.split(/\n{2,}/).map((block, index) => {
+        const lines = block.split("\n").filter(Boolean);
+        const list = lines.every((line) => /^[-*]\s+/.test(line));
+        return list ? (
+          <ul key={index}>
+            {lines.map((line, lineIndex) => (
+              <li key={`${index}-${lineIndex}`}>
+                {inline(line.replace(/^[-*]\s+/, ""))}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={index}>
+            {lines.map((line, lineIndex) => (
+              <React.Fragment key={lineIndex}>
+                {lineIndex > 0 && <br />}
+                {inline(line)}
+              </React.Fragment>
+            ))}
+          </p>
+        );
+      })}
     </div>
   );
 }

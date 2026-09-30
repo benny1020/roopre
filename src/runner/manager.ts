@@ -27,7 +27,12 @@ import {
   executionCapacityOf,
   type Evidence,
 } from "../shared/runtime.ts";
-import { gate, type Run, type Workspace } from "../shared/contracts.ts";
+import {
+  gate,
+  latestDesign,
+  type Run,
+  type Workspace,
+} from "../shared/contracts.ts";
 import { approvalBinding, policyBinding } from "../domain/runtime.ts";
 import { command, git } from "./process.ts";
 import { startBroker } from "./broker.ts";
@@ -401,7 +406,9 @@ export class RunnerManager {
       (planning
         ? r.runtime.binding !== policyBinding(w, f) ||
           r.runtime.draftRevision !== f.draft.revision
-        : !gate(w, f).eligible || r.runtime.binding !== approvalBinding(w, f))
+        : !latestDesign(f) ||
+          !gate(w, f, approvalBinding(w, f)).eligible ||
+          r.runtime.binding !== approvalBinding(w, f))
     )
       throw Error("설계·지침·초안 또는 승인 계약이 바뀌었습니다.");
     return { w, r, f };
@@ -1289,7 +1296,7 @@ export class RunnerManager {
             draft: ReturnType<typeof parseDraft>;
           }[] = [];
           const prompt = () =>
-            `Read the repository without running code. Refine requirements and design. Do not approve or implement. Return ONLY JSON {"requirements":"...", "body":"..."}. Requirements must identify AC01 etc. Body must include these markdown headings: ${sections.map((s) => "## " + s).join(", ")}.\nCurrent requirements: ${draft.requirements}\nCurrent design: ${draft.body}`;
+            `Read the repository without running code. Refine requirements and design. Do not approve or implement. Return ONLY JSON {"requirements":"...", "body":"..."}. Write a concise, plain-language design report under these required headings: ${sections.map((s) => "## " + s).join(", ")}. Cover the decision summary, changed scope and files, exceptions or unresolved questions, AC and testing, and rollback. Requirements must identify AC01 etc.\nCurrent requirements: ${draft.requirements}\nCurrent design: ${draft.body}`;
           await runStage(planAgents, prompt, true, async (a, result) => {
             try {
               const next = parseDraft(result.output);
@@ -1578,7 +1585,8 @@ export class RunnerManager {
           if (
             abort.signal.aborted ||
             ["cancelled", "blocked"].includes(r.status) ||
-            !gate(w, f).eligible ||
+            !latestDesign(f) ||
+            !gate(w, f, approvalBinding(w, f)).eligible ||
             r.runtime!.binding !== approvalBinding(w, f)
           )
             throw Error("완료 직전 승인이 변경됐습니다.");
@@ -1636,7 +1644,8 @@ export class RunnerManager {
         !old.runtime ||
         old.runtime.terminationConfirmed !== true ||
         !["failed", "interrupted"].includes(old.status) ||
-        !gate(w, f).eligible ||
+        !latestDesign(f) ||
+        !gate(w, f, approvalBinding(w, f)).eligible ||
         old.runtime.binding !== approvalBinding(w, f)
       )
         throw Error("현재 설계를 다시 승인하세요.");
@@ -1684,7 +1693,11 @@ export class RunnerManager {
     const f = w.features.find((f) => f.id === r.featureId)!;
     if (r.runtime.kind === "planning")
       throw Error("계획 작업은 최신 초안에서 새로 요청하세요.");
-    if (!gate(w, f).eligible || r.runtime.binding !== approvalBinding(w, f))
+    if (
+      !latestDesign(f) ||
+      !gate(w, f, approvalBinding(w, f)).eligible ||
+      r.runtime.binding !== approvalBinding(w, f)
+    )
       throw Error("현재 설계를 다시 승인하세요.");
     return { w, r, f };
   }

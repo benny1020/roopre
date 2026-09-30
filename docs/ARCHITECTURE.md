@@ -13,7 +13,7 @@ Orca는 Electron 코드를 `src/main`, `src/preload`, `src/renderer/src`, `src/s
 ```mermaid
 flowchart LR
   UI[React renderer] -->|한정된 IPC| Main[Electron main]
-  Main --> Auth[macOS LocalAuthentication]
+  Main --> Approval[설계 보고 확인과 승인 binding 검사]
   Main --> Vault[safeStorage 암호화 모델·Git host 연결 저장]
   Main --> Rules[승인·정책 domain]
   Rules --> DB[(PostgreSQL)]
@@ -26,13 +26,13 @@ flowchart LR
   Checks --> Evidence[commit · 로그 · 시도별 산출물]
 ```
 
-renderer는 Node·파일·셸에 직접 접근하지 않는다. preload에 명시한 메서드만 호출한다. owner 데이터에는 HTTP API가 없으며 Electron main에서만 본인 인증 증명을 발급한다. M1 fixture API는 별도 workspace로 보존하며 실제 실행기를 연결하지 않는다.
+renderer는 Node·파일·셸에 직접 접근하지 않는다. preload에 명시한 메서드만 호출한다. owner 데이터에는 HTTP API가 없으며 Electron main/domain에서 화면에 표시된 승인 binding을 검증하고 앱 확인 기록을 저장한다. OS 본인 인증은 요구하지 않는다. M1 fixture API는 별도 workspace로 보존하며 실제 실행기를 연결하지 않는다.
 
 현재 실행 관리자는 Electron main 안에 있고 CLI·테스트는 별도 Docker 프로세스다. 독립 상주 daemon/원격 runner는 아직 없다. 정상 앱 종료는 작업을 중단하고 컨테이너 종료를 기다린다. 강제 종료 후 재시작과 DB 재접속 시 남은 실행을 정리한다. 종료 확인이 불가능하면 해당 실행의 슬롯을 계속 점유하고 10초 이상 간격으로 재확인한다. 기존 작업 화면은 열 수 있고, 취소/승인 철회와 체크포인트를 유지하며 작업은 자동 재실행하지 않는다. Mac sleep 중 가용성은 보장하지 않는다.
 
 ## 승인과 상태
 
-설계 본문·완료 기준 hash, 팀 정책 버전, 해당 프로젝트 지침·필수 검사·owner·실행 프로필·의존 관계를 승인 binding에 묶는다. 본인 인증 대기 중 계약이 변경되어도 이전 증명으로 승인할 수 없다. owner는 자신이 작성한 설계도 직접 승인할 수 있고 AI에게 승인 권한은 없다.
+설계 본문·완료 기준 hash, 팀 정책 버전, 해당 프로젝트 지침·필수 검사·owner·실행 프로필·의존 관계를 승인 binding에 묶는다. 보고서를 읽는 동안 계약이 변경되면 이전 binding으로 승인할 수 없다. owner는 자신이 작성한 설계도 직접 승인할 수 있고 AI에게 승인 권한은 없다.
 
 PostgreSQL workspace JSONB 행 잠금으로 명령과 실행 claim을 직렬화한다. 시작·단계 전환·완료 때 승인을 검사하고, 실행 중 주기적으로 취소·승인 철회·연결 변경을 확인한다. 프로젝트 정책 변경은 해당 프로젝트 승인만 무효화한다. 실제 여러 사용자의 인증·DB 권한 경계는 M3다.
 

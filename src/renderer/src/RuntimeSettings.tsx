@@ -155,9 +155,9 @@ export default function RuntimeSettings({
       </details>
       {!desktop ? (
         <section className="runtime-card">
-          <h2>맥 앱에서 연결하세요</h2>
+          <h2>데스크톱 앱에서 연결하세요</h2>
           <p>
-            API key 저장·저장소 선택·본인 승인은 macOS 앱에서 사용할 수
+            API key 저장·저장소 선택·설계 승인은 데스크톱 앱에서 사용할 수
             있습니다. 이 브라우저는 로컬 개발 미리보기입니다.
           </p>
         </section>
@@ -801,7 +801,7 @@ export default function RuntimeSettings({
                 void act(async () => {
                   const d = await desktop.diagnostics();
                   setDiagnostic(
-                    `Docker ${d.docker ? "준비됨" : "확인 필요"} · 실행 이미지 ${d.image ? "준비됨" : "pnpm runner:image 필요"} · 본인 확인 도구 ${d.approvalHelper ? "준비됨" : "설치 필요"}\n${d.message}`,
+                    `Docker ${d.docker ? "준비됨" : "확인 필요"} · 실행 이미지 ${d.image ? "준비됨" : "pnpm runner:image 필요"}\n${d.message}`,
                   );
                 })
               }

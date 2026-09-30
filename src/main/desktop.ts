@@ -20,7 +20,6 @@ import { checkedArtifact } from "../runner/artifacts.ts";
 import { shell } from "electron";
 import { app, ipcMain, dialog, BrowserWindow, safeStorage } from "electron";
 import { join, resolve } from "node:path";
-import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Store } from "../database/store.ts";
@@ -34,7 +33,6 @@ import { approvalBinding } from "../domain/runtime.ts";
 import { ConnectionVault } from "./connections/vault.ts";
 import { GitHostVault } from "./git-hosts/vault.ts";
 import { GitHostAdapter } from "./git-hosts/adapter.ts";
-import { authenticateOwner } from "./approval/native.ts";
 import { RunnerManager } from "../runner/manager.ts";
 import { command, git } from "../runner/process.ts";
 import { trustedRenderer } from "./security.ts";
@@ -57,9 +55,6 @@ export async function installDesktop() {
   let refining = false;
   let migrationCleanup: Promise<void> | undefined;
   const resources = join(app.getAppPath(), "resources");
-  const helper = app.isPackaged
-    ? join(process.resourcesPath, "roopre-approve")
-    : join(resources, "bin/roopre-approve");
   const vault = new ConnectionVault(
     join(app.getPath("userData"), "private", "connections.json"),
     {
@@ -126,7 +121,6 @@ export async function installDesktop() {
   await bootstrap.init();
   const restoration = bootstrap.restore(databaseUrl);
   const harnessLibrary = new HarnessLibrary();
-  let authenticating = false;
   let migrating = false;
   const deliveryLocks = new Set<string>();
   ipcMain.handle(
@@ -470,26 +464,19 @@ export async function installDesktop() {
             if (c.type === "configure_execution")
               throw Error("저장소 선택 경로를 사용하세요.");
             if (c.type === "review" && c.decision === "approve") {
-              if (authenticating)
-                throw Error("진행 중인 본인 확인을 완료하세요.");
-              authenticating = true;
-              try {
-                const w = await store!.read("owner");
-                const f = w.features.find((f) => f.id === c.featureId);
-                if (!f || f.designs.at(-1)?.id !== c.designId)
-                  throw Error("최신 설계를 확인하세요.");
-                const binding = approvalBinding(w, f);
-                await authenticateOwner(
-                  helper,
-                  `루프리: ${f.title.slice(0, 70)} 설계 v${f.designs.at(-1)!.number} 승인`,
+              const w = await store!.read("owner");
+              const f = w.features.find((f) => f.id === c.featureId);
+              if (!f || f.designs.at(-1)?.id !== c.designId)
+                throw Error("최신 설계를 확인하세요.");
+              const binding = approvalBinding(w, f);
+              if (c.confirmationBinding !== binding)
+                throw Error(
+                  "설계 보고서가 변경됐습니다. 최신 내용을 읽고 다시 승인하세요.",
                 );
-                value = await store!.execute("owner", randomUUID(), c, {
-                  binding,
-                  authentication: "macos-owner",
-                });
-              } finally {
-                authenticating = false;
-              }
+              value = await store!.execute("owner", randomUUID(), c, {
+                binding,
+                authentication: "app-confirmation",
+              });
             } else value = await store!.execute("owner", randomUUID(), c);
             break;
           }
@@ -754,7 +741,7 @@ export async function installDesktop() {
             value = {
               docker: docker.code === 0,
               image: image.code === 0,
-              approvalHelper: existsSync(helper),
+              approvalHelper: false,
               message:
                 "로컬 파일럿 · 실제 팀 인증은 M3 · 앱 종료/맥 sleep 시 작업 중단 가능",
             };

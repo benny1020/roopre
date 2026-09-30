@@ -4,9 +4,9 @@
 
 개발팀의 **요구사항 → 설계 → 개발자 승인 → 구현 → 리뷰·테스트** 흐름을 표준화하는 macOS 앱.
 
-**v0.4는 한 명의 소유자가 사용하는 로컬 파일럿입니다.** 설계를 macOS 본인 인증으로 승인한 뒤, Claude Code가 격리된 Docker 작업 공간에서 구현하고 고정 검사와 별도 읽기 전용 리뷰를 수행합니다. 여러 프로젝트의 실행·diff·검사 근거를 앱에서 확인합니다. 실제 팀 계정과 서버 운영은 후속 M3 범위입니다.
+**v0.4는 한 명의 소유자가 사용하는 로컬 파일럿입니다.** 설계 보고를 읽고 앱에서 승인한 뒤, Claude Code가 격리된 Docker 작업 공간에서 구현하고 고정 검사와 별도 읽기 전용 리뷰를 수행합니다. 여러 프로젝트의 실행·diff·검사 근거를 앱에서 확인합니다. 실제 팀 계정과 서버 운영은 후속 M3 범위입니다.
 
-[승인된 설계](docs/design/PRODUCT-DESIGN-v0.2.md) · [팀 개발 표준](docs/design/TEAM-STANDARD-ADDENDUM.md) · [구조](docs/ARCHITECTURE.md) · [사용·개발 안내](docs/DEVELOPMENT.md) · [검증과 남은 조건](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md) · [전담 PR 리뷰·머지 승인](docs/PR-REVIEW-PROCESS.md)
+[승인된 설계](docs/design/PRODUCT-DESIGN-v0.2.md) · [간단 승인 변경](docs/design/SIMPLE-CONFIRMATION.md) · [팀 개발 표준](docs/design/TEAM-STANDARD-ADDENDUM.md) · [구조](docs/ARCHITECTURE.md) · [사용·개발 안내](docs/DEVELOPMENT.md) · [검증과 남은 조건](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md) · [전담 PR 리뷰·머지 승인](docs/PR-REVIEW-PROCESS.md)
 
 ## 시작하기
 
@@ -28,7 +28,7 @@ Electron 앱은 PostgreSQL에 직접 연결하며 소유자 워크스페이스�
 1. 앱의 **표준 · 연결 · 환경**에서 HTTPS endpoint, API key/Bearer token, 모델 ID를 등록하고 연결 검사합니다. Anthropic Messages 규격만 지원합니다. 연결 검사에는 소량의 과금이 발생할 수 있습니다.
 2. 프로젝트의 Git 폴더·기준 브랜치·고정 검사 명령·예산·시간 한도를 저장합니다.
 3. 기능의 `AC01` 형식 완료 기준과 7개 설계 항목을 작성하고 리뷰 요청합니다.
-4. 본인이 설계를 검토하고 macOS 비밀번호/Touch ID로 승인합니다. **실행·결과 → 개발 시작**을 누릅니다.
+4. 설계 보고를 검토하고 **승인** 또는 **수정 요청**을 선택합니다. 비밀번호/Touch ID는 필요하지 않습니다. **실행·결과 → 개발 시작**을 누릅니다.
 5. **에이전트**에서 단계별 복수 에이전트와 Markdown 지침을 설정합니다. **실행 현황**에서 진행 상태를, 기능에서 변경 diff·검사 로그·리뷰·테스트 산출물을 확인합니다. 병합과 배포는 기존 절차로 수행합니다.
 
 ## 하네스 표준 공유
@@ -56,7 +56,7 @@ Electron 앱은 PostgreSQL에 직접 연결하며 소유자 워크스페이스�
 
 ```text
 src/
-  main/                  Electron 창·본인 인증·비밀 저장·IPC
+  main/                  Electron 창·승인 확인·비밀 저장·IPC
   preload/               명시적인 IPC 메서드만 노출
   renderer/
     index.html
