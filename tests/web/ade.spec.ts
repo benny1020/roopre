@@ -128,10 +128,11 @@ test("home explains the full development flow before exposing advanced control",
   await prepareHome(page, state);
 
   const primary = page.getByRole("navigation", { name: "주요 화면" });
-  await expect(primary.getByRole("button")).toHaveCount(3);
+  await expect(primary.getByRole("button")).toHaveCount(4);
   await expect(primary.getByRole("button").nth(0)).toContainText("홈");
   await expect(primary.getByRole("button").nth(1)).toContainText("작업");
-  await expect(primary.getByRole("button").nth(2)).toContainText("에이전트");
+  await expect(primary.getByRole("button").nth(2)).toContainText("품질");
+  await expect(primary.getByRole("button").nth(3)).toContainText("에이전트");
   await expect(page.getByRole("heading", { name: "지금 볼 것" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "에이전트 작업" }),
@@ -140,6 +141,7 @@ test("home explains the full development flow before exposing advanced control",
     page.getByRole("heading", { name: "프로젝트 흐름" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /전체 관제/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /품질 근거/ })).toBeVisible();
   await expect(
     page.locator(".project-flow-row").first().locator(".flow-step"),
   ).toHaveCount(3);
@@ -179,6 +181,91 @@ test("home explains the full development flow before exposing advanced control",
     page.getByRole("tab", { name: "규칙", exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("실행 선택")).toHaveValue("ade-run-current");
+});
+
+test("quality intelligence exposes evidence denominators and opens the exact run", async ({
+  page,
+}) => {
+  const quality = adeFixture();
+  const current = quality.runs.at(-1)!;
+  current.status = "ready_for_merge";
+  current.runtime!.terminationConfirmed = true;
+  current.runtime!.review = "AC와 고정 검사를 확인했습니다.";
+  current.runtime!.harness = {
+    version: 1,
+    workflowRevision: 4,
+    agents: [],
+  };
+  current.runtime!.evidence.push({
+    name: "test",
+    status: "passed",
+    code: 0,
+    at: current.at,
+    tree: "f".repeat(40),
+    log: "all passed",
+    attempt: current.runtime!.attempt,
+  });
+  await prepareHome(page, quality);
+  await page
+    .getByRole("navigation", { name: "주요 화면" })
+    .getByRole("button", { name: "품질" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "팀 표준이 실제 결과로 이어지는지" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("품질 핵심 지표")).toContainText("결과율");
+  await expect(page.getByLabel("품질 핵심 지표")).toContainText("근거 완결");
+  await expect(page.getByText(/초기 근거/)).toBeVisible();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({
+    path: "artifacts/quality-intelligence-dark.png",
+    fullPage: true,
+  });
+  await axe(page);
+  await page.getByLabel("화면 테마").selectOption("light");
+  await page.setViewportSize({ width: 1024, height: 760 });
+  await page.screenshot({
+    path: "artifacts/quality-intelligence-light-1024.png",
+    fullPage: true,
+  });
+  await axe(page);
+
+  await page
+    .getByRole("button", {
+      name: new RegExp(`결과 준비, 시도 ${current.runtime!.attempt}`),
+    })
+    .click();
+  await expect(page.getByLabel("실행 선택")).toHaveValue(current.id);
+});
+
+test("quality intelligence keeps incomplete runtime and invalid costs visible", async ({
+  page,
+}) => {
+  const quality = adeFixture();
+  quality.runs[0].runtime = undefined;
+  quality.runs[1].runtime!.costReported = true;
+  quality.runs[1].runtime!.costUsd = -1;
+  await prepareHome(page, quality);
+  await page
+    .getByRole("navigation", { name: "주요 화면" })
+    .getByRole("button", { name: "품질" })
+    .click();
+
+  await expect(
+    page.getByText("실행 환경 기록이 없는 실행 1개를 지표에서 제외했습니다."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("비용 값이 잘못된 실행 1개를 합계에서 제외했습니다."),
+  ).toBeVisible();
+  await expect(page.locator(".quality-clear")).toHaveCount(0);
+  await expect(page.locator(".quality-table-row").first()).toContainText(
+    "잘못된 값 1",
+  );
+  await expect(page.locator(".quality-table-row").first()).not.toContainText(
+    "모두 보고",
+  );
+  await axe(page);
 });
 
 test("home agent rows always open the current run", async ({ page }) => {
@@ -1919,8 +2006,16 @@ test("execution setup keeps the feature project across settings and returns to t
   await page
     .getByRole("button", { name: "작업으로 돌아가기", exact: true })
     .click();
-  // The simplified global shortcut opens live agent work and history returns to the task.
+  // Global shortcuts open quality and live agent work while history returns to the task.
   await page.keyboard.press("Control+3");
+  await expect(
+    page.getByRole("heading", { name: "팀 표준이 실제 결과로 이어지는지" }),
+  ).toBeVisible();
+  await page.keyboard.press("Meta+[");
+  await expect(
+    page.getByRole("heading", { name: "두 번째 프로젝트의 기능", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Control+4");
   await expect(
     page.getByRole("heading", { name: "실행 현황", exact: true }),
   ).toBeVisible();

@@ -12,6 +12,7 @@ import RunPanel from "./RunPanel";
 import RunOverview from "./RunOverview";
 import PortfolioOverview from "./PortfolioOverview";
 import WorkspaceHome, { FlowRail } from "./WorkspaceHome";
+import QualityIntelligence from "./QualityIntelligence";
 import { activeStatuses } from "../../shared/runtime";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -116,6 +117,13 @@ export default function App() {
   );
   const [portfolio, setPortfolio] = useState<PortfolioState>(() =>
     readLocal("portfolio", initialPortfolio),
+  );
+  const [qualityProjectId, setQualityProjectId] = useState(() =>
+    readLocal("quality-project", "all"),
+  );
+  useEffect(
+    () => saveLocal("quality-project", qualityProjectId),
+    [qualityProjectId],
   );
   const [query, setQuery] = useState("");
   const [navigationRestore, setNavigationRestore] = useState(0);
@@ -339,6 +347,7 @@ export default function App() {
       query,
       settingsContext,
       runtimeSection,
+      qualityProjectId,
       portfolio,
     },
     (location) => {
@@ -352,6 +361,7 @@ export default function App() {
       setQuery(location.query);
       setSettingsContext(location.settingsContext);
       setRuntimeSection(location.runtimeSection);
+      setQualityProjectId(location.qualityProjectId || "all");
       if (location.portfolio) setPortfolio(location.portfolio);
       if (location.scope === "portfolio" && location.portfolio?.selectionRef)
         portfolioReturnFocus.current = `${location.portfolio.selectionRef.featureId}:${location.portfolio.selectionRef.runId || ""}:${location.portfolio.selectionRef.attempt || ""}:${location.portfolio.selectionRef.agentExecutionId || ""}`;
@@ -374,6 +384,7 @@ export default function App() {
           "blocked",
           "queued",
           "portfolio",
+          "quality",
           ...settingsScopes,
         ].includes(location.scope) ||
         snapshot.projects.some((p) => p.id === location.scope)
@@ -426,10 +437,18 @@ export default function App() {
         setModal(null);
         setSearch(false);
       }
-      if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) {
+      if ((e.metaKey || e.ctrlKey) && ["1", "2", "3", "4"].includes(e.key)) {
         e.preventDefault();
         if (modal || search) return;
-        navigate(e.key === "1" ? "inbox" : e.key === "2" ? "all" : "queued");
+        navigate(
+          e.key === "1"
+            ? "inbox"
+            : e.key === "2"
+              ? "all"
+              : e.key === "3"
+                ? "quality"
+                : "queued",
+        );
       }
     };
     window.addEventListener("keydown", key);
@@ -521,6 +540,12 @@ export default function App() {
               icon={<PanelLeft size={17} />}
               label="작업"
               onClick={() => navigate("all")}
+            />
+            <Nav
+              active={scope === "quality" && !selected}
+              icon={<ShieldCheck size={17} />}
+              label="품질"
+              onClick={() => navigate("quality")}
             />
             <Nav
               active={scope === "queued" && !selected}
@@ -749,6 +774,19 @@ export default function App() {
                 setSelected(ref.featureId);
               }}
             />
+          ) : scope === "quality" ? (
+            <QualityIntelligence
+              snapshot={snapshot}
+              projectId={qualityProjectId}
+              onProjectId={setQualityProjectId}
+              onOpen={(featureId, runId) => {
+                localStorage.setItem(`ade:run:${featureId}`, runId);
+                saveLocal(`tab:${featureId}`, "execution");
+                setDetailRunId(runId);
+                setDetailTab("execution");
+                setSelected(featureId);
+              }}
+            />
           ) : scope === "harness" ? (
             <PackageSettings
               key={navigationRestore}
@@ -827,6 +865,7 @@ export default function App() {
               }}
               onProject={(projectId) => navigate(projectId)}
               onPortfolio={() => navigate("portfolio")}
+              onQuality={() => navigate("quality")}
               onRuns={() => navigate("queued")}
               onCreate={() => setModal("feature")}
             />

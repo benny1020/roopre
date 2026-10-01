@@ -6,6 +6,7 @@ export type WorkspaceLocation = {
   query: string;
   settingsContext?: { projectId: string; featureId?: string };
   runtimeSection: "connection" | "profile";
+  qualityProjectId?: string;
   portfolio?: {
     projectScope: string;
     query: string;
@@ -31,6 +32,7 @@ const identity = (location: WorkspaceLocation) =>
     location.settingsContext?.projectId,
     location.settingsContext?.featureId,
     location.scope === "runtime" ? location.runtimeSection : undefined,
+    location.scope === "quality" ? location.qualityProjectId : undefined,
     location.scope === "portfolio" ? location.portfolio?.view : undefined,
     location.scope === "portfolio"
       ? location.portfolio?.selectionRef

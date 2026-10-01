@@ -6,7 +6,7 @@
 
 **v0.4는 한 명의 소유자가 사용하는 로컬 파일럿입니다.** 설계 보고를 읽고 앱에서 승인한 뒤, Claude Code가 격리된 Docker 작업 공간에서 구현하고 고정 검사와 별도 읽기 전용 리뷰를 수행합니다. 여러 프로젝트의 실행·diff·검사 근거를 앱에서 확인합니다. 실제 팀 계정과 서버 운영은 후속 M3 범위입니다.
 
-[승인된 설계](docs/design/PRODUCT-DESIGN-v0.2.md) · [간단 승인 변경](docs/design/SIMPLE-CONFIRMATION.md) · [팀 개발 표준](docs/design/TEAM-STANDARD-ADDENDUM.md) · [구조](docs/ARCHITECTURE.md) · [사용·개발 안내](docs/DEVELOPMENT.md) · [검증과 남은 조건](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md) · [전담 PR 리뷰·머지 승인](docs/PR-REVIEW-PROCESS.md)
+[승인된 설계](docs/design/PRODUCT-DESIGN-v0.2.md) · [Quality Intelligence](docs/design/QUALITY-INTELLIGENCE.md) · [간단 승인 변경](docs/design/SIMPLE-CONFIRMATION.md) · [팀 개발 표준](docs/design/TEAM-STANDARD-ADDENDUM.md) · [구조](docs/ARCHITECTURE.md) · [사용·개발 안내](docs/DEVELOPMENT.md) · [검증과 남은 조건](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md) · [전담 PR 리뷰·머지 승인](docs/PR-REVIEW-PROCESS.md)
 
 ## 시작하기
 
@@ -43,6 +43,7 @@ Electron 앱은 PostgreSQL에 직접 연결하며 소유자 워크스페이스�
 - 독립 체크아웃·Docker 격리. 기본 전역 3개 실행·프로젝트당 2개 실행·단계당 3개 에이전트 병렬이며, 소유자가 안전 범위에서 조절.
 - Claude Code 구현 → 고정 검사/E2E → 읽기 전용 AI 리뷰 → 제한된 수정 반복.
 - 중단·재시도·변경 복구, 시도별 검사와 산출물 해시, 최종 commit·diff 확인.
+- 결과율·첫 시도 완료·검사/리뷰 근거·보고 비용을 실제 실행 표본과 함께 확인하는 Quality Intelligence.
 - 라이트·다크·시스템 테마 및 설정 유지.
 - 에이전트별 읽기 전용 상담과 사용자 확인 작업 기억. 적용 범위·승인 영향·저장 경계는 [상담·기억 안내](docs/AGENT-CONVERSATIONS.md)를 따른다.
 
