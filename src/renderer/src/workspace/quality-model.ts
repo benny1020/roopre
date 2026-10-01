@@ -32,7 +32,9 @@ export type QualityBreakdown = {
   firstPass: number;
   evidenceComplete: number;
   reportedCost: number;
+  reportedCostRuns: number;
   unreportedCost: number;
+  invalidCost: number;
 };
 
 export type QualityProjection = {
@@ -53,6 +55,7 @@ export type QualityProjection = {
   unreportedCostRuns: number;
   invalidCostRuns: number;
   invalidTimestampRuns: number;
+  missingRuntimeRuns: number;
   missingHarnessRuns: number;
   resultRate?: number;
   firstPassRate?: number;
@@ -117,8 +120,15 @@ function summarize(
       (total, row) => total + (row.reportedCost ?? 0),
       0,
     ),
+    reportedCostRuns: rows.filter((row) => row.reportedCost !== undefined)
+      .length,
     unreportedCost: rows.filter((row) => row.run.runtime?.costReported !== true)
       .length,
+    invalidCost: rows.filter(
+      (row) =>
+        row.run.runtime?.costReported === true &&
+        row.reportedCost === undefined,
+    ).length,
   };
 }
 
@@ -134,9 +144,9 @@ export function qualityProjection(
   );
   const runs: QualityRun[] = [];
   let invalidCostRuns = 0;
+  let missingRuntimeRuns = 0;
 
   for (const run of snapshot.runs) {
-    if (!run.runtime || run.runtime.kind === "planning") continue;
     const feature = features.get(run.featureId);
     const project = feature && projects.get(feature.projectId);
     if (
@@ -145,6 +155,11 @@ export function qualityProjection(
       (projectId !== "all" && project.id !== projectId)
     )
       continue;
+    if (!run.runtime) {
+      missingRuntimeRuns += 1;
+      continue;
+    }
+    if (run.runtime.kind === "planning") continue;
     const cost = run.runtime.costUsd;
     const validCost = Number.isFinite(cost) && cost >= 0;
     if (run.runtime.costReported === true && !validCost) invalidCostRuns += 1;
@@ -225,6 +240,7 @@ export function qualityProjection(
     invalidCostRuns,
     invalidTimestampRuns: runs.filter((row) => row.occurredAt === undefined)
       .length,
+    missingRuntimeRuns,
     missingHarnessRuns: runs.filter((row) => row.workflowRevision === undefined)
       .length,
     resultRate: rate(ready.length, decided.length),

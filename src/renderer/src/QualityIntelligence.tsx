@@ -112,9 +112,13 @@ function BreakdownTable({
             <span role="cell">
               ${row.reportedCost.toFixed(2)}
               <small>
-                {row.unreportedCost
-                  ? `미보고 ${row.unreportedCost}`
-                  : "모두 보고"}
+                {[
+                  row.reportedCostRuns ? `보고 ${row.reportedCostRuns}` : "",
+                  row.unreportedCost ? `미보고 ${row.unreportedCost}` : "",
+                  row.invalidCost ? `잘못된 값 ${row.invalidCost}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "비용 기록 없음"}
               </small>
             </span>
           </div>
@@ -162,6 +166,9 @@ export default function QualityIntelligence({
       : "",
     quality.invalidCostRuns
       ? `비용 값이 잘못된 실행 ${quality.invalidCostRuns}개를 합계에서 제외했습니다.`
+      : "",
+    quality.missingRuntimeRuns
+      ? `실행 환경 기록이 없는 실행 ${quality.missingRuntimeRuns}개를 지표에서 제외했습니다.`
       : "",
     quality.missingHarnessRuns
       ? `Harness revision이 없는 이전 실행 ${quality.missingHarnessRuns}개를 별도로 표시합니다.`

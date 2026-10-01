@@ -239,6 +239,35 @@ test("quality intelligence exposes evidence denominators and opens the exact run
   await expect(page.getByLabel("실행 선택")).toHaveValue(current.id);
 });
 
+test("quality intelligence keeps incomplete runtime and invalid costs visible", async ({
+  page,
+}) => {
+  const quality = adeFixture();
+  quality.runs[0].runtime = undefined;
+  quality.runs[1].runtime!.costReported = true;
+  quality.runs[1].runtime!.costUsd = -1;
+  await prepareHome(page, quality);
+  await page
+    .getByRole("navigation", { name: "주요 화면" })
+    .getByRole("button", { name: "품질" })
+    .click();
+
+  await expect(
+    page.getByText("실행 환경 기록이 없는 실행 1개를 지표에서 제외했습니다."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("비용 값이 잘못된 실행 1개를 합계에서 제외했습니다."),
+  ).toBeVisible();
+  await expect(page.locator(".quality-clear")).toHaveCount(0);
+  await expect(page.locator(".quality-table-row").first()).toContainText(
+    "잘못된 값 1",
+  );
+  await expect(page.locator(".quality-table-row").first()).not.toContainText(
+    "모두 보고",
+  );
+  await axe(page);
+});
+
 test("home agent rows always open the current run", async ({ page }) => {
   const active = adeFixture();
   await prepareHome(page, active);

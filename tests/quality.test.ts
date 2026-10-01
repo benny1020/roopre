@@ -79,6 +79,11 @@ test("quality projection reports missing evidence, review, harness and costs wit
   invalid.runtime!.costReported = true;
   invalid.runtime!.costUsd = Number.NaN;
   invalid.at = "invalid";
+  snapshot.runs.push({
+    ...structuredClone(invalid),
+    id: "missing-runtime",
+    runtime: undefined,
+  });
 
   const quality = qualityProjection(snapshot);
   assert.equal(quality.ready, 2);
@@ -90,8 +95,12 @@ test("quality projection reports missing evidence, review, harness and costs wit
   assert.equal(quality.unreportedCostRuns, 1);
   assert.equal(quality.invalidCostRuns, 1);
   assert.equal(quality.invalidTimestampRuns, 1);
+  assert.equal(quality.missingRuntimeRuns, 1);
   assert.equal(quality.missingHarnessRuns, 2);
   assert.equal(quality.harnesses[0].label, "Harness 기록 없음");
+  assert.equal(quality.projects[0].reportedCostRuns, 0);
+  assert.equal(quality.projects[0].unreportedCost, 1);
+  assert.equal(quality.projects[0].invalidCost, 1);
 });
 
 test("quality projection filters projects and keeps breakdown totals explainable", () => {
