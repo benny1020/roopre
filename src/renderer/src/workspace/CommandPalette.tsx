@@ -9,6 +9,7 @@ import {
   Plus,
   Settings2,
   Activity,
+  ShieldCheck,
 } from "lucide-react";
 import type { Snapshot } from "../../../shared/contracts";
 import { Dialog } from "./Controls";
@@ -47,6 +48,13 @@ export default function CommandPalette({
         icon: Plus,
         action: () => create("project"),
         disabled: !connected,
+      },
+      {
+        id: "quality",
+        title: "품질 근거",
+        meta: "결과율 · 첫 시도 · 검사 · 리뷰 · 비용",
+        icon: ShieldCheck,
+        action: () => navigate("quality"),
       },
       {
         id: "runs",

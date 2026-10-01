@@ -7,6 +7,7 @@ import {
   CircleAlert,
   Plus,
   Radar,
+  ShieldCheck,
 } from "lucide-react";
 import type { Feature, Snapshot } from "../../shared/contracts";
 import { activeStatuses } from "../../shared/runtime";
@@ -89,6 +90,7 @@ export default function WorkspaceHome({
   onOpen,
   onProject,
   onPortfolio,
+  onQuality,
   onRuns,
   onCreate,
 }: {
@@ -97,6 +99,7 @@ export default function WorkspaceHome({
   onOpen: (featureId: string, destination: Destination) => void;
   onProject: (projectId: string) => void;
   onPortfolio: () => void;
+  onQuality: () => void;
   onRuns: () => void;
   onCreate: () => void;
 }) {
@@ -237,9 +240,14 @@ export default function WorkspaceHome({
               <p>계획부터 검토까지 모든 기능의 위치를 한 줄로 봅니다.</p>
             </div>
           </div>
-          <button className="text-action" onClick={onPortfolio}>
-            전체 관제 <ArrowRight size={14} />
-          </button>
+          <div className="home-header-actions">
+            <button className="text-action" onClick={onQuality}>
+              품질 근거 <ShieldCheck size={14} />
+            </button>
+            <button className="text-action" onClick={onPortfolio}>
+              전체 관제 <ArrowRight size={14} />
+            </button>
+          </div>
         </header>
         <div className="project-flow-list">
           {snapshot.projects.map((project) => {

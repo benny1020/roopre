@@ -1,3 +1,16 @@
+# Quality Intelligence — 2026-10-01
+
+[Quality Intelligence 설계](design/QUALITY-INTELLIGENCE.md)에 따라 구현 실행의 결과율, 첫 시도 완료, 검사·독립 리뷰 근거, provider 보고 비용을 분자와 분모가 드러나는 지표로 추가했다. planning·진행·대기·취소는 결과율에서 제외하고, 표본 3개 미만·비용 미보고·Harness revision 누락을 성공으로 보정하지 않는다. 프로젝트와 실행 당시 workflow revision별 결과를 비교하고 최근 실행에서 정확한 run 근거로 이동한다.
+
+- 순수 projection 회귀 3개 통과: 상태별 분모, 현재 attempt 검사와 리뷰 결합, 비용 미보고/잘못된 값, 시각/Harness 누락, 프로젝트 필터와 breakdown 합계를 확인했다.
+- fixture ADE/온보딩 Chromium 42개 통과. 품질 화면의 정확한 run 이동, 명령/주요 탐색, 다크·라이트, 1440×900·1024×760, WCAG A/AA axe 검사를 포함한다.
+- 전체 브라우저 49개 중 fixture 기반 42개는 통과했다. 실제 PostgreSQL을 사용하는 7개는 Docker Desktop backend가 74일 된 중단 상태에서 재시작 후에도 엔진을 열지 못해 `127.0.0.1:55441` 연결 거절로 미수행 상태다. 제품 회귀 실패로 집계하지 않으며 정확한 PR head CI에서 확인한다.
+- `pnpm build` 통과. 시각 검증 산출물은 `artifacts/quality-intelligence-dark.png`, `artifacts/quality-intelligence-light-1024.png`이며 로컬 fixture 데이터만 사용한다.
+
+현재 화면은 저장된 실행 근거의 존재와 비율을 보여 주며 코드 품질의 절대 점수나 팀 생산성 향상을 보증하지 않는다. 반복 가능한 평가 Suite, 실제 provider dogfood, 원격 runner와 팀 SSO/RBAC는 설계에 명시한 후속 묶음이다.
+
+---
+
 # 개발 흐름 가독성 재설계 — 2026-10-01
 
 [흐름 가독성 설계](design/FLOW-CLARITY-REDESIGN.md)에 따라 첫 화면과 기능 상세의 정보 구조를 단순화했다. 홈은 `지금 볼 것`, `에이전트 작업`, `프로젝트 흐름`을 실제 작업 행으로 보여 주며 전역 탐색은 홈·작업·에이전트 세 항목으로 줄였다. 내부 다섯 단계는 저장·실행 계약을 바꾸지 않고 계획·개발·검토의 세 구간 흐름선으로 표현한다. 전역 관제, 상세 실행, 규칙과 설정은 홈·명령 팔레트·기능 탭에서 계속 접근할 수 있다.
