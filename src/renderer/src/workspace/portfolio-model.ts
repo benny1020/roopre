@@ -180,7 +180,7 @@ export function describePortfolioRun(
           : 2,
       statusLabel[run.status] || "Running",
       agent && !run.runtime?.cancelRequested
-        ? `${agent.name} Inspect the execution record`
+        ? `Inspect ${agent.name}'s execution record`
         : run.runtime?.cancelRequested
           ? "Waiting for stop and termination confirmation"
           : "Waiting for runner status",

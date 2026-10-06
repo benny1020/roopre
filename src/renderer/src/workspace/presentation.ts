@@ -49,7 +49,7 @@ export function workState(snapshot: Snapshot, feature: Feature): WorkState {
       : gate.eligible
         ? "Start implementation with the approved design"
         : gate.blockers
-          ? `Blocking comments ${gate.blockers} to resolve`
+          ? `Resolve ${countLabel(gate.blockers, "blocking comment")}`
           : gate.status === "draft"
             ? "Write a design and request review"
             : "Review design and approvals",

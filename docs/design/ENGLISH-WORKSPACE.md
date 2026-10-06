@@ -11,6 +11,7 @@ Use natural English for product-owned screens, commands, feedback, defaults and 
 - Describe work in terms of the next action. An empty requirement starts at intent, rather than incorrectly asking users to review a design.
 - Use one vocabulary throughout: feature, design, workflow, stage, run, attempt, check, review, evidence and approval. Agents are workers; contextual consultation remains secondary.
 - The agent picker explains the selected stage's execution mode and each role's purpose. Existing roles and creating a new role share one entry point.
+- Stage backgrounds remain behind agent nodes even when selected; adding an agent must not hide existing workers or block pointer interaction.
 - Use a short workspace search label, distinct navigation landmarks, clear action verbs and compact desktop typography. Preserve resizable panels, keyboard navigation, diffs and execution logs.
 
 The reference principles are the workspace/task separation of [Vibe Kanban](https://github.com/BloopAI/vibe-kanban), isolated agent workspaces of [Emdash](https://github.com/generalaction/emdash), and task/agent operational visibility of [Paperclip](https://github.com/paperclipai/paperclip). These inform hierarchy and progressive disclosure; no reference product is copied and no new claims about their current implementation are required.

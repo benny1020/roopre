@@ -1703,6 +1703,8 @@ test("graph editing supports stage moves, undo, draft recovery and accessible co
   await dialog.getByLabel("Search existing agents").fill("review");
   await dialog.getByRole("button", { name: /review 역할/ }).click();
   await expect(page.getByLabel("Agent stage")).toHaveValue("verification");
+  // Selecting a stage must never raise its background over its agent nodes.
+  await source.click({ trial: true, timeout: 3000 });
   await page.setViewportSize({ width: 1440, height: 940 });
   await axe(page);
   await page.screenshot({

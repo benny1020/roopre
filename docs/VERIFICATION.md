@@ -7,8 +7,9 @@
 - `pnpm test:desktop`: **1 passed** with actual Electron startup, onboarding, theme and restart persistence.
 - `pnpm test:conversation`: **1 passed** through Electron main/preload/IPC, including confirmation binding and persisted consultation. Provider responses use a fixture.
 - `pnpm runner:image` and `pnpm test:runner`: image build and **5 integration tests passed**. Covers Java 21/Gradle, agent memory snapshots, parallel isolation/fan-in, read-only review, cancellation, runner cleanup, dedicated PostgreSQL ownership, restart identity and backup/migration preservation. Claude execution uses a test program.
+- `pnpm test:resilience`: **1 passed** with real process/Docker/DB project capacity, cancellation, SIGKILL restart and connection-loss recovery.
 - `pnpm check:mac`: temporary macOS application packaging, included resources, security fuses and code-signing integrity passed. No ZIP was produced. This is not Developer ID signing or notarization.
-- Visually inspected rendered Home, design confirmation, workflow editor, execution graph, agent picker and native onboarding. Fixed active-stage text overlap and confirmed the resulting graph geometry with a browser assertion. Screenshots in `artifacts/` are fixture evidence, not user runs.
+- Visually inspected rendered Home, design confirmation, workflow editor, execution graph, agent picker and native onboarding. Fixed active-stage text overlap and confirmed the resulting graph geometry with a browser assertion. A final visual check also reproduced selected stage backgrounds covering agent nodes; explicit layering and a pointer-interaction regression prevent it. Screenshots in `artifacts/` are fixture evidence, not user runs.
 
 The Docker engine was restored without resetting volumes. This supersedes the historical unavailable local database results below; those entries remain as the original audit history. Setup now reuses an existing PostgreSQL image and downloads only when absent, with regressions for both paths.
 

@@ -156,6 +156,7 @@ export default function WorkflowGraph({
         {
           id: stage,
           type: "stage",
+          zIndex: 0,
           position: { x: left + i * column, y: 20 },
           draggable: false,
           data: {
@@ -176,6 +177,7 @@ export default function WorkflowGraph({
           ? list.map((item, j): Node => ({
               id: item.id,
               type: "agent",
+              zIndex: 1,
               position: { x: left + i * column + 10, y: top + 32 + j * row },
               draggable: editable,
               data: { item, selected: selected === item.id },
@@ -261,6 +263,8 @@ export default function WorkflowGraph({
             edgesFocusable={false}
             deleteKeyCode={null}
             nodesDraggable={editable}
+            // Stage nodes are backgrounds: selection must not cover agents.
+            elevateNodesOnSelect={false}
             panOnScroll={false}
             preventScrolling={false}
             zoomOnScroll={false}
@@ -300,7 +304,7 @@ export default function WorkflowGraph({
       <div className="graph-legend">
         <span>
           <i className="legend-selected" />
-          Optional
+          Selected
         </span>
         <span>
           <i className="legend-running" />
