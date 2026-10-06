@@ -32,6 +32,49 @@ export const sections = [
   "검증 계획",
   "적용·복구",
 ] as const;
+// Stable wire keys preserve existing approvals and review comments. Labels and
+// new documents use English; both heading formats remain valid on disk.
+export const sectionLabels: Record<(typeof sections)[number], string> = {
+  요구사항: "Requirements",
+  구조: "Architecture",
+  "API·데이터": "API & Data",
+  "예외 상황": "Failure cases",
+  "변경 영향": "Change impact",
+  "검증 계획": "Verification plan",
+  "적용·복구": "Rollout & Recovery",
+};
+export function designSectionKey(title: string) {
+  return sections.find(
+    (key) => key === title.trim() || sectionLabels[key] === title.trim(),
+  );
+}
+export function designSectionLabel(title: string) {
+  const key = designSectionKey(title);
+  return key ? sectionLabels[key] : title;
+}
+export function hasDesignSections(body: string) {
+  const headings = new Set(
+    body
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("## "))
+      .map((line) => designSectionKey(line.slice(3))),
+  );
+  return sections.every((key) => headings.has(key));
+}
+export const designPrompts = [
+  "Describe existing components and change responsibilities.",
+  "Describe input/output contracts and data changes.",
+  "Describe failure, duplicate request and authorization handling.",
+  "Describe affected features and dependencies.",
+  "Describe verification for each acceptance criterion.",
+  "Describe rollout order and recovery steps.",
+];
+export function hasDesignPlaceholders(body: string) {
+  return (
+    body.includes("작성하세요.") ||
+    designPrompts.some((prompt) => body.includes(prompt))
+  );
+}
 export type Person = {
   id: string;
   name: string;
@@ -313,7 +356,7 @@ export function gate(
     return {
       eligible: false,
       status: "draft",
-      reasons: ["설계를 게시하고 개발자 리뷰를 요청하세요."],
+      reasons: ["Publish the design and request review."],
       approved: 0,
       required: workspace.projects
         .find((p) => p.id === feature.projectId)!
@@ -336,7 +379,7 @@ export function gate(
   );
   const reasons: string[] = workflowIssues(workspace, project);
   if (design.policyVersion !== policy.version)
-    reasons.push("팀 지침이 변경됐습니다. 새 설계를 게시해 재리뷰하세요.");
+    reasons.push("Team instructions changed. Publish a new design for review.");
   if (
     JSON.stringify([...design.reviewers].sort()) !==
     JSON.stringify(
@@ -347,7 +390,7 @@ export function gate(
         .sort(),
     )
   )
-    reasons.push("필수 검토자가 변경됐습니다. 새 설계를 게시하세요.");
+    reasons.push("Required reviewers changed. Publish a new design.");
   if (workspace.mode === "local-owner")
     reasons.push(
       ...executionProfileIssues(project.executionProfile, [
@@ -367,12 +410,13 @@ export function gate(
         (!currentApprovalBinding || d.binding === currentApprovalBinding),
     )
   )
-    reasons.push("사용자 본인의 설계 승인이 필요합니다.");
+    reasons.push("Your design approval is required.");
   if (blockers)
-    reasons.push(`차단 의견 ${blockers}건의 해결 확인이 필요합니다.`);
-  if (changed) reasons.push("수정 요청한 검토자의 재승인이 필요합니다.");
+    reasons.push(`${blockers} blocking comments need confirmed resolution.`);
+  if (changed)
+    reasons.push("Reviewers who requested changes must approve again.");
   if (approved < design.reviewers.length)
-    reasons.push(`필수 승인 ${approved}/${design.reviewers.length}`);
+    reasons.push(`Required approvals ${approved}/${design.reviewers.length}`);
   return {
     eligible: reasons.length === 0,
     status:

@@ -73,7 +73,7 @@ test("duplicate preparation shares one attempt; cancellation is reported and nev
     boot.cancel();
     await boot.stop();
     assert.equal(calls.filter((c) => c[0] === "git").length, 1);
-    assert.match(boot.status().error, /중단/);
+    assert.match(boot.status().error, /stopped/);
     assert(!calls.some((c) => c.includes("rm")));
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -91,7 +91,7 @@ test("corrupt bootstrap state is preserved and failed progress writes do not adv
       async () => {},
       () => false,
     );
-    await assert.rejects(() => boot.init(), /복구/);
+    await assert.rejects(() => boot.init(), /recover/);
     assert.equal(await readFile(file, "utf8"), "invalid");
     await rm(file);
     await boot.init();
@@ -165,3 +165,67 @@ test("failed identity persistence cannot create resources and retry saves identi
     await rm(root, { recursive: true, force: true });
   }
 });
+
+for (const cached of [true, false]) {
+  test(
+    cached
+      ? "setup reuses the cached database image without contacting a registry"
+      : "setup pulls a missing database image before creating the private database",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "roopre-bootstrap-cache-"));
+      const calls: string[][] = [];
+      const run = (async (bin: string, args: string[]) => {
+        calls.push([bin, ...args]);
+        if (
+          bin === "docker" &&
+          args[0] === "image" &&
+          args[1] === "inspect" &&
+          args[2] === "postgres:18-alpine"
+        )
+          return { code: cached ? 0 : 1, output: "", outputTruncated: false };
+        // Stop before resource creation; image resolution and persisted identity are real.
+        if (bin === "docker" && args[0] === "create")
+          return {
+            code: 1,
+            output: "fixture stop before container creation",
+            outputTruncated: false,
+          };
+        return { code: 0, output: "", outputTruncated: false };
+      }) as typeof command;
+      const boot = new Bootstrap(
+        root,
+        cipher,
+        "unused",
+        async () => {},
+        () => false,
+        run,
+      );
+      try {
+        await boot.init();
+        boot.prepare();
+        for (let i = 0; i < 100 && boot.status().busy; i++)
+          await new Promise((r) => setTimeout(r, 10));
+        assert.equal(boot.status().busy, false);
+        assert(boot.status().error);
+        assert.equal(
+          calls.filter((call) => call[1] === "pull").length,
+          cached ? 0 : 1,
+        );
+        assert(
+          calls.some(
+            (call) =>
+              call[1] === "create" && call.includes("postgres:18-alpine"),
+          ),
+        );
+        const state = JSON.parse(
+          await readFile(join(root, "onboarding.json"), "utf8"),
+        );
+        assert(state.database.id);
+        assert(!calls.some((call) => call[1] === "rm"));
+      } finally {
+        await boot.stop();
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+}

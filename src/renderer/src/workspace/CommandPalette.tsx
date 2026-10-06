@@ -35,52 +35,52 @@ export default function CommandPalette({
     [
       {
         id: "new-feature",
-        title: "새 기능",
-        meta: "요구사항으로 시작",
+        title: "New feature",
+        meta: "Start with requirements",
         icon: Plus,
         action: () => create("feature"),
         disabled: !connected || !snapshot?.projects.length,
       },
       {
         id: "new-project",
-        title: "새 프로젝트",
-        meta: "저장소와 개발 흐름 연결",
+        title: "New project",
+        meta: "Connect repository and workflow",
         icon: Plus,
         action: () => create("project"),
         disabled: !connected,
       },
       {
         id: "quality",
-        title: "품질 근거",
-        meta: "결과율 · 첫 시도 · 검사 · 리뷰 · 비용",
+        title: "Quality evidence",
+        meta: "Results, attempts, checks, reviews & cost",
         icon: ShieldCheck,
         action: () => navigate("quality"),
       },
       {
         id: "runs",
-        title: "실행 현황",
-        meta: "모든 프로젝트의 에이전트 작업",
+        title: "Execution",
+        meta: "Agent activity across all projects",
         icon: Activity,
         action: () => navigate("queued"),
       },
       {
         id: "portfolio",
-        title: "전역 관제",
-        meta: "프로젝트 흐름 · 판단할 일 · 역할별 작업",
+        title: "Workspace overview",
+        meta: "Project flow, decisions & roles",
         icon: Activity,
         action: () => navigate("portfolio"),
       },
       {
         id: "settings",
-        title: "설정",
-        meta: "하네스 · 에이전트 · 연결 · 지침",
+        title: "Settings",
+        meta: "Harness, agents, connections & instructions",
         icon: Settings2,
         action: () => navigate("harness"),
       },
       ...(snapshot?.projects.map((p) => ({
         id: `project:${p.id}`,
         title: p.name,
-        meta: "프로젝트",
+        meta: "Projects",
         icon: Folder,
         action: () => navigate(p.id),
       })) || []),
@@ -88,7 +88,8 @@ export default function CommandPalette({
         id: `feature:${f.id}`,
         title: f.title,
         meta:
-          snapshot.projects.find((p) => p.id === f.projectId)?.name || "기능",
+          snapshot.projects.find((p) => p.id === f.projectId)?.name ||
+          "Feature",
         icon: FileText,
         action: () => onSelect(f.id),
       })) || []),
@@ -105,7 +106,7 @@ export default function CommandPalette({
   };
   return (
     <Dialog
-      label="작업 검색"
+      label="Search work"
       onClose={onClose}
       className="command-dialog ade-command"
     >
@@ -113,14 +114,14 @@ export default function CommandPalette({
         <Search size={18} />
         <input
           role="combobox"
-          aria-label="명령과 작업 검색"
+          aria-label="Search commands and work"
           aria-expanded="true"
           aria-controls={id}
           aria-autocomplete="list"
           aria-activedescendant={
             commands[selected] ? `${id}-${selected}` : undefined
           }
-          placeholder="기능, 프로젝트 또는 명령 검색…"
+          placeholder="Search features, projects or commands…"
           maxLength={500}
           value={query}
           onChange={(e) => {
@@ -152,7 +153,7 @@ export default function CommandPalette({
         />
         <button
           className="icon-button"
-          aria-label="검색 닫기"
+          aria-label="Close search"
           onClick={onClose}
         >
           <X size={16} />
@@ -162,7 +163,7 @@ export default function CommandPalette({
         className="command-results"
         role="listbox"
         id={id}
-        aria-label="검색 결과"
+        aria-label="Search results"
       >
         {commands.map((c, i) => (
           <div
@@ -183,21 +184,19 @@ export default function CommandPalette({
           </div>
         ))}
         {!commands.length && (
-          <p className="quiet-empty">
-            일치하는 작업이 없습니다. 다른 이름을 검색하세요.
-          </p>
+          <p className="quiet-empty">No matching work. Try another name.</p>
         )}
       </div>
       <footer>
         <span>
           <kbd>↑</kbd>
-          <kbd>↓</kbd> 이동
+          <kbd>↓</kbd> Navigate
         </span>
         <span>
-          <kbd>↵</kbd> 열기
+          <kbd>↵</kbd> Open
         </span>
         <span>
-          <kbd>esc</kbd> 닫기
+          <kbd>esc</kbd> Close
         </span>
       </footer>
     </Dialog>

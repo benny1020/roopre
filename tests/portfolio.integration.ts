@@ -74,9 +74,9 @@ test(
       application = await launch();
       let page = await application.firstWindow();
       await page
-        .getByRole("button", { name: "나중에 · 앱 열기", exact: true })
+        .getByRole("button", { name: "Skip for now · Open app", exact: true })
         .click();
-      await expect(page.getByText("동기화됨", { exact: true })).toBeVisible();
+      await expect(page.getByText("Synced", { exact: true })).toBeVisible();
 
       // This uses the app's real preload IPC command handler to create only
       // disposable read-model records. It deliberately does not publish or
@@ -98,7 +98,7 @@ test(
           const feature = await api.command({
             type: "create_feature",
             projectId: project.entityId,
-            title: `${name} 기능`,
+            title: `${name} Feature`,
             template: "feature",
             requirements: "AC-01 관제에서 실제 snapshot을 확인한다.",
           });
@@ -119,37 +119,41 @@ test(
         (feature: any) => feature.projectId === gamma.id,
       );
 
-      await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+      await page
+        .getByRole("button", { name: /Search commands and work/ })
+        .click();
       const commandSearch = page.getByRole("combobox", {
-        name: "명령과 작업 검색",
+        name: "Search commands and work",
       });
-      await commandSearch.fill("전역 관제");
+      await commandSearch.fill("Workspace overview");
       await commandSearch.press("Enter");
       await expect(
-        page.getByRole("heading", { name: "전역 관제", exact: true }),
+        page.getByRole("heading", { name: "Workspace overview", exact: true }),
       ).toBeVisible();
       await page
-        .getByRole("button", { name: "에이전트 작업실", exact: true })
+        .getByRole("button", { name: "Agent workspace", exact: true })
         .click();
       await expect(
-        page.getByText("실행 인스턴스가 있는 작업석만 표시합니다.", {
+        page.getByText("Only seats with execution records are shown.", {
           exact: true,
         }),
       ).toBeVisible();
       await expect(
-        page.getByText("현재 실행 기록 없음", { exact: true }).first(),
+        page.getByText("No current run", { exact: true }).first(),
       ).toBeVisible();
       await page
-        .getByRole("button", { name: "프로젝트 흐름", exact: true })
+        .getByRole("button", { name: "Project flow", exact: true })
         .click();
       await expect(
-        page.getByRole("region", { name: "프로젝트 단계 관제" }),
+        page.getByRole("region", { name: "Project stage overview" }),
       ).toBeVisible();
-      await page.getByLabel("프로젝트 범위").selectOption(gamma.id);
-      await page.getByLabel("전역 기능 검색").fill("Gamma portal 기능");
+      await page.getByLabel("Project scope").selectOption(gamma.id);
+      await page
+        .getByLabel("Search workspace features")
+        .fill("Gamma portal 기능");
       await page.getByRole("button", { name: "Gamma portal 기능" }).click();
       await expect(
-        page.getByRole("complementary", { name: "선택한 작업" }),
+        page.getByRole("complementary", { name: "Selected work" }),
       ).toContainText("Gamma portal 기능");
       await mkdir("artifacts", { recursive: true });
       await page.screenshot({
@@ -157,38 +161,38 @@ test(
         fullPage: true,
       });
       await page
-        .getByRole("button", { name: /기존 설계·승인 상세 보기/ })
+        .getByRole("button", { name: /Open design and approvals/ })
         .click();
       await expect(
         page.getByRole("heading", { name: "Gamma portal 기능", exact: true }),
       ).toBeVisible();
-      await page.getByRole("tab", { name: "개발·검증", exact: true }).click();
-      await expect(
-        page.getByRole("tab", { name: "개발·검증", exact: true }),
-      ).toHaveAttribute("aria-selected", "true");
       await page
-        .getByRole("button", { name: "기능 목록으로", exact: true })
+        .getByRole("tab", { name: "Build & verify", exact: true })
         .click();
       await expect(
-        page.getByRole("heading", { name: "전역 관제", exact: true }),
+        page.getByRole("tab", { name: "Build & verify", exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
+      await page
+        .getByRole("button", { name: "Back to features", exact: true })
+        .click();
+      await expect(
+        page.getByRole("heading", { name: "Workspace overview", exact: true }),
       ).toBeVisible();
-      await expect(page.getByLabel("프로젝트 범위")).toHaveValue(gamma.id);
-      await expect(page.getByLabel("전역 기능 검색")).toHaveValue(
+      await expect(page.getByLabel("Project scope")).toHaveValue(gamma.id);
+      await expect(page.getByLabel("Search workspace features")).toHaveValue(
         "Gamma portal 기능",
       );
       await expect(
-        page.getByRole("complementary", { name: "선택한 작업" }),
+        page.getByRole("complementary", { name: "Selected work" }),
       ).toContainText("Gamma portal 기능");
 
       // Force foreground reads through the isolated proxy to fail. The last
       // accepted app snapshot must remain visible until a later real read wins.
       online = false;
       for (const socket of sockets) socket.destroy();
-      await expect(page.getByText("연결 확인 중", { exact: true })).toBeVisible(
-        {
-          timeout: 20000,
-        },
-      );
+      await expect(page.getByText("Connecting", { exact: true })).toBeVisible({
+        timeout: 20000,
+      });
       await expect(page.getByRole("status")).toContainText("오래된 화면");
       await expect(
         page.getByRole("heading", { name: "Gamma portal 기능", exact: true }),
@@ -198,7 +202,7 @@ test(
         fullPage: true,
       });
       online = true;
-      await expect(page.getByText("동기화됨", { exact: true })).toBeVisible({
+      await expect(page.getByText("Synced", { exact: true })).toBeVisible({
         timeout: 20000,
       });
       await expect(page.getByRole("status")).toHaveCount(0);
@@ -211,16 +215,16 @@ test(
       application = undefined;
       application = await launch();
       page = await application.firstWindow();
-      await expect(page.getByText("동기화됨", { exact: true })).toBeVisible();
+      await expect(page.getByText("Synced", { exact: true })).toBeVisible();
       await expect(
-        page.getByRole("heading", { name: "전역 관제", exact: true }),
+        page.getByRole("heading", { name: "Workspace overview", exact: true }),
       ).toBeVisible();
-      await expect(page.getByLabel("프로젝트 범위")).toHaveValue(gamma.id);
-      await expect(page.getByLabel("전역 기능 검색")).toHaveValue(
+      await expect(page.getByLabel("Project scope")).toHaveValue(gamma.id);
+      await expect(page.getByLabel("Search workspace features")).toHaveValue(
         "Gamma portal 기능",
       );
       await expect(
-        page.getByRole("complementary", { name: "선택한 작업" }),
+        page.getByRole("complementary", { name: "Selected work" }),
       ).toContainText("Gamma portal 기능");
       await page.screenshot({
         path: "artifacts/portfolio-native-restarted.png",

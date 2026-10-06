@@ -43,7 +43,7 @@ export function seed(): Workspace {
   ];
   const features: Feature[] = specs.map(
     ([id, projectId, title, goal, template], index) => {
-      const body = `## 요구사항\n${goal}\n\n수용 기준 AC-01: 정상 흐름에서 요청한 결과를 확인한다.\nAC-02: 실패하거나 중복 요청해도 기존 데이터를 훼손하지 않는다.\n\n## 구조\n화면의 상태 표시와 서비스의 처리 결과를 분리한다. 기존 서비스 계층에서 오류를 정규화하고 UI는 정규화된 상태를 표시한다.\n\n## API·데이터\n기존 응답 계약을 유지한다. 오류 응답에는 code와 message를 사용하고 개인 정보는 포함하지 않는다. 데이터 변경이 없는 기능은 기존 조회 경로를 재사용한다.\n\n## 예외 상황\n네트워크 단절·중복 클릭·권한 없는 요청을 검증한다. 재시도 가능한 오류만 재시도 버튼을 제공한다.\n\n## 변경 영향\n관련 화면과 서비스의 회귀 검사를 실행한다. 기존 사용자 동작은 유지하며 변경 범위를 이번 기능으로 제한한다.\n\n## 검증 계획\nAC-01은 서비스 테스트와 브라우저 정상 시나리오로 검증한다. AC-02는 중복 요청과 연결 실패 시나리오로 검증하고 실패 시 trace를 보관한다.\n\n## 적용·복구\n테스트 환경에서 확인한 뒤 기존 배포 절차를 따른다. 문제가 있으면 이전 배포 버전으로 복구한다. 데이터 마이그레이션은 없다.`;
+      const body = `## Requirements\n${goal}\n\n수용 기준 AC-01: 정상 흐름에서 요청한 결과를 확인한다.\nAC-02: 실패하거나 중복 요청해도 기존 데이터를 훼손하지 않는다.\n\n## 구조\n화면의 상태 표시와 서비스의 처리 결과를 분리한다. 기존 서비스 계층에서 오류를 정규화하고 UI는 정규화된 상태를 표시한다.\n\n## API·데이터\n기존 응답 계약을 유지한다. 오류 응답에는 code와 message를 사용하고 개인 정보는 포함하지 않는다. 데이터 변경이 없는 기능은 기존 조회 경로를 재사용한다.\n\n## 예외 상황\n네트워크 단절·중복 클릭·권한 없는 요청을 검증한다. 재시도 가능한 오류만 재시도 버튼을 제공한다.\n\n## 변경 영향\n관련 화면과 서비스의 회귀 검사를 실행한다. 기존 사용자 동작은 유지하며 변경 범위를 이번 기능으로 제한한다.\n\n## 검증 계획\nAC-01은 서비스 테스트와 브라우저 정상 시나리오로 검증한다. AC-02는 중복 요청과 연결 실패 시나리오로 검증하고 실패 시 trace를 보관한다.\n\n## 적용·복구\n테스트 환경에서 확인한 뒤 기존 배포 절차를 따른다. 문제가 있으면 이전 배포 버전으로 복구한다. 데이터 마이그레이션은 없다.`;
       return {
         id,
         projectId,
@@ -139,13 +139,13 @@ export function seed(): Workspace {
       {
         version: 1,
         global:
-          "승인된 요구사항과 설계를 기준으로 개발한다. 검증 근거가 없는 결과는 완료로 보고하지 않는다.",
+          "Work from approved requirements and designs. Never report completion without verification evidence.",
         design:
-          "요구사항·구조·API·예외·변경 영향·검증·복구를 명시한다. 필수 개발자 리뷰를 받은 후 구현한다.",
+          "Specify requirements, architecture, API and data contracts, failure cases, change impact, verification and rollback. Obtain required human design approval before implementation.",
         implementation:
-          "승인 범위에서 구현하고 테스트한다. 실패하면 원인을 분석해 수정한다. 중요한 설계 변경은 재승인을 요청한다.",
+          "Implement and test within the approved scope. Diagnose and fix failures. Request approval again for material design changes.",
         reviewer:
-          "구현자의 설명만으로 판단하지 않는다. 실제 설계·코드·검증 결과를 대조하고 재현 가능한 지적을 남긴다.",
+          "Compare the actual design, code and verification results. Do not rely only on the implementer's explanation. Report reproducible findings.",
         requiredChecks: ["typecheck", "test", "review"],
         at,
         authorId: "jun",

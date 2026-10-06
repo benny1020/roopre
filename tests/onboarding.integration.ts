@@ -45,21 +45,21 @@ test(
       application = await launch();
       let page = await application.firstWindow();
       await page
-        .getByRole("heading", { name: "AI 연결", exact: true })
+        .getByRole("heading", { name: "AI connections", exact: true })
         .waitFor();
       await page
-        .getByLabel("연결 이름", { exact: true })
+        .getByLabel("Connection name", { exact: true })
         .fill("첫 사용 검증 연결");
       await page
         .getByLabel("Endpoint", { exact: true })
         .fill("https://invalid.example");
       await page.getByLabel("API key", { exact: true }).fill(fixtureKey);
       await page
-        .getByRole("button", { name: "연결 저장", exact: true })
+        .getByRole("button", { name: "Save connection", exact: true })
         .click();
       await expect(
         page.getByText(
-          "연결을 저장했습니다. 실제 사용 전 연결 검사를 실행하세요.",
+          "Connection saved. Run a connection test before using it.",
         ),
       ).toBeVisible();
       await expect(page.getByLabel("API key", { exact: true })).toHaveValue("");
@@ -78,12 +78,12 @@ test(
         false,
         "native safeStorage never persists the fixture plaintext",
       );
-      await page.getByRole("button", { name: "다음", exact: true }).click();
+      await page.getByRole("button", { name: "Next", exact: true }).click();
       await page.waitForFunction(
         async () => !(await (globalThis as any).roopre.bootstrap()).busy,
       );
       await page
-        .getByRole("button", { name: "환경 준비", exact: true })
+        .getByRole("button", { name: "Environment setup", exact: true })
         .click();
       await page.waitForFunction(
         async () => {
@@ -94,11 +94,11 @@ test(
         { timeout: 120000 },
       );
       await mkdir("artifacts", { recursive: true });
-      await expect(page.getByText(/데이터베이스 연결됨/)).toBeVisible();
+      await expect(page.getByText(/Database connected/)).toBeVisible();
       await page.screenshot({ path: "artifacts/first-use-environment.png" });
-      await page.getByRole("button", { name: "다음", exact: true }).click();
+      await page.getByRole("button", { name: "Next", exact: true }).click();
       await page
-        .getByLabel("프로젝트 이름", { exact: true })
+        .getByLabel("Project name", { exact: true })
         .fill("첫 번째 예비 프로젝트");
       // The OS directory picker is the only UI fixture; built IPC, Git, DB and safeStorage are real.
       await application.evaluate(({ dialog }, repo) => {
@@ -108,10 +108,13 @@ test(
         })) as any;
       }, repo);
       await page
-        .getByRole("button", { name: "저장소 폴더 선택", exact: true })
+        .getByRole("button", { name: "Choose repository folder", exact: true })
         .click();
       await page
-        .getByRole("textbox", { name: "필수 검사 명령 (JSON)", exact: true })
+        .getByRole("textbox", {
+          name: "Required check commands (JSON)",
+          exact: true,
+        })
         .fill(
           JSON.stringify(
             ["typecheck", "test", "e2e"].map((name) => ({
@@ -126,71 +129,76 @@ test(
           ),
         );
       await page
-        .getByLabel("프로젝트 Markdown 지침", { exact: true })
+        .getByLabel("Project Markdown instructions", { exact: true })
         .fill("# 파일럿 규칙\n승인된 범위와 기존 검사를 유지한다.");
       await page
-        .getByRole("button", { name: "프로젝트 연결 저장", exact: true })
+        .getByRole("button", { name: "Save project connection", exact: true })
         .click();
       await expect(
-        page.getByText("프로젝트와 실행 기준을 저장했습니다."),
+        page.getByText("Project and execution settings saved."),
       ).toBeVisible();
       // Add another project through the actual onboarding form; the next step must target it.
       await page
-        .getByRole("combobox", { name: "저장된 프로젝트", exact: true })
+        .getByRole("combobox", { name: "Saved project", exact: true })
         .selectOption("");
       await page
-        .getByLabel("프로젝트 이름", { exact: true })
+        .getByLabel("Project name", { exact: true })
         .fill("첫 사용 파일럿");
       await page
-        .getByRole("button", { name: "저장소 폴더 선택", exact: true })
+        .getByRole("button", { name: "Choose repository folder", exact: true })
         .click();
       await page
-        .getByRole("button", { name: "프로젝트 연결 저장", exact: true })
+        .getByRole("button", { name: "Save project connection", exact: true })
         .click();
       await expect(
         page
-          .getByRole("combobox", { name: "저장된 프로젝트", exact: true })
+          .getByRole("combobox", { name: "Saved project", exact: true })
           .locator("option:checked"),
       ).toHaveText("첫 사용 파일럿");
-      await page.getByRole("button", { name: "다음", exact: true }).click();
+      await page.getByRole("button", { name: "Next", exact: true }).click();
       await page
-        .getByRole("button", { name: "기본 흐름 적용", exact: true })
+        .getByRole("button", { name: "Use default workflow", exact: true })
         .click();
-      await expect(page.getByText("기본 흐름을 적용했습니다.")).toBeVisible();
+      await expect(page.getByText("Default workflow applied.")).toBeVisible();
       await page
-        .getByRole("textbox", { name: "구현 단계 지침", exact: true })
+        .getByRole("textbox", {
+          name: "Implementation instructions",
+          exact: true,
+        })
         .fill("검사 기준을 유지하고 작은 변경으로 구현한다.");
       await page
-        .getByRole("button", { name: "개발 흐름 저장", exact: true })
+        .getByRole("button", { name: "Save workflow", exact: true })
         .click();
-      await expect(page.getByText("개발 흐름을 저장했습니다.")).toBeVisible();
-      await page.getByRole("button", { name: "다음", exact: true }).click();
+      await expect(page.getByText("Workflow saved.")).toBeVisible();
+      await page.getByRole("button", { name: "Next", exact: true }).click();
       await page
-        .getByLabel("기능 이름", { exact: true })
+        .getByLabel("Feature name", { exact: true })
         .fill("첫 사용자 동선 확인");
       await page
-        .getByLabel("요구사항과 완료 기준", { exact: true })
+        .getByLabel("Requirements and acceptance criteria", { exact: true })
         .fill(
           "AC01 프로젝트 설정과 역할을 재시작 후 복원한다.\nAC02 본인 승인 전 구현하지 않는다.",
         );
       await page
-        .getByRole("button", { name: "첫 요구사항 만들기", exact: true })
+        .getByRole("button", { name: "Create first requirement", exact: true })
         .click();
       await expect(
         page.getByRole("heading", { name: "첫 사용자 동선 확인", exact: true }),
       ).toBeVisible();
-      await page.getByRole("tab", { name: "개발·검증", exact: true }).click();
+      await page
+        .getByRole("tab", { name: "Build & verify", exact: true })
+        .click();
       await expect(
-        page.getByRole("button", { name: "개발 시작", exact: true }),
+        page.getByRole("button", { name: "Start implementation", exact: true }),
       ).toBeDisabled();
       await expect(
-        page.getByRole("region", { name: "실행 준비" }),
-      ).toContainText("연결 검사 전");
+        page.getByRole("region", { name: "Execution readiness" }),
+      ).toContainText("Not tested");
       await expect(
         page
           .getByRole("listitem")
-          .filter({ hasText: "프로젝트 AI 연결" })
-          .getByRole("img", { name: "확인 필요" }),
+          .filter({ hasText: "Project AI connection" })
+          .getByRole("img", { name: "Needs attention" }),
       ).toBeVisible();
       // Electron cannot create axe's temporary cross-origin page. This app has no frames.
       const audit = await new AxeBuilder({ page })

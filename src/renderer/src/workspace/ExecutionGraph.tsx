@@ -37,24 +37,24 @@ export default function ExecutionGraph({
           : !["requirements", "design"].includes(s);
       const list = items.filter((i) => i.stage === s);
       const mode = run.runtime?.harness
-        ? `${run.runtime.harness.execution?.[s] === "parallel" ? "병렬" : "순차"} · `
+        ? `${run.runtime.harness.execution?.[s] !== "sequential" ? "Parallel" : "Sequential"} · `
         : "";
       return [
         s,
         !relevant
-          ? "설계·승인 기록에서 확인"
+          ? "View in design and approval history"
           : list.length
-            ? `${mode}${list.filter((i) => i.state === "running").length} 실행 · ${list.filter((i) => i.state === "passed").length}/${list.length} 완료`
+            ? `${mode}${list.filter((i) => i.state === "running").length} running · ${list.filter((i) => i.state === "passed").length}/${list.length} complete`
             : s === "verification"
-              ? "시스템 고정 검사 포함"
-              : "에이전트 기록 없음",
+              ? "Includes fixed system checks"
+              : "No agent records",
       ];
     }),
   );
   return (
     <div className="execution-graph-layout">
       <WorkflowGraph
-        label="실행 흐름 그래프"
+        label="Execution workflow graph"
         items={items}
         selected={selected}
         onSelect={setSelected}
@@ -68,31 +68,34 @@ export default function ExecutionGraph({
               if (target) setSelected(target);
             }}
           >
-            현재 작업 선택
+            Select current activity
           </button>
         }
       />
-      <section className="graph-run-detail" aria-label="선택한 실행 근거">
+      <section
+        className="graph-run-detail"
+        aria-label="Selected execution evidence"
+      >
         <div className="graph-detail-heading">
           <span className="muted">
-            {stage ? stageNames[stage] : "실행"} · 시도{" "}
+            {stage ? stageNames[stage] : "Run"} · Attempt{" "}
             {run.runtime?.attempt ?? 1}
           </span>
           <h3>
-            {item?.name ?? (stage ? stageNames[stage] : "실행 기록")}
+            {item?.name ?? (stage ? stageNames[stage] : "Run history")}
             {item && ` · ${item.detail}`}
           </h3>
         </div>
         {!connected && (
           <p role="status" className="error-banner">
-            연결이 끊겼습니다. 마지막으로 받은 기록입니다.
+            Disconnected. Showing the last received records.
           </p>
         )}
         {execution ? (
           <>
             <p className="graph-agent-meta">
-              에이전트 v{execution.revision} ·{" "}
-              {execution.required ? "필수" : "선택"} · {execution.model}
+              Agent v{execution.revision} ·{" "}
+              {execution.required ? "Required" : "Optional"} · {execution.model}
             </p>
             {execution.error && (
               <p role="alert" className="error-banner">
@@ -101,27 +104,27 @@ export default function ExecutionGraph({
             )}
             {execution.output ? (
               <details open>
-                <summary>실행 결과</summary>
+                <summary>Results</summary>
                 <pre>{execution.output}</pre>
               </details>
             ) : (
               <p className="muted">
-                아직 결과가 기록되지 않았습니다. 실행 출력에서 현재 활동을
-                확인하세요.
+                No result recorded yet. Check execution output for current
+                activity.
               </p>
             )}
             <details>
-              <summary>실제로 적용한 지침</summary>
+              <summary>Applied instructions</summary>
               <MarkdownPreview text={execution.instructions} />
             </details>
             <details>
-              <summary>입력·출력 버전</summary>
+              <summary>Input & output versions</summary>
               <p className="evidence-binding">
-                입력 tree <code>{execution.inputTree}</code>
+                Input tree <code>{execution.inputTree}</code>
                 {execution.outputTree && (
                   <>
                     {" "}
-                    · 출력 tree <code>{execution.outputTree}</code>
+                    · Output tree <code>{execution.outputTree}</code>
                   </>
                 )}
               </p>
@@ -129,8 +132,9 @@ export default function ExecutionGraph({
           </>
         ) : item ? (
           <p className="muted">
-            이 시도에서 시작 기록이 없습니다. 앞 단계 완료와 병렬 실행 묶음을
-            기다립니다. 종료된 실행은 자동으로 이어지지 않습니다.
+            No start record for this attempt. Waiting for earlier stages and
+            available parallel capacity. Finished runs do not resume
+            automatically.
           </p>
         ) : (
           <>
@@ -147,32 +151,32 @@ export default function ExecutionGraph({
             {stage === "verification" ? (
               <>
                 <p className="muted">
-                  현재 시도의 고정 검사 {evidence.length}개 · 통과{" "}
-                  {evidence.filter((e) => e.status === "passed").length} · 실패{" "}
-                  {evidence.filter((e) => e.status === "failed").length}
+                  Fixed checks for this attempt {evidence.length} · Passed{" "}
+                  {evidence.filter((e) => e.status === "passed").length} ·
+                  Failed {evidence.filter((e) => e.status === "failed").length}
                 </p>
                 <button onClick={() => onNavigate("checks")}>
-                  검증 결과 보기
+                  View verification results
                 </button>
               </>
             ) : stage === "review" ? (
               <button onClick={() => onNavigate("review")}>
-                AI 리뷰 결과 보기
+                View AI review
               </button>
             ) : (
               <p className="muted">
                 {["requirements", "design"].includes(stage ?? "") &&
                 run.runtime?.kind !== "planning"
-                  ? "이 실행의 설계는 상단 설계·리뷰에서 확인하세요. 설계 승인은 실행 그래프에서 변경되지 않습니다."
-                  : "에이전트를 선택하면 실행 결과와 적용한 지침을 확인할 수 있습니다."}
+                  ? "Review this run's design in the Plan tab. Design approval cannot be changed from the execution graph."
+                  : "Select an agent to inspect its result and applied instructions."}
               </p>
             )}
           </>
         )}
         <footer className="graph-detail-footer">
           {run.runtime?.harness
-            ? `하네스 v${run.runtime.harness.workflowRevision}`
-            : "하네스 스냅샷 없음 · 기록만 표시"}
+            ? `Harness v${run.runtime.harness.workflowRevision}`
+            : "No harness snapshot · records only"}
         </footer>
       </section>
     </div>

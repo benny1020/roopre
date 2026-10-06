@@ -53,10 +53,10 @@ function createWindow() {
     if (details.reason === "clean-exit" || window.isDestroyed()) return;
     const { response } = await dialog.showMessageBox(window, {
       type: "error",
-      message: "앱 화면을 다시 열어야 합니다.",
+      message: "Reopen the workspace",
       detail:
-        "저장된 설계와 실행 기록은 유지됩니다. 화면만 다시 불러옵니다. 저장하지 않은 입력은 복구되지 않을 수 있습니다.",
-      buttons: ["화면 다시 열기", "닫기"],
+        "Saved designs and run history are preserved. Only the window reloads; unsaved input may be lost.",
+      buttons: ["Reopen workspace", "Close"],
       defaultId: 0,
       cancelId: 1,
     });
@@ -81,12 +81,12 @@ else
       } catch (error) {
         const { response } = await dialog.showMessageBox({
           type: "warning",
-          message: "루프리 실행 환경을 확인해 주세요",
+          message: "Check the Roopre environment",
           detail:
             error instanceof Error
               ? error.message
-              : "실행 환경을 시작하지 못했습니다.",
-          buttons: ["다시 연결", "설치 안내 열기", "종료"],
+              : "Could not start the execution environment.",
+          buttons: ["Reconnect", "Open setup guide", "Quit"],
           defaultId: 0,
           cancelId: 2,
         });
@@ -102,8 +102,8 @@ else
           );
           if (result)
             dialog.showErrorBox(
-              "설치 안내",
-              "설치 안내 폴더를 열지 못했습니다. 앱을 다시 설치하거나 저장소의 docs/DISTRIBUTION.md를 확인하세요.",
+              "Setup guide",
+              "Could not open the setup guide. Reinstall the app or read docs/DISTRIBUTION.md in the repository.",
             );
         }
       }

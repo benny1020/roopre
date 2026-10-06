@@ -216,7 +216,7 @@ test("interruptAll closes admission while a send is preparing", async (t) => {
   assert.equal(drained, false);
   release();
   await draining;
-  await assert.rejects(sending, /상담.*종료|중단|drain/i);
+  await assert.rejects(sending, /conversation.*closing|interrupted|drain/i);
   assert.equal(fetched, 0);
   assert.equal(
     Number(
@@ -493,7 +493,7 @@ test("prepared history is rejected when deletion or summary reset changes its th
   await deletedRace.entered;
   await service.deleteThread(first.thread.id);
   deletedRace.release();
-  await assert.rejects(staleAfterDelete, /상담 맥락이 변경/);
+  await assert.rejects(staleAfterDelete, /Consultation context changed/);
   assert.equal(fetches, 1);
 
   const second = await start();
@@ -511,7 +511,7 @@ test("prepared history is rejected when deletion or summary reset changes its th
   const thread = await service.getThread(second.thread.id);
   await service.resetSummary(second.thread.id, thread.revision);
   resetRace.release();
-  await assert.rejects(staleAfterReset, /상담 맥락이 변경/);
+  await assert.rejects(staleAfterReset, /Consultation context changed/);
   assert.equal((await service.getThread(second.thread.id)).summary, null);
   assert.equal(fetches, 2);
 });

@@ -68,15 +68,15 @@ function fixture() {
 }
 test("owner approval requires an app confirmation tied to the current immutable contract", () => {
   const { w, f, review } = fixture();
-  assert.throws(() => apply(w, "jun", review), /앱에서 승인/);
-  assert.throws(() => apply(w, "agent", review), /에이전트/);
+  assert.throws(() => apply(w, "jun", review), /confirm approval in the app/);
+  assert.throws(() => apply(w, "agent", review), /Agent/);
   assert.throws(
     () =>
       apply(w, "jun", review, {
         authentication: "app-confirmation",
         binding: "forged",
       }),
-    /앱에서 승인/,
+    /confirm approval in the app/,
   );
   apply(
     w,
@@ -154,7 +154,7 @@ test("owner configures bounded execution capacity and each run snapshots stage f
         expectedRevision: w.revision,
         capacity,
       }),
-    /에이전트는 사람의 승인·정책·실행 제어/,
+    /Agents cannot approve designs/,
   );
   apply(w, "jun", {
     type: "configure_execution_capacity",
@@ -197,7 +197,7 @@ test("profile mutation cannot reuse authenticated approval, or weaken required c
         projectId: f.projectId,
         profile: { ...profile, checks: [profile.checks[0]] },
       }),
-    /필수 검사/,
+    /required check/,
   );
   apply(w, "jun", {
     type: "configure_execution",
@@ -205,7 +205,10 @@ test("profile mutation cannot reuse authenticated approval, or weaken required c
     profile: { ...profile, budgetUsd: 3 },
   });
   assert.equal(gate(w, f).eligible, false);
-  assert.throws(() => apply(w, "jun", review, proof), /앱에서 승인/);
+  assert.throws(
+    () => apply(w, "jun", review, proof),
+    /confirm approval in the app/,
+  );
   assert.throws(
     () =>
       apply(w, "jun", {
@@ -213,7 +216,7 @@ test("profile mutation cannot reuse authenticated approval, or weaken required c
         featureId: f.id,
         designId: review.designId,
       }),
-    /승인 계약/,
+    /Approval contract/,
   );
 });
 test("project rule changes invalidate only that project; team rules invalidate all", () => {
@@ -252,7 +255,7 @@ test("local owner cannot remove its required approval or publish without AC evid
         reviewerIds: ["mina"],
         requiredChecks: ["typecheck", "test", "review"],
       }),
-    /본인/,
+    /own approval/,
   );
   f.draft.requirements = "그냥 잘 만든다";
   assert.throws(

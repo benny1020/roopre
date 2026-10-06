@@ -1,18 +1,16 @@
-<img src="resources/icon.png" width="96" height="96" alt="루프리 아이콘" />
+<img src="resources/icon.png" width="96" height="96" alt="Roopre icon" />
 
-# 루프리 · roopre
+# Roopre
 
-개발팀의 **요구사항 → 설계 → 개발자 승인 → 구현 → 리뷰·테스트** 흐름을 표준화하는 macOS 앱.
+An Agentic Development Environment for macOS. Define intent, approve a design, and supervise agents as they implement, verify and review the work.
 
-**v0.4는 한 명의 소유자가 사용하는 로컬 파일럿입니다.** 설계 보고를 읽고 앱에서 승인한 뒤, Claude Code가 격리된 Docker 작업 공간에서 구현하고 고정 검사와 별도 읽기 전용 리뷰를 수행합니다. 여러 프로젝트의 실행·diff·검사 근거를 앱에서 확인합니다. 실제 팀 계정과 서버 운영은 후속 M3 범위입니다.
+Roopre standardizes how developers work, while each developer owns their local projects and approvals. **The current beta is a local workspace, not a shared team server or SSO product.** New installations contain no sample projects, fictional teammates or fabricated results.
 
-[승인된 설계](docs/design/PRODUCT-DESIGN-v0.2.md) · [Quality Intelligence](docs/design/QUALITY-INTELLIGENCE.md) · [간단 승인 변경](docs/design/SIMPLE-CONFIRMATION.md) · [팀 개발 표준](docs/design/TEAM-STANDARD-ADDENDUM.md) · [구조](docs/ARCHITECTURE.md) · [사용·개발 안내](docs/DEVELOPMENT.md) · [검증과 남은 조건](docs/VERIFICATION.md) · [변경 이력](CHANGELOG.md) · [전담 PR 리뷰·머지 승인](docs/PR-REVIEW-PROCESS.md)
+[Design](docs/design/PRODUCT-DESIGN-v0.2.md) · [English workspace](docs/design/ENGLISH-WORKSPACE.md) · [Architecture](docs/ARCHITECTURE.md) · [Verification](docs/VERIFICATION.md) · [Distribution](docs/DISTRIBUTION.md) · [Changelog](CHANGELOG.md)
 
-## 시작하기
+## Start from source
 
-외부 배포 준비 상태·설치 파일 검증·남은 결정은 [배포 안내](docs/DISTRIBUTION.md)를 확인하세요. `0.4.0-beta.1`은 품질 보강 중인 베타 후보이며 아직 공개 배포 완료 버전이 아닙니다.
-
-준비: Apple Silicon macOS, Node.js 24, pnpm 11.0.4, Xcode Command Line Tools, 실행 중인 Docker Desktop.
+Requires Apple Silicon macOS, Node.js 24, pnpm 11.0.4, Xcode Command Line Tools, Git and Docker Desktop. For packaged installations, see the [setup and recovery guide](resources/setup/README.md).
 
 ```bash
 git clone https://github.com/benny1020/roopre.git
@@ -23,90 +21,56 @@ pnpm runner:image
 pnpm dev
 ```
 
-Electron 앱은 PostgreSQL에 직접 연결하며 소유자 워크스페이스를 사용합니다. `pnpm dev`가 함께 시작하는 `127.0.0.1:4318` API와 `4317` 브라우저 화면은 별도의 빈 개발 미리보기 워크스페이스입니다. 새 앱에는 샘플 프로젝트·가상 팀원·실행 결과가 포함되지 않습니다. 기존 DB 볼륨과 기록은 보존됩니다. DB 중지는 `pnpm db:stop`입니다.
+The Electron app connects directly to PostgreSQL. `pnpm dev` also starts a separate local development API on `127.0.0.1:4318` and browser preview on `4317`. The preview uses a separate workspace. Existing database volumes and history are preserved; stop the development database with `pnpm db:stop`.
 
-1. 앱의 **표준 · 연결 · 환경**에서 HTTPS endpoint, API key/Bearer token, 모델 ID를 등록하고 연결 검사합니다. Anthropic Messages 규격만 지원합니다. 연결 검사에는 소량의 과금이 발생할 수 있습니다.
-2. 프로젝트의 Git 폴더·기준 브랜치·고정 검사 명령·예산·시간 한도를 저장합니다.
-3. 기능의 `AC01` 형식 완료 기준과 7개 설계 항목을 작성하고 리뷰 요청합니다.
-4. 설계 보고를 검토하고 **승인** 또는 **수정 요청**을 선택합니다. 비밀번호/Touch ID는 필요하지 않습니다. **실행·결과 → 개발 시작**을 누릅니다.
-5. **에이전트**에서 단계별 복수 에이전트와 Markdown 지침을 설정합니다. **실행 현황**에서 진행 상태를, 기능에서 변경 diff·검사 로그·리뷰·테스트 산출물을 확인합니다. 병합과 배포는 기존 절차로 수행합니다.
+`0.4.0-beta.1` remains a beta candidate. Builds and fixture tests do not establish public release readiness, signing, notarization or successful execution against a real model provider.
 
-## 하네스 표준 공유
+## Development loop
 
-**하네스 표준 → 기본 표준/폴더·Git 가져오기 → Markdown 편집·변경 비교 → 프로젝트 적용 → 폴더로 내보내기** 흐름을 제공합니다. 회사 공통 기준, 프로젝트 프로필, 기능 디렉토리, 단계별 복수 에이전트를 버전으로 고정합니다. 팀 저장소에서 검토할 파일 구조와 검증 명령은 [Harness v1 스펙](docs/specs/HARNESS-V1.md)을 확인하세요. 실제 키·로컬 경로·설계 승인 이력은 공유하지 않습니다.
+1. **Connect.** Getting started prepares the environment and repository. In **Settings → Standards, connections & runtime**, register an HTTPS endpoint, model ID and API key or bearer token. Only Anthropic Messages-compatible connections are currently supported. Connection tests make a small paid model request.
+2. **Define intent.** Create a feature with measurable acceptance criteria such as `AC01`. Planning agents can inspect the repository and prepare requirements and a design without writing source code.
+3. **Review the plan.** Publish the design, read its review brief and select **Approve design** or **Request changes**. No macOS password or Touch ID is required. Existing Korean documents and English documents both work.
+4. **Build.** Select **Build & verify → Start implementation**. The approved design, instructions, environment and checks are pinned for the run.
+5. **Verify and review.** Inspect changed files, fixed-check exit codes, current-attempt evidence, independent review and artifacts. Retry preserves changes; earlier passes never substitute for current evidence.
+6. **Integrate.** Review the verified result and explicitly publish a branch or create a draft PR/MR. Follow your existing merge and deployment process.
 
-## 현재 기능과 경계
+**Home** prioritizes decisions, live agents and project progress. **Work** opens features in a list or stage board. **Agents** shows execution, and **Quality** compares recorded results, attempts, evidence and reported costs. Search commands, projects and features with `⌘K`.
 
-- 프로젝트·기능·설계 버전·의견, 팀·프로젝트·단계·역할·기능 지침 관리.
-- 설계·정책·실행 프로필에 묶인 본인 승인. 변경/철회 시 실행 차단.
-- macOS 암호화 API key 저장. 모델 호출 중 실제 key는 호스트 broker에만 보관.
-- 독립 체크아웃·Docker 격리. 기본 전역 3개 실행·프로젝트당 2개 실행·단계당 3개 에이전트 병렬이며, 소유자가 안전 범위에서 조절.
-- Claude Code 구현 → 고정 검사/E2E → 읽기 전용 AI 리뷰 → 제한된 수정 반복.
-- 중단·재시도·변경 복구, 시도별 검사와 산출물 해시, 최종 commit·diff 확인.
-- 결과율·첫 시도 완료·검사/리뷰 근거·보고 비용을 실제 실행 표본과 함께 확인하는 Quality Intelligence.
-- 라이트·다크·시스템 테마 및 설정 유지.
-- 에이전트별 읽기 전용 상담과 사용자 확인 작업 기억. 적용 범위·승인 영향·저장 경계는 [상담·기억 안내](docs/AGENT-CONVERSATIONS.md)를 따른다.
+## Agents and shared standards
 
-**지원 범위:** Node 단일 패키지 저장소의 lockfile 기반 준비입니다. 설치 스크립트·사설 레지스트리·외부 네트워크 의존 테스트·monorepo·서비스 DB 자동 준비는 아직 지원하지 않습니다. 기존 테스트/설정/의존성 파일은 보호하므로 이를 바꾸는 작업은 별도 검토가 필요합니다. 모델 응답·비용 보고와 gateway 호환성은 실제 연결로 확인해야 합니다. 임의 endpoint의 청구액을 앱이 절대 상한으로 보장하지 않습니다.
+In **Settings → Agents & workflow**, define global or project agents using Markdown, import/export roles and assign multiple agents to each stage. A role description can be refined with AI before you review and apply the suggestion. Stages run in parallel by default; choose sequential execution when one role needs another's result.
 
-자동 테스트 결과와 남은 수동 검증은 [검증 문서](docs/VERIFICATION.md)를 확인하세요. 현재 상태를 팀 실무 배포 완료로 간주하지 않습니다.
+In **Settings → Harness standards**, import a local folder or HTTPS Git repository, edit Markdown, compare changes, map local connections and apply a versioned standard. Export the folder to maintain company standards in a dedicated Git repository. Keys, local repository paths, user data and approval records are excluded. See the [Harness v1 specification](docs/specs/HARNESS-V1.md).
 
-## 저장소 구성
+Contextual agent consultations are read-only. Conversations preserve raw messages, bounded summaries and source references. Only explicitly confirmed work memories enter future approved execution inputs; changing them requires affected designs to be reviewed again. See [agent conversations and memory](docs/AGENT-CONVERSATIONS.md).
 
-[Orca의 공개 저장소](https://github.com/stablyai/orca)의 Electron 책임 분리와 개발 도구 배치를 참고했습니다. Roopre 고유의 팀 API·승인 규칙·DB 경계는 별도로 유지합니다.
+## Execution and security boundaries
 
-```text
-src/
-  main/                  Electron 창·승인 확인·비밀 저장·IPC
-  preload/               명시적인 IPC 메서드만 노출
-  renderer/
-    index.html
-    src/                 React 화면
-  shared/                명령·이벤트·공유 타입
-  runner/                Docker 실행·검증·broker·복구
-  server/                개발 미리보기 Fastify API·SSE
-  domain/                승인·정책·의존성 규칙
-  database/              PostgreSQL 저장·빈 초기 워크스페이스
-  types/                 renderer 전역 타입
-config/                  TS·브라우저 개발·DB 설정
-  scripts/               실행·패키징·문서 검사
-docs/                    설계·개발 안내·조사·검증
-tests/                   도메인·API 회귀 테스트
-.github/                 CI·macOS 빌드·PR/이슈 템플릿
-electron.vite.config.ts  main/preload/renderer 빌드
-```
+- Independent feature worktrees and Docker isolation. Defaults: 3 workspace runs, 2 per project and 3 parallel agents per stage, configurable in Settings. Same-project tasks can run concurrently.
+- API keys and Git tokens are encrypted locally. Model credentials remain in the host broker rather than agent containers.
+- Repository profiles support Node.js web projects and Java 21 / Gradle 8 / Spring Boot checks. Web changes can require configured e2e commands.
+- GitHub, GitHub Enterprise, GitLab, self-managed GitLab and generic Git support. Draft PR/MR handoff requires verified head/base evidence; it does not merge automatically.
+- Required implementation/review roles, fixed checks and design approval gates cannot be bypassed through project settings. Cancellation, retry and termination confirmation preserve evidence.
+- English product UI, dark/light/system appearance, keyboard commands, resizable panels, workflow graphs, diffs and execution logs. User-authored content is preserved in its original language.
 
-## 명령
+Docker and PostgreSQL must be available. App exit or Mac sleep can interrupt local work; inspect preserved state before retrying. There is no always-on cloud executor, shared team authentication or automatic update service in this beta.
 
-| 명령                | 용도                                                                     |
-| ------------------- | ------------------------------------------------------------------------ |
-| `pnpm dev`          | 로컬 API + Electron 개발 앱                                              |
-| `pnpm server`       | 로컬 API만 시작                                                          |
-| `pnpm dev:web`      | 같은 renderer를 브라우저에서 확인; API 별도 실행                         |
-| `pnpm check`        | 포맷·문서 링크·타입·빌드·실제 DB 테스트                                  |
-| `pnpm test`         | 도메인·API 테스트; 실행 중인 DB 필요                                     |
-| `pnpm build:mac`    | `release/<version>/`에 미공증 앱·ZIP·체크섬 생성                         |
-| `pnpm start`        | 빌드된 Electron 앱 실행; DB/Docker 별도 필요                             |
-| `pnpm runner:image` | Claude Code·Playwright 실행 이미지 준비                                  |
-| `pnpm test:runner`  | 실제 Docker + 가짜 Claude 계약 검사; DB/이미지 필요                      |
-| `pnpm test:web`     | 실제 renderer/DB + 테스트용 IPC 브라우저 시나리오                        |
-| `pnpm test:desktop` | 실제 Electron 시작 실패·재연결·종료, 응답은 fixture                      |
-| `pnpm verify:mac`   | 패키지 파일·보안 fuse·서명 무결성 검사                                   |
-| `pnpm release:mac`  | Developer ID·Keychain profile 필요. 서명·공증 후 ZIP 생성, 게시하지 않음 |
+## Development commands
 
-패키지는 개발용 미공증 빌드입니다. 앱에 DB 클라이언트·실행기를 포함하지만 PostgreSQL과 Docker는 별도로 실행해야 합니다. GitHub의 **macOS package** 워크플로우에서도 수동 빌드를 할 수 있으며 공개 GitHub Release를 자동 발행하지 않습니다.
+| Command                                  | Purpose                                                                                         |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `pnpm dev`                               | Local API and Electron development workspace                                                    |
+| `pnpm dev:desktop`                       | Electron development workspace only                                                             |
+| `pnpm server` / `pnpm dev:web`           | Local API / browser preview                                                                     |
+| `pnpm check`                             | Formatting, document integrity, types, build and tests; PostgreSQL required                     |
+| `pnpm test:web`                          | Renderer workflows, keyboard and accessibility checks                                           |
+| `pnpm test:desktop`                      | Native Electron startup, persistence and recovery fixtures                                      |
+| `pnpm test:conversation`                 | Native conversation integration fixtures                                                        |
+| `pnpm runner:image` / `pnpm test:runner` | Runner image / Docker integration with fixture agents                                           |
+| `pnpm check:mac`                         | Temporary macOS packaging and integrity check; no ZIP                                           |
+| `pnpm build:mac`                         | Development app, ZIP and checksums in `release/<version>/`                                      |
+| `pnpm start`                             | Launch the built Electron app                                                                   |
+| `pnpm verify:mac`                        | Package contents, fuses and signing integrity                                                   |
+| `pnpm release:mac`                       | Requires Developer ID and notarization profiles; creates but does not publish a release archive |
 
-## v0.3 시작 가이드와 커스텀 에이전트
-
-맥 앱은 DB 없이 시작 가이드를 열고 AI 연결 → 환경 준비 → 내 프로젝트 → 개발 기준 → 첫 요구사항으로 안내합니다. 전용 DB/이미지 준비와 기존 소유자 워크스페이스의 백업·검증 이전을 앱에서 수행합니다. 설치 상세는 [패키지 안내](resources/setup/README.md)를 따릅니다.
-
-에이전트를 전역 또는 프로젝트 범위로 만들고 Markdown 지침을 편집·가져오기·내보내기할 수 있습니다. 요구사항/설계/구현/검증/리뷰에 여러 역할을 배치하고, 실제 적용 지침·버전·tree·결과를 실행별로 보존합니다. 필수 구현자/리뷰어와 고정 테스트는 해제할 수 없습니다. 요구사항·설계는 읽기 전용 초안 생성이며 구현은 본인 설계 승인 이후입니다.
-
-## 개발 원칙
-
-1. 중요한 요구·설계를 먼저 문서화하고 개발자 승인을 받습니다.
-2. 승인된 범위 안의 구현 선택과 검증은 자율적으로 진행합니다.
-3. 개발자는 필수 검토·검사 기준을 우회하거나 테스트를 약화해 완료 처리하지 않습니다.
-4. 문서나 에이전트의 완료 선언과 실제 실행 근거를 구분합니다.
-
-[CONTRIBUTING](CONTRIBUTING.md)과 [AGENTS](AGENTS.md)에 구체적인 작업·검증 기준을 정리했습니다.
+Use an independent [PR reviewer](docs/PR-REVIEW-PROCESS.md), preserve test and approval gates, and distinguish agent claims from reproducible execution evidence. Contributor instructions are in [CONTRIBUTING](CONTRIBUTING.md) and [AGENTS](AGENTS.md).

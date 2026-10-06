@@ -176,9 +176,9 @@ export default function RunPanel({
     <div className="execution-workspace" ref={workspaceRef}>
       <div className="execution-toolbar">
         <label className="run-picker">
-          실행
+          Run
           <select
-            aria-label="실행 선택"
+            aria-label="Select run"
             value={run?.id || ""}
             onChange={(e) => {
               setSelected(e.target.value);
@@ -186,10 +186,10 @@ export default function RunPanel({
               onSelectRun?.(e.target.value || null);
             }}
           >
-            {!runs.length && <option value="">아직 실행 없음</option>}
+            {!runs.length && <option value="">No runs yet</option>}
             {runs.map((r, i) => (
               <option key={r.id} value={r.id}>
-                {i === 0 ? "최신 · " : ""}
+                {i === 0 ? "Latest ·" : ""}
                 {runNames[r.status]} · {r.id.slice(0, 8)}
               </option>
             ))}
@@ -197,18 +197,22 @@ export default function RunPanel({
         </label>
         {run && (
           <span className="run-attempt">
-            시도 {runtime?.attempt ?? 1}
-            {run.id !== current?.id && <strong> · 이전 실행</strong>}
+            Attempt {runtime?.attempt ?? 1}
+            {run.id !== current?.id && <strong> · Previous run</strong>}
           </span>
         )}
         <div className="button-row">
-          {run && <button onClick={() => onSetup("profile")}>실행 설정</button>}
+          {run && (
+            <button onClick={() => onSetup("profile")}>
+              Execution settings
+            </button>
+          )}
           <button
             className="secondary"
             title={
               !planningConfigured
-                ? "실행 프로필과 요구사항 또는 설계 에이전트를 먼저 설정하세요."
-                : "현재 저장된 초안을 기준으로 계획합니다."
+                ? "Configure an execution profile and planning agents first."
+                : "Planning uses the currently saved draft."
             }
             disabled={!connected || busy || working || !planningConfigured}
             onClick={() =>
@@ -222,7 +226,7 @@ export default function RunPanel({
             }
           >
             <Bot size={14} />
-            요구사항·설계 에이전트 실행
+            Run planning agents
           </button>
           <button
             className="primary"
@@ -244,7 +248,7 @@ export default function RunPanel({
             }
           >
             <Play size={13} />
-            개발 시작
+            Start implementation
           </button>
           {tab === "flow" &&
             current &&
@@ -261,7 +265,7 @@ export default function RunPanel({
                 }
               >
                 <Square size={12} />
-                최신 실행 취소
+                Cancel latest run
               </button>
             )}
           {tab === "flow" &&
@@ -276,22 +280,22 @@ export default function RunPanel({
                 }
                 title={
                   current.runtime?.terminationConfirmed !== true
-                    ? "이전 컨테이너 종료 확인 후 재시도할 수 있습니다."
-                    : "보존한 변경으로 새 실행을 준비합니다."
+                    ? "Retry after the previous container's termination is confirmed."
+                    : "Start a new run with preserved changes."
                 }
                 onClick={() =>
                   void act(() => window.roopre!.runAction(current.id, "retry"))
                 }
               >
                 <RefreshCw size={12} />
-                최신 변경 재시도
+                Retry latest changes
               </button>
             )}
           {tab !== "flow" && (
             <button
               className="icon-button"
-              aria-label="에이전트 패널"
-              title="에이전트 패널 표시"
+              aria-label="Agent inspector"
+              title="Show agent inspector"
               aria-pressed={inspector}
               onClick={() => setInspector(!inspector)}
             >
@@ -307,13 +311,15 @@ export default function RunPanel({
       )}
       {!gate.eligible && (
         <details className="execution-gate">
-          <summary>설계 승인 조건 · {gate.reasons.length}개 확인 필요</summary>
+          <summary>
+            Design approval gate · {gate.reasons.length} items to resolve
+          </summary>
           <ul>
             {gate.reasons.map((r) => (
               <li key={r}>{r}</li>
             ))}
           </ul>
-          <button onClick={onDesign}>설계 검토로 이동</button>
+          <button onClick={onDesign}>Open design review</button>
         </details>
       )}
       {!run ? (
@@ -329,24 +335,27 @@ export default function RunPanel({
             className={`execution-split ${inspector && tab !== "flow" ? "with-inspector" : ""}`}
             style={{ "--inspector-width": `${width}px` } as React.CSSProperties}
           >
-            <section className="execution-center" aria-label="실행 작업 공간">
+            <section
+              className="execution-center"
+              aria-label="Execution workspace"
+            >
               <Tabs
-                label="실행 결과"
+                label="Results"
                 value={tab}
                 onChange={setTab}
                 items={[
-                  { id: "flow", label: "흐름" },
-                  { id: "changes", label: <>변경</> },
+                  { id: "flow", label: "Workflow" },
+                  { id: "changes", label: <>Changes</> },
                   {
                     id: "checks",
                     label: (
                       <>
-                        검증 <span>{evidence.length}</span>
+                        Verification <span>{evidence.length}</span>
                       </>
                     ),
                   },
-                  { id: "review", label: "AI 리뷰" },
-                  { id: "artifacts", label: "산출물" },
+                  { id: "review", label: "AI review" },
+                  { id: "artifacts", label: "Artifacts" },
                 ]}
               />
               <div
@@ -365,8 +374,8 @@ export default function RunPanel({
                     <div className="surface-toolbar">
                       <span>
                         {diff?.runId === run.id
-                          ? `작업 공간 diff · ${diff.at} 조회`
-                          : "작업 공간의 변경 내용"}
+                          ? `Workspace diff · ${diff.at} Refresh`
+                          : "Workspace changes"}
                       </span>
                       <button
                         className="soft"
@@ -379,7 +388,7 @@ export default function RunPanel({
                           size={13}
                           className={diffLoading ? "spin" : ""}
                         />
-                        {diffLoading ? "불러오는 중…" : "변경 내용 보기"}
+                        {diffLoading ? "Loading…" : "Load changes"}
                       </button>
                     </div>
                     {diff?.runId === run.id ? (
@@ -388,13 +397,13 @@ export default function RunPanel({
                       <Empty
                         title={
                           runtime?.worktree
-                            ? "변경 내용을 확인하세요"
-                            : "아직 작업 공간이 없습니다"
+                            ? "Inspect changes"
+                            : "No workspace yet"
                         }
                       >
                         {runtime?.worktree
-                          ? "현재 작업 공간에서 diff를 가져옵니다. 실행 중인 변경은 검증한 commit과 다를 수 있습니다."
-                          : "격리된 작업 공간이 준비되면 변경 파일을 확인할 수 있습니다."}
+                          ? "Load the current workspace diff. In-flight changes may differ from the verified commit."
+                          : "Changed files appear after the isolated workspace is ready."}
                       </Empty>
                     )}
                   </>
@@ -402,21 +411,21 @@ export default function RunPanel({
                 {tab === "checks" && (
                   <div className="evidence-list">
                     <div className="surface-toolbar">
-                      <strong>SYSTEM · 고정 검사</strong>
+                      <strong>SYSTEM · Fixed checks</strong>
                       <span>
-                        현재 시도 {runtime?.attempt ?? 1} · 결과{" "}
-                        {evidence.length}개
+                        Current attempt {runtime?.attempt ?? 1} · Result{" "}
+                        {evidence.length}
                       </span>
                     </div>
                     {runtime?.head && (
                       <p className="evidence-binding">
-                        검증 commit <code>{runtime.head}</code>
+                        Verified commit <code>{runtime.head}</code>
                       </p>
                     )}
                     {!evidence.length && (
-                      <Empty title="아직 검증 근거가 없습니다">
-                        검사를 실행하면 종료 코드, 검사한 tree와 출력을 확인할
-                        수 있습니다. 대기는 통과가 아닙니다.
+                      <Empty title="No verification evidence yet">
+                        Checks record exit codes, the verified tree and output.
+                        Pending checks are not passes.
                       </Empty>
                     )}
                     {evidence.map((e, i) => (
@@ -428,17 +437,19 @@ export default function RunPanel({
                             <XCircle size={15} />
                           )}
                           <strong>{e.name}</strong>
-                          <span>{e.status === "passed" ? "통과" : "실패"}</span>
+                          <span>
+                            {e.status === "passed" ? "Passed" : "Failed"}
+                          </span>
                           <code>tree {e.tree.slice(0, 8)}</code>
                         </summary>
                         <div className="evidence-binding">
-                          종료 코드 {e.code} · {new Date(e.at).toLocaleString()}{" "}
-                          · 시도 {e.attempt}
+                          Exit code {e.code} · {new Date(e.at).toLocaleString()}{" "}
+                          · Attempt {e.attempt}
                           <br />
                           <code>{e.tree}</code>
                         </div>
                         <pre className="output-text">
-                          {e.log || "출력 없음"}
+                          {e.log || "No output"}
                         </pre>
                       </details>
                     ))}
@@ -446,23 +457,23 @@ export default function RunPanel({
                       <div className="check-command" key={check.name}>
                         <span>{check.name}</span>
                         <code>{check.argv.join(" ")}</code>
-                        <small>{check.timeoutSeconds}s 제한</small>
+                        <small>{check.timeoutSeconds}s timeout</small>
                       </div>
                     ))}
                     {!!history.length && (
                       <details className="history-evidence">
                         <summary>
-                          이전 시도 검사 {history.length}개 · 현재 시도의 통과
-                          근거가 아닙니다
+                          Previous-attempt checks {history.length} · Not
+                          evidence for this attempt
                         </summary>
                         {history.map((e, i) => (
                           <details key={i}>
                             <summary>
-                              시도 {e.attempt} · {e.name} · {e.status} · tree{" "}
+                              Attempt {e.attempt} · {e.name} · {e.status} · tree{" "}
                               {e.tree.slice(0, 8)}
                             </summary>
                             <pre className="output-text">
-                              {e.log || "출력 없음"}
+                              {e.log || "No output"}
                             </pre>
                           </details>
                         ))}
@@ -473,57 +484,60 @@ export default function RunPanel({
                 {tab === "review" && (
                   <div className="review-evidence">
                     <div className="surface-toolbar">
-                      <strong>AGENT · 독립 리뷰</strong>
-                      <span>최종 판단은 검증 근거와 함께</span>
+                      <strong>AGENT · Independent review</strong>
+                      <span>
+                        Assess the review alongside verification evidence
+                      </span>
                     </div>
                     {!reviewers.length && (
-                      <Empty title="현재 시도의 AI 리뷰가 아직 없습니다">
-                        구현과 검사가 끝나면 독립 리뷰의 결과와 근거를 확인할 수
-                        있습니다. 이전 시도의 통과 의견은 현재 시도의 검증
-                        근거가 아닙니다.
+                      <Empty title="No AI review for this attempt yet">
+                        Independent review follows implementation and checks.
+                        Earlier review results do not verify this attempt.
                       </Empty>
                     )}
                     {reviewers.map((a) => (
                       <details key={a.id} open>
                         <summary>
-                          {a.name} v{a.revision} · 시도 {a.attempt} ·{" "}
-                          {a.required ? "필수" : "선택"} ·{" "}
+                          {a.name} v{a.revision} · Attempt {a.attempt} ·{" "}
+                          {a.required ? "Required" : "Optional"} ·{" "}
                           {a.status === "passed"
-                            ? "통과"
+                            ? "Passed"
                             : a.status === "failed"
-                              ? "실패"
-                              : "진행 중"}
+                              ? "Failed"
+                              : "In progress"}
                         </summary>
                         <div className="evidence-binding">
-                          입력 tree <code>{a.inputTree}</code>
+                          Input tree <code>{a.inputTree}</code>
                           <br />
-                          출력 tree <code>{a.outputTree || "기록 대기"}</code>
+                          Output tree{" "}
+                          <code>{a.outputTree || "Awaiting record"}</code>
                         </div>
                         <ReviewEvidence
-                          value={a.output || a.error || "출력 대기"}
+                          value={a.output || a.error || "Awaiting output"}
                         />
                       </details>
                     ))}
                     {!!pastReviewers.length && (
                       <details className="review-history">
                         <summary>
-                          이전 시도 AI 리뷰 {pastReviewers.length}개 · 현재 검증
-                          근거가 아닙니다
+                          Previous-attempt AI reviews {pastReviewers.length} ·
+                          Not current verification evidence
                         </summary>
                         {pastReviewers.map((a) => (
                           <details key={a.id}>
                             <summary>
-                              시도 {a.attempt} · {a.name} v{a.revision} ·{" "}
-                              {a.required ? "필수" : "선택"} · {a.status}
+                              Attempt {a.attempt} · {a.name} v{a.revision} ·{" "}
+                              {a.required ? "Required" : "Optional"} ·{" "}
+                              {a.status}
                             </summary>
                             <div className="evidence-binding">
-                              입력 tree <code>{a.inputTree}</code>
+                              Input tree <code>{a.inputTree}</code>
                               <br />
-                              출력 tree{" "}
-                              <code>{a.outputTree || "기록 없음"}</code>
+                              Output tree{" "}
+                              <code>{a.outputTree || "No records"}</code>
                             </div>
                             <ReviewEvidence
-                              value={a.output || a.error || "출력 없음"}
+                              value={a.output || a.error || "No output"}
                             />
                           </details>
                         ))}
@@ -531,7 +545,9 @@ export default function RunPanel({
                     )}
                     {runtime?.review && (
                       <details className="review-original">
-                        <summary>전체 리뷰 원문 · 이전 시도 포함 가능</summary>
+                        <summary>
+                          Full review output · may include earlier attempts
+                        </summary>
                         <pre className="output-text">{runtime.review}</pre>
                       </details>
                     )}
@@ -540,13 +556,13 @@ export default function RunPanel({
                 {tab === "artifacts" && (
                   <div className="artifact-list">
                     <div className="surface-toolbar">
-                      <strong>실행 산출물</strong>
-                      <span>무결성 검증 후 Finder에서 열기</span>
+                      <strong>Run artifacts</strong>
+                      <span>Verify integrity and open in Finder</span>
                     </div>
                     {!runtime?.artifacts?.length ? (
-                      <Empty title="아직 저장된 산출물이 없습니다">
-                        실행기가 수집한 보고서, 테스트 결과와 증거 파일이 여기에
-                        표시됩니다.
+                      <Empty title="No saved artifacts yet">
+                        Reports, test results and evidence collected by the
+                        runner appear here.
                       </Empty>
                     ) : (
                       runtime.artifacts.map((file, i) => (
@@ -564,7 +580,7 @@ export default function RunPanel({
                           <span>
                             {file.path}
                             <small>
-                              {file.bytes.toLocaleString()} bytes · 시도{" "}
+                              {file.bytes.toLocaleString()} bytes · Attempt{" "}
                               {file.attempt}
                             </small>
                           </span>
@@ -583,53 +599,55 @@ export default function RunPanel({
                   onChange={setWidth}
                   min={240}
                   max={360}
-                  label="에이전트 패널 너비"
+                  label="Agent inspector width"
                 />
-                <aside className="agent-inspector" aria-label="에이전트 상태">
+                <aside className="agent-inspector" aria-label="Agent status">
                   <header>
                     <Bot size={15} />
-                    <strong>에이전트</strong>
+                    <strong>Agents</strong>
                     <span>{runtime?.agents?.length || 0}</span>
                   </header>
                   <div className="inspector-scroll">
                     <div className="actor-label">
                       {liveAgent
-                        ? `AGENT · ${attemptAgents.filter((a) => a.status === "running").length}개 실행 중`
-                        : "AGENT · 최근 활동"}
+                        ? `AGENT · ${attemptAgents.filter((a) => a.status === "running").length} running`
+                        : "AGENT · Latest activity"}
                     </div>
-                    <h3>{agent?.name || "현재 시도 · 에이전트 대기"}</h3>
+                    <h3>
+                      {agent?.name || "Current attempt · Waiting for agents"}
+                    </h3>
                     <p>
                       {run.reason ||
                         (agent
-                          ? `${stageNames[agent.stage]} · ${agent.status === "running" ? "실행 중" : agent.status === "passed" ? "완료" : "실패"}`
-                          : "실행기에서 작업을 시작하면 활동이 표시됩니다.")}
+                          ? `${stageNames[agent.stage]} · ${agent.status === "running" ? "Running" : agent.status === "passed" ? "Complete" : "Failed"}`
+                          : "Activity appears when the runner starts work.")}
                     </p>
                     {agent?.error && (
                       <p className="failure-text">{agent.error}</p>
                     )}
                     <dl>
-                      <dt>모델</dt>
-                      <dd>{agent?.model || "실행 후 표시"}</dd>
-                      <dt>최근 확인</dt>
+                      <dt>Model</dt>
+                      <dd>{agent?.model || "Available after execution"}</dd>
+                      <dt>Last seen</dt>
                       <dd>
                         {runtime?.heartbeat
                           ? new Date(runtime.heartbeat).toLocaleTimeString()
-                          : "대기"}
+                          : "Pending"}
                       </dd>
-                      <dt>추정 비용</dt>
+                      <dt>Estimated cost</dt>
                       <dd>
                         {runtime?.costReported
                           ? `$${runtime.costUsd.toFixed(4)}`
-                          : "미확인"}{" "}
+                          : "Unknown"}{" "}
                         / ${runtime?.profile.budgetUsd ?? "—"}
                       </dd>
                     </dl>
                     <small className="muted">
-                      CLI 추정값 · 확정 청구액 아님
+                      CLI estimate · not the final bill
                     </small>
                     {!!runtime?.agents?.length && (
                       <section>
-                        <h4>단계별 작업</h4>
+                        <h4>Stage activity</h4>
                         {runtime.agents.map((a) => (
                           <details className="agent-task" key={a.id}>
                             <summary>
@@ -638,42 +656,43 @@ export default function RunPanel({
                                 {a.name}
                                 <small>
                                   {stageNames[a.stage]} · v{a.revision} ·{" "}
-                                  {a.required ? "필수" : "선택"}
+                                  {a.required ? "Required" : "Optional"}
                                   {" · "}
                                   {a.status === "running"
-                                    ? "실행 중"
+                                    ? "Running"
                                     : a.status === "passed"
-                                      ? "완료"
-                                      : "실패"}
+                                      ? "Complete"
+                                      : "Failed"}
                                 </small>
                               </span>
                             </summary>
                             <p>
-                              {a.model} · 시도 {a.attempt}
+                              {a.model} · Attempt {a.attempt}
                             </p>
                             <p className="failure-text">{a.error}</p>
                             <details>
-                              <summary>작업 결과</summary>
+                              <summary>Agent result</summary>
                               <pre className="output-text">
-                                {a.output || "출력 대기"}
+                                {a.output || "Awaiting output"}
                               </pre>
                             </details>
                             <details>
-                              <summary>실제 적용한 지침</summary>
+                              <summary>Applied instructions</summary>
                               <code>{a.instructionHash}</code>
                               <pre className="output-text">
                                 {a.instructions}
                               </pre>
                             </details>
                             <p>
-                              입력 tree <code>{a.inputTree}</code>
+                              Input tree <code>{a.inputTree}</code>
                             </p>
                             <p>
-                              출력 tree <code>{a.outputTree || "대기"}</code>
+                              Output tree{" "}
+                              <code>{a.outputTree || "Pending"}</code>
                             </p>
                             {a.worktree && (
                               <p>
-                                작업 공간 <code>{a.worktree}</code>
+                                Workspace <code>{a.worktree}</code>
                               </p>
                             )}
                           </details>
@@ -681,27 +700,29 @@ export default function RunPanel({
                       </section>
                     )}
                     <section>
-                      <h4>SYSTEM · 실행 계약</h4>
+                      <h4>SYSTEM · Execution contract</h4>
                       <dl>
-                        <dt>설계</dt>
+                        <dt>Design</dt>
                         <dd>
-                          <code>{runtime?.binding.slice(0, 12) || "대기"}</code>
+                          <code>
+                            {runtime?.binding.slice(0, 12) || "Pending"}
+                          </code>
                         </dd>
-                        <dt>브랜치</dt>
-                        <dd>{runtime?.branch || "대기"}</dd>
-                        <dt>작업 공간</dt>
-                        <dd>{runtime?.worktree || "준비 전"}</dd>
+                        <dt>Branch</dt>
+                        <dd>{runtime?.branch || "Pending"}</dd>
+                        <dt>Workspace</dt>
+                        <dd>{runtime?.worktree || "Not prepared"}</dd>
                       </dl>
                       <details>
-                        <summary>실행 시점의 전체 지침</summary>
+                        <summary>Full instructions at execution</summary>
                         <pre className="output-text">
-                          {run.effectivePolicy || "기록 없음"}
+                          {run.effectivePolicy || "No records"}
                         </pre>
                       </details>
                     </section>
                     {current && (
                       <section className="run-actions">
-                        <h4>실행 제어 · 최신 작업</h4>
+                        <h4>Controls · Latest run</h4>
                         {["failed", "interrupted"].includes(current.status) &&
                           current.runtime?.kind !== "planning" && (
                             <button
@@ -712,8 +733,8 @@ export default function RunPanel({
                               }
                               title={
                                 current.runtime?.terminationConfirmed !== true
-                                  ? "이전 컨테이너 종료 확인 후 재시도할 수 있습니다."
-                                  : "보존한 변경으로 새 실행을 준비합니다."
+                                  ? "Retry after the previous container's termination is confirmed."
+                                  : "Start a new run with preserved changes."
                               }
                               onClick={() =>
                                 void act(() =>
@@ -722,7 +743,7 @@ export default function RunPanel({
                               }
                             >
                               <RefreshCw size={13} />
-                              변경을 이어서 재시도
+                              Retry with preserved changes
                             </button>
                           )}
                         {(![
@@ -740,7 +761,7 @@ export default function RunPanel({
                             }
                           >
                             <Square size={12} />
-                            실행 취소
+                            Cancel run
                           </button>
                         )}
                         {current.status === "ready_for_merge" &&
@@ -758,7 +779,7 @@ export default function RunPanel({
                                 )
                               }
                             >
-                              원격 branch 게시 · Draft PR/MR
+                              Publish branch · Create draft PR/MR
                             </button>
                           )}
                         <p>
@@ -768,12 +789,12 @@ export default function RunPanel({
                               target="_blank"
                               rel="noreferrer"
                             >
-                              Draft PR/MR 열기
+                              Open draft PR/MR
                             </a>
                           ) : current.status === "ready_for_merge" ? (
-                            "결과 검토 후 원격 전달을 선택하거나 기존 병합 절차를 따르세요. 자동 병합하지 않습니다."
+                            "Review the evidence, then publish or use your existing merge process. Merging is a separate action."
                           ) : (
-                            "재시도·취소는 최신 실행에 적용됩니다."
+                            "Retry and cancel apply to the latest run."
                           )}
                         </p>
                       </section>
@@ -790,7 +811,7 @@ export default function RunPanel({
               onChange={setHeight}
               min={120}
               max={outputLimit}
-              label="실행 출력 높이"
+              label="Execution output height"
             />
           )}
           <section
@@ -800,7 +821,7 @@ export default function RunPanel({
                 "--output-height": `${Math.min(height, outputLimit)}px`,
               } as React.CSSProperties
             }
-            aria-label="실행 출력"
+            aria-label="Execution output"
           >
             <header>
               <button
@@ -815,22 +836,22 @@ export default function RunPanel({
                 aria-expanded={output}
               >
                 <Terminal size={14} />
-                실행 출력{" "}
+                Execution output{" "}
                 {output ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
               </button>
               {output && (
                 <Tabs
-                  label="출력 종류"
+                  label="Output type"
                   value={outputTab}
                   onChange={setOutputTab}
                   items={[
-                    { id: "events", label: "진행 기록" },
-                    { id: "agent", label: "에이전트 결과" },
+                    { id: "events", label: "Activity log" },
+                    { id: "agent", label: "Agent results" },
                   ]}
                 />
               )}
               <span>
-                {run.id.slice(0, 8)} · 시도 {runtime?.attempt ?? 1}
+                {run.id.slice(0, 8)} · Attempt {runtime?.attempt ?? 1}
               </span>
             </header>
             {output &&
@@ -840,12 +861,12 @@ export default function RunPanel({
                 <div
                   className="output-scroll"
                   tabIndex={0}
-                  aria-label="에이전트 결과"
+                  aria-label="Agent results"
                 >
                   <pre className="output-text">
                     {agent?.output ||
                       agent?.error ||
-                      "완료된 결과가 아직 없습니다. 실시간 내부 추론은 표시하지 않습니다."}
+                      "No completed results yet. Private reasoning is not displayed."}
                   </pre>
                 </div>
               ))}

@@ -40,15 +40,25 @@ function StageNode({ data }: NodeProps) {
     >
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <strong>
-        {String(data.name)} {data.running ? <small>진행 중</small> : null}
+        <span className="stage-name" title={String(data.name)}>
+          {String(data.name)}
+        </span>
+        {data.running ? (
+          <i
+            className="stage-running"
+            role="img"
+            aria-label="Active stage"
+            title="Active stage"
+          />
+        ) : null}
       </strong>
       <span>{String(data.detail)}</span>
       {data.onAdd ? (
         <button
           className="stage-add nodrag nopan"
           type="button"
-          aria-label={`${String(data.name)}에 에이전트 추가`}
-          title={`${String(data.name)}에 에이전트 추가`}
+          aria-label={`Add agent to ${String(data.name)}`}
+          title={`Add agent to ${String(data.name)}`}
           disabled={Boolean(data.addDisabled)}
           onClick={(e) => {
             e.stopPropagation();
@@ -155,11 +165,11 @@ export default function WorkflowGraph({
             running: activeStage === stage,
             detail:
               stageDetails?.[stage] ??
-              `${modes?.[stage] === "sequential" ? "순차" : "병렬"} · ${list.length}개${running ? ` · 실행 ${running}` : ""}`,
+              `${modes?.[stage] === "sequential" ? "Sequential" : "Parallel"} · ${list.length}${running ? ` · Runs ${running}` : ""}`,
             height,
             selected: selected === stage,
           },
-          ariaLabel: `${stageNames[stage]} 단계`,
+          ariaLabel: `${stageNames[stage]} Stage`,
           style: { width: column - 12, height },
         },
         ...(!collapsed
@@ -225,8 +235,8 @@ export default function WorkflowGraph({
       <div className="graph-toolbar">
         <span>
           {editable
-            ? "에이전트를 끌어 단계 이동 · 선택해서 편집"
-            : "노드를 선택해 확인 · 실행 위치는 유지"}
+            ? "Drag agents between stages · Select to edit"
+            : "Select a node to inspect · Execution layout stays fixed"}
         </span>
         <div className="graph-toolbar-actions">
           {toolbarActions}
@@ -234,7 +244,7 @@ export default function WorkflowGraph({
             onClick={() => setCollapsed((v) => !v)}
             aria-expanded={!collapsed}
           >
-            {collapsed ? "에이전트 펼치기" : "에이전트 접기"}
+            {collapsed ? "Expand agents" : "Collapse agents"}
           </button>
         </div>
       </div>
@@ -273,13 +283,13 @@ export default function WorkflowGraph({
               );
             }}
             ariaLabelConfig={{
-              "controls.zoomIn.ariaLabel": "확대",
-              "controls.zoomOut.ariaLabel": "축소",
-              "controls.fitView.ariaLabel": "전체 흐름 보기",
+              "controls.zoomIn.ariaLabel": "Zoom in",
+              "controls.zoomOut.ariaLabel": "Zoom out",
+              "controls.fitView.ariaLabel": "Fit workflow",
               "node.a11yDescription.default":
-                "Enter로 선택하고 Tab으로 이동합니다.",
+                "Press Enter to select and Tab to navigate.",
               "node.a11yDescription.keyboardDisabled":
-                "Enter로 선택하고 Tab으로 이동합니다.",
+                "Press Enter to select and Tab to navigate.",
             }}
           >
             <Background gap={20} size={1} />
@@ -290,13 +300,13 @@ export default function WorkflowGraph({
       <div className="graph-legend">
         <span>
           <i className="legend-selected" />
-          선택
+          Optional
         </span>
         <span>
           <i className="legend-running" />
-          실행 중
+          Running
         </span>
-        <span>설계 승인 후 구현</span>
+        <span>Implementation follows design approval</span>
       </div>
     </section>
   );

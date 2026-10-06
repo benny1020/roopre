@@ -39,12 +39,12 @@ test("archived test evidence survives retries and rejects symlinks, traversal an
     );
     await assert.rejects(
       checkedArtifact(archive, "../outside.json", saved.hash),
-      /경로/,
+      /path/,
     );
     await writeFile(join(archive, saved.path), "tampered");
     await assert.rejects(
       checkedArtifact(archive, saved.path, saved.hash),
-      /변경/,
+      /changed|changes/,
     );
   } finally {
     await rm(root, { recursive: true, force: true });

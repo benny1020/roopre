@@ -111,7 +111,7 @@ test("command search ranks exact titles and matches words across project and fea
   const commands = [
     { title: "Setup", meta: "결제 프로젝트" },
     { title: "결제 재시도", meta: "Commerce" },
-    { title: "결제", meta: "기능" },
+    { title: "결제", meta: "Feature" },
   ];
   assert.equal(searchCommands(commands, "  결제  ")[0].title, "결제");
   assert.deepEqual(searchCommands(commands, "commerce   재시도"), [

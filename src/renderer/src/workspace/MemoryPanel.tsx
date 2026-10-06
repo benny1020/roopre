@@ -133,34 +133,36 @@ export default function MemoryPanel({
     setError("");
   };
   if (!agentId)
-    return <p className="muted">기억을 관리할 에이전트를 선택하세요.</p>;
+    return <p className="muted">Select an agent to manage its memory.</p>;
   return (
-    <section className="memory-panel" aria-label="작업 기억">
+    <section className="memory-panel" aria-label="Work memory">
       <p className="conversation-boundary">
-        기억은 다음 승인된 실행 입력에만 고정됩니다. 명령·승인·검증 근거가
-        아니며, 저장하면 이 프로젝트의 설계 승인을 다시 확인해야 합니다.
+        Memory is pinned as input to the next approved run. It is not a command,
+        approval or verification result. Saving memory requires project designs
+        to be reviewed again.
       </p>
       {activeRun && (
         <p className="conversation-warning">
-          대기·실행 중이거나 종료 확인 전인 작업이 있어 기억을 바꿀 수 없습니다.
+          Memory cannot change while a run is queued, active or awaiting
+          termination confirmation.
         </p>
       )}
       {memories.map((memory) => (
         <article className="memory-item" key={memory.id}>
           <strong>{memory.title}</strong>{" "}
           <small>
-            r{memory.revision} · {memory.active ? "사용 중" : "사용 중지"}
+            r{memory.revision} · {memory.active ? "Active" : "Deactivate"}
           </small>
           <p>{memory.body}</p>
           <small>
-            출처: {memory.sourceRefs.map(canonicalSourceRef).join(", ")}
+            Source: {memory.sourceRefs.map(canonicalSourceRef).join(", ")}
           </small>
           <button
             className="soft"
             disabled={activeRun}
             onClick={() => edit(memory)}
           >
-            <Pencil size={13} /> 수정
+            <Pencil size={13} /> Edit
           </button>
           {memory.active && (
             <button
@@ -168,45 +170,45 @@ export default function MemoryPanel({
               disabled={activeRun}
               onClick={() => void deactivate(memory)}
             >
-              <Pause size={13} /> 사용 중지
+              <Pause size={13} /> Deactivate
             </button>
           )}
         </article>
       ))}
       <div className="memory-form">
         <label>
-          적용 범위
+          Scope
           <select
-            aria-label="기억 적용 범위"
+            aria-label="Memory scope"
             disabled={!!editing || !featureId}
             value={projectWide ? "project" : "feature"}
             onChange={(event) =>
               setProjectWide(event.target.value === "project")
             }
           >
-            <option value="feature">이 기능</option>
-            <option value="project">프로젝트 전체</option>
+            <option value="feature">This feature</option>
+            <option value="project">Entire project</option>
           </select>
         </label>
         {projectWide && featureId && (
           <p className="conversation-warning">
-            이 기능의 대화 출처를 프로젝트 전체 기억으로 승격합니다. 이
-            프로젝트의 모든 설계 승인을 다시 확인해야 합니다.
+            Promote this feature's conversation context to project-wide memory.
+            All project designs will require review again.
           </p>
         )}
         <label>
-          제목
+          Title
           <input
-            aria-label="기억 제목"
+            aria-label="Memory title"
             value={title}
             maxLength={240}
             onChange={(event) => setTitle(event.target.value)}
           />
         </label>
         <label>
-          내용
+          Content
           <textarea
-            aria-label="기억 내용"
+            aria-label="Memory content"
             value={body}
             maxLength={2000}
             onChange={(event) => setBody(event.target.value)}
@@ -214,17 +216,17 @@ export default function MemoryPanel({
         </label>
         {sourceRef ? (
           <p className="memory-source">
-            출처: {canonicalSourceRef(sourceRef)}{" "}
-            {editing && "(기존 출처 고정)"}
+            Source: {canonicalSourceRef(sourceRef)}{" "}
+            {editing && "(original source retained)"}
           </p>
         ) : (
           <label>
-            사용자 확인 출처
+            User-confirmed source
             <input
-              aria-label="사용자 확인 출처"
+              aria-label="User-confirmed source"
               value={manualSource}
               maxLength={240}
-              placeholder="예: 9월 28일 사용자 결정"
+              placeholder="e.g. User decision on September 28"
               onChange={(event) => setManualSource(event.target.value)}
             />
           </label>
@@ -235,7 +237,8 @@ export default function MemoryPanel({
             checked={confirmed}
             onChange={(event) => setConfirmed(event.target.checked)}
           />{" "}
-          이 내용과 범위를 확인했고, 프로젝트 승인 재확인 영향을 이해합니다.
+          I confirm this content and scope and understand that project approvals
+          need review again.
         </label>
         {error && (
           <p className="conversation-error" role="alert">
@@ -252,7 +255,7 @@ export default function MemoryPanel({
           }
           onClick={() => void save()}
         >
-          <Save size={14} /> {editing ? "수정 저장" : "기억으로 저장"}
+          <Save size={14} /> {editing ? "Save changes" : "Save as memory"}
         </button>
       </div>
     </section>

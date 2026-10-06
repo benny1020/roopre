@@ -10,11 +10,11 @@ import {
 } from "./stage-execution.ts";
 export { stages } from "./harness-stages.ts";
 export const stageNames: Record<(typeof stages)[number], string> = {
-  requirements: "요구사항",
-  design: "설계",
-  implementation: "구현",
-  verification: "검증",
-  review: "리뷰",
+  requirements: "Requirements",
+  design: "Design",
+  implementation: "Implementation",
+  verification: "Verification",
+  review: "Review",
 };
 export const agentSchema = z.object({
   id: z.string().uuid(),
@@ -74,16 +74,16 @@ export function agentInstructionContext(
   scopeId?: string,
 ) {
   const policy = w.policies.at(-1);
-  const base = `${packageInstructions(p.harness, scopeId)}\n\n# 전역 v${policy?.version ?? 0}\n${policy?.global ?? ""}\n\n# 프로젝트 ${p.name}\n${p.instructions ?? ""}`;
+  const base = `${packageInstructions(p.harness, scopeId)}\n\n# Global v${policy?.version ?? 0}\n${policy?.global ?? ""}\n\n# Project ${p.name}\n${p.instructions ?? ""}`;
   if (!assignment)
-    return `${base}\n\n# 에이전트 ${agent.name} v${agent.revision}\n${agent.markdown}`;
+    return `${base}\n\n# Agent ${agent.name} v${agent.revision}\n${agent.markdown}`;
   const rolePolicy =
     assignment.stage === "design" || assignment.stage === "requirements"
       ? policy?.design
       : assignment.stage === "implementation"
         ? policy?.implementation
         : policy?.reviewer;
-  return `${base}\n\n# 단계 ${stageNames[assignment.stage]}\n${rolePolicy ?? ""}\n${p.workflow?.instructions[assignment.stage] ?? ""}\n\n# 에이전트 ${agent.name} v${agent.revision}\n${agent.markdown}`;
+  return `${base}\n\n# Stage ${stageNames[assignment.stage]}\n${rolePolicy ?? ""}\n${p.workflow?.instructions[assignment.stage] ?? ""}\n\n# Agent ${agent.name} v${agent.revision}\n${agent.markdown}`;
 }
 export type AgentExecution = {
   id: string;
@@ -125,20 +125,20 @@ export function workflowIssues(
   if (
     new Set(flow.assignments.map((a) => a.id)).size !== flow.assignments.length
   )
-    problems.push("배치 ID가 중복됐습니다.");
+    problems.push("Duplicate assignment IDs.");
   for (const stage of ["implementation", "review"])
     if (!flow.assignments.some((a) => a.stage === stage && a.required))
       problems.push(
-        "필수 구현 에이전트와 필수 리뷰 에이전트가 각각 필요합니다.",
+        "A required implementation agent and a required review agent are both needed.",
       );
   for (const a of flow.assignments) {
     const d = definitions.find((d) => d.id === a.agentId);
     if (!d || d.archived || (d.projectId && d.projectId !== p.id)) {
-      problems.push("사용할 수 없는 에이전트가 배치됐습니다.");
+      problems.push("An assigned agent is unavailable.");
       continue;
     }
     if ((a.stage === "implementation") !== (d.capability === "implementation"))
-      problems.push(`${d.name}: 단계와 코드 수정 권한이 맞지 않습니다.`);
+      problems.push(`${d.name}: stage does not match write permissions.`);
   }
   return [...new Set(problems)];
 }
@@ -210,25 +210,25 @@ export function importAgentMarkdown(text: string): {
   capability?: AgentDefinition["capability"];
   markdown: string;
 } {
-  if (text.length > 24000) throw Error("Markdown 파일이 너무 큽니다.");
+  if (text.length > 24000) throw Error("Markdown file is too large.");
   const normalized = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
   if (!normalized.startsWith("---\n"))
     return { markdown: z.string().trim().min(1).max(20000).parse(normalized) };
   const end = normalized.indexOf("\n---\n", 4);
-  if (end < 0) throw Error("frontmatter 종료 구분자가 없습니다.");
+  if (end < 0) throw Error("Missing frontmatter closing delimiter.");
   const fields: Record<string, string> = {};
   for (const line of normalized.slice(4, end).split("\n")) {
     const match = /^(schema|name|description|capability): (.*)$/.exec(line);
     if (!match || fields[match[1]] !== undefined)
-      throw Error("지원하지 않는 frontmatter 또는 중복 키입니다.");
+      throw Error("Unsupported frontmatter or duplicate key.");
     const raw = match[2];
     const value = raw.startsWith('"') ? JSON.parse(raw) : raw;
     if (typeof value !== "string")
-      throw Error("frontmatter 값은 문자열이어야 합니다.");
+      throw Error("Frontmatter values must be strings.");
     fields[match[1]] = value;
   }
   if (fields.schema !== "roopre-agent/v1")
-    throw Error("지원하는 형식은 roopre-agent/v1입니다.");
+    throw Error("Supported format is roopre-agent/v1.");
   return {
     name: fields.name,
     description: fields.description,

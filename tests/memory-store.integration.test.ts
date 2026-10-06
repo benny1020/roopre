@@ -201,7 +201,7 @@ test("Store validates memory sources and persists mutation guards", async () => 
           active: true,
         },
       }),
-      /대화 출처/,
+      /Conversation source/,
     );
     await assert.rejects(
       memory("no-promote", "bad", [
@@ -211,7 +211,7 @@ test("Store validates memory sources and persists mutation guards", async () => 
           turnId: pending.turn.id,
         },
       ]),
-      /대화 출처/,
+      /Conversation source/,
     );
     await memory(
       "promoted",
@@ -315,7 +315,7 @@ test("Store validates memory sources and persists mutation guards", async () => 
     );
     await assert.rejects(
       memory("run-no-promote", "bad", [{ type: "run", runId: "run-source" }]),
-      /실행 출처/,
+      /Run source/,
     );
     await memory(
       "run-promoted",
@@ -332,7 +332,7 @@ test("Store validates memory sources and persists mutation guards", async () => 
         [{ type: "run", runId: "run-source" }],
         otherFeatureId,
       ),
-      /실행 출처/,
+      /Run source/,
     );
     const beforeOther = (await store.read("owner")).features.find(
       (f) => f.id === "other-approved",
@@ -346,7 +346,7 @@ test("Store validates memory sources and persists mutation guards", async () => 
         undefined,
         1,
       ),
-      /최신/,
+      /latest/,
     );
     await memory(
       first.id,
@@ -385,7 +385,7 @@ test("Store validates memory sources and persists mutation guards", async () => 
       ]);
     await assert.rejects(
       memory("over-limit", "x", [{ type: "manual", label: "over" }]),
-      /20개/,
+      /20 active/,
     );
     await store.mutate((w) => {
       w.runs.push({
@@ -402,7 +402,7 @@ test("Store validates memory sources and persists mutation guards", async () => 
     });
     await assert.rejects(
       memory("active-guard", "x", [{ type: "manual", label: "active" }]),
-      /먼저 종료/,
+      /End.*first/,
     );
   } finally {
     await store.pool.query(
@@ -555,7 +555,7 @@ test("Store.deleteConversation atomically deactivates selected derived memory", 
     const before = await store.read("owner");
     await assert.rejects(
       store.deleteConversation(pending.thread.id, ["derived"]),
-      /먼저 종료/,
+      /End.*first/,
     );
     assert.deepEqual(await store.read("owner"), before);
     await store.mutate((state) => {

@@ -27,11 +27,11 @@ function apiError(status: number) {
   return (
     (
       {
-        401: "Git host 인증에 실패했습니다.",
-        403: "Git host 권한이 부족합니다.",
-        404: "저장소 또는 API endpoint를 찾지 못했습니다.",
+        401: "Git host authentication failed.",
+        403: "Insufficient Git host permissions.",
+        404: "Repository or API endpoint not found.",
       } as Record<number, string>
-    )[status] ?? `Git host 요청 실패 (HTTP ${status})`
+    )[status] ?? `Git host request failed (HTTP ${status})`
   );
 }
 function slug(remote: GitRemote) {
@@ -74,7 +74,9 @@ export class GitHostAdapter {
   }
   async getRepository(remote: GitRemote) {
     if (remote.host !== this.info.host)
-      throw Error("선택한 Git host 연결과 remote host가 다릅니다.");
+      throw Error(
+        "Selected Git host connection does not match the remote host.",
+      );
     const path =
       this.info.kind === "github"
         ? `/repos/${slug(remote)}`

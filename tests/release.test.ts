@@ -57,7 +57,7 @@ test(
       execFileSync("mkfifo", [join(results, "trap.json")]);
       await assert.rejects(
         readWorkspaceFile(root, "test-results/trap.json", 100),
-        /一般|일반/,
+        /regular file/,
       );
       const files = await collectArtifacts(root, 1);
       assert.deepEqual(
@@ -66,14 +66,14 @@ test(
       );
       await assert.rejects(
         readWorkspaceFile(root, "test-results/valid.json", 1),
-        /크기/,
+        /size/,
       );
       await symlink(results, join(root, "linked"));
       await assert.rejects(
         readWorkspaceFile(root, "linked/valid.json", 100),
-        /경로/,
+        /path/,
       );
-      await assert.rejects(readWorkspaceFile(root, "../outside", 100), /경로/);
+      await assert.rejects(readWorkspaceFile(root, "../outside", 100), /path/);
       const controller = new AbortController();
       controller.abort();
       await assert.rejects(
@@ -101,7 +101,7 @@ test("corrupt connection records are rejected without replacing the original fil
       encrypt: Buffer.from,
       decrypt: (b) => b.toString(),
     });
-    await assert.rejects(vault.init(), /원본 파일/);
+    await assert.rejects(vault.init(), /original file/);
     assert.equal(await readFile(path, "utf8"), original);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -142,7 +142,7 @@ test("truncated Git output cannot silently omit files from review or protected c
     await git(root, "commit", "-m", "fixture");
     const tracked = (await git(root, "ls-files", "-z")).split("\0");
     for (const name of names) assert(tracked.includes(name));
-    await assert.rejects(git(root, "show", "HEAD:large.txt"), /검토 한도/);
+    await assert.rejects(git(root, "show", "HEAD:large.txt"), /review limit/);
     const output = await command(process.execPath, [
       "-e",
       "process.stdout.write('x'.repeat(210000))",

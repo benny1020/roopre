@@ -35,15 +35,15 @@ export function executionGraph(
     detail:
       a.status === "running"
         ? !connected
-          ? "연결 끊김 · 마지막 기록 실행 중"
+          ? "Disconnected · last known state running"
           : executing
-            ? "실행 중"
+            ? "Running"
             : runtime.terminationConfirmed
-              ? "종료됨 · 결과 미확인"
-              : "종료 확인 중"
+              ? "Finished · result unconfirmed"
+              : "Confirming termination"
         : a.status === "passed"
-          ? "완료 기록"
-          : "실패 기록",
+          ? "Completion record"
+          : "Failed run",
   }));
   const pending = (runtime.harness?.agents ?? []).filter(
     (a) =>
@@ -60,8 +60,8 @@ export function executionGraph(
       name: a.agent.name,
       state: "idle" as const,
       detail: executing
-        ? "시작 대기 · 단계/묶음 순서"
-        : "이 시도에서 실행 기록 없음",
+        ? "Waiting for stage or parallel batch"
+        : "No execution record for this attempt",
     })),
   ];
 }

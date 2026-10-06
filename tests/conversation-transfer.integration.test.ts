@@ -141,7 +141,7 @@ test("conversation transfer round-trips turns, summaries and tombstones without 
     const targetState = await target.read("owner");
     await assert.rejects(
       transferWorkspace(source, target, join(root, "second-backup")),
-      /기존 대화|기존 이벤트|기존 작업/,
+      /contains conversations|contains events|contains work/,
     );
     assert.deepEqual(
       await target.read("owner"),
@@ -195,7 +195,7 @@ test("transfer rejects a tombstone-only target without changing it", async () =>
         target,
         join(tmpdir(), `transfer-backup-${randomUUID()}`),
       ),
-      /기존 대화/,
+      /contains conversation deletion records/,
     );
     assert.deepEqual(
       (

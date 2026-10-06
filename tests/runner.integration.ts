@@ -403,7 +403,7 @@ test(
         (r) => r.id === runId,
       )!;
       assert.equal(timedOut.status, "failed");
-      assert.match(timedOut.reason, /시간 한도/);
+      assert.match(timedOut.reason, /Time limit/);
       assert.equal(timedOut.runtime!.terminationConfirmed, true);
       assert.deepEqual(
         timedOut.runtime!.evidence.map((e) => e.name),
@@ -724,7 +724,7 @@ test(
         (r) => r.id === runId,
       )!;
       assert.equal(scoped.status, "failed");
-      assert.match(scoped.reason, /디렉토리 밖/);
+      assert.match(scoped.reason, /outside the approved feature directory/);
       assert.equal(scoped.runtime!.head, undefined);
       assert.equal(scoped.runtime!.evidence.length, 0);
     } finally {
@@ -803,7 +803,7 @@ test(
       for (let i = 0; i < 500 && bootstrap.status().busy; i++)
         await new Promise((r) => setTimeout(r, 100));
       assert.equal(bootstrap.status().error, "");
-      assert(database);
+      assert(database, JSON.stringify(bootstrap.status()));
       assert.equal(bootstrap.status().busy, false);
       const saved = JSON.parse(
         await readFile(join(root, "onboarding.json"), "utf8"),

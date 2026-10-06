@@ -146,7 +146,7 @@ await import(${JSON.stringify(pathToFileURL(resolve("out/main/index.js")).href)}
       application = await launch();
       let page = await application.firstWindow();
       await page
-        .getByRole("button", { name: "나중에 · 앱 열기", exact: true })
+        .getByRole("button", { name: "Skip for now · Open app", exact: true })
         .click();
       await page.evaluate(async (featureId) => {
         const api = (globalThis as any).roopre;
@@ -356,20 +356,26 @@ await import(${JSON.stringify(pathToFileURL(resolve("out/main/index.js")).href)}
       assert.equal(completed.status, "completed", completed.error);
       assert.equal(completed.answer, "fixture consultation answer");
       assert.deepEqual(completed.usage, { inputTokens: 7, outputTokens: 5 });
-      await page.getByRole("button", { name: /명령 · 작업 검색/ }).click();
+      await page
+        .getByRole("button", { name: /Search commands and work/ })
+        .click();
       const commandSearch = page.getByRole("combobox", {
-        name: "명령과 작업 검색",
+        name: "Search commands and work",
       });
-      await commandSearch.fill("전역 관제");
+      await commandSearch.fill("Workspace overview");
       await commandSearch.press("Enter");
       await page
         .getByRole("button", { name: /Fixture feature/ })
         .first()
         .click();
-      await page.getByRole("tab", { name: "대화", exact: true }).click();
-      await page.getByLabel("상담 메시지").fill("Rendered compose request");
       await page
-        .getByRole("button", { name: "질문 보내기", exact: true })
+        .getByRole("tab", { name: "Conversation", exact: true })
+        .click();
+      await page
+        .getByLabel("Consultation message")
+        .fill("Rendered compose request");
+      await page
+        .getByRole("button", { name: "Send question", exact: true })
         .click();
       await expect(
         page.getByText("fixture consultation answer", { exact: true }),

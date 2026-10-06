@@ -118,7 +118,7 @@ export default function PackageSettings({
         }
       setDraft(JSON.stringify(next, null, 2));
     } catch {
-      setError("정의 JSON을 먼저 수정·검증하세요.");
+      setError("Edit and validate the definition JSON first.");
     }
   };
   let editedFiles: Record<string, string> = files;
@@ -131,13 +131,13 @@ export default function PackageSettings({
     <div className="content-page package-settings">
       <div className="page-heading">
         <div>
-          <h1>하네스 표준</h1>
-          <p>팀의 개발 기준을 파일로 관리하고 프로젝트에 적용합니다.</p>
+          <h1>Harness standards</h1>
+          <p>Manage team standards as files and apply them to projects.</p>
         </div>
         <span className="version-badge">roopre.harness/v1</span>
       </div>
       {!api?.harnessCandidate ? (
-        <p>폴더·Git 가져오기와 적용은 macOS 앱에서 사용할 수 있습니다.</p>
+        <p>Folder and Git imports are available in the macOS app.</p>
       ) : (
         <>
           {error && (
@@ -152,9 +152,9 @@ export default function PackageSettings({
           )}
           <section className="package-toolbar">
             <label className="field">
-              대상 프로젝트
+              Target project
               <select
-                aria-label="표준 대상 프로젝트"
+                aria-label="Standards project"
                 value={projectId}
                 onChange={(e) => {
                   setProjectId(e.target.value);
@@ -162,7 +162,7 @@ export default function PackageSettings({
                   setBaseline(snapshot.revision);
                 }}
               >
-                <option value="">선택하세요</option>
+                <option value="">Select</option>
                 {snapshot.projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -179,7 +179,7 @@ export default function PackageSettings({
                   )
                 }
               >
-                폴더 가져오기
+                Import folder
               </button>
               <button
                 disabled={busy}
@@ -189,7 +189,7 @@ export default function PackageSettings({
                   )
                 }
               >
-                기본 표준으로 시작
+                Start from defaults
               </button>
               <button
                 disabled={busy || !project?.workflow}
@@ -204,29 +204,30 @@ export default function PackageSettings({
                   )
                 }
               >
-                현재 설정 불러오기
+                Load current settings
               </button>
             </div>
           </section>
           {installed && (
             <section className="package-installed">
-              <strong>적용된 표준 · {installed.package.name}</strong>
+              <strong>Applied standard · {installed.package.name}</strong>
               <span>
-                {projectPackageChanges(project!).join(" · ") || "표준과 일치"}
+                {projectPackageChanges(project!).join(" · ") ||
+                  "Matches standard"}
               </span>
               <span>
-                {installed.package.id}@{installed.package.version} · 적용{" "}
-                {installed.revision}회
+                {installed.package.id}@{installed.package.version} · Applied{" "}
+                {installed.revision} times
               </span>
               <code>{installed.digest}</code>
               <span>
                 {installed.source.kind === "git"
                   ? `${installed.source.url} · ${installed.source.commit}`
-                  : "로컬 폴더 또는 편집한 표준"}
+                  : "Local folder or edited standard"}
               </span>
               <p>
-                실행은 저장된 스냅샷을 사용합니다. 개인 연결·저장소 경로와 현재
-                전역 필수 기준이 함께 적용됩니다.
+                Runs use a saved snapshot, together with local connections,
+                repository paths and current global checks.
               </p>
               <button
                 disabled={busy}
@@ -241,15 +242,15 @@ export default function PackageSettings({
                   )
                 }
               >
-                적용한 원본 보기
+                View imported source
               </button>
             </section>
           )}
           <details className="package-git">
-            <summary>Git 저장소에서 표준 가져오기·업데이트 확인</summary>
+            <summary>Import or check updates from Git</summary>
             <div className="runtime-grid">
               <label className="field">
-                HTTPS Git 주소
+                HTTPS Git URL
                 <input
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
@@ -257,14 +258,14 @@ export default function PackageSettings({
                 />
               </label>
               <label className="field">
-                브랜치·태그·커밋
+                Branch, tag or commit
                 <input value={ref} onChange={(e) => setRef(e.target.value)} />
               </label>
             </div>
             <p>
-              저장소 루트의 harness.json을 읽고 정확한 commit으로 고정합니다.
-              코드·hook 실행이나 자동 push는 하지 않습니다. 비공개 저장소는
-              macOS Git 자격 증명이 필요합니다.
+              Reads harness.json from the repository root and pins its commit.
+              No code or hooks run and nothing is pushed. Private repositories
+              require local Git credentials.
             </p>
             <button
               disabled={busy || !url || !ref}
@@ -274,16 +275,15 @@ export default function PackageSettings({
                 )
               }
             >
-              Git 표준 읽기
+              Read Git standard
             </button>
           </details>
           {!candidate ? (
             <section className="package-empty">
-              <h2>공유할 개발 기준을 선택하세요</h2>
+              <h2>Choose standards to share</h2>
               <p>
-                기본 7개 에이전트로 시작하거나 현재 프로젝트 설정을 불러와
-                파일로 내보낼 수 있습니다. 사용자 데이터·API key·승인은 내보내지
-                않습니다.
+                Start with seven default agents or export your project's current
+                settings. User data, API keys and approvals are excluded.
               </p>
             </section>
           ) : (
@@ -296,51 +296,52 @@ export default function PackageSettings({
                 <p>
                   {candidate.source.kind === "git"
                     ? `Git commit ${candidate.source.commit}`
-                    : "적용 전 미리보기"}{" "}
-                  · {candidate.package.agents.length}개 에이전트 ·{" "}
-                  {candidate.package.profiles.length}개 프로필
+                    : "Preview changes"}{" "}
+                  · {candidate.package.agents.length} agents ·{" "}
+                  {candidate.package.profiles.length} profiles
                 </p>
                 <code>SHA-256 {candidate.digest}</code>
               </div>
-              <nav className="package-tabs" aria-label="하네스 보기">
+              <nav className="package-tabs" aria-label="Harness">
                 <button
                   aria-pressed={tab === "overview"}
                   onClick={() => setTab("overview")}
                 >
-                  구성·변경 비교
+                  Changes
                 </button>
                 <button
                   aria-pressed={tab === "files"}
                   onClick={() => setTab("files")}
                 >
-                  디렉토리·Markdown
+                  Files & Markdown
                 </button>
                 <button
                   aria-pressed={tab === "edit"}
                   onClick={() => setTab("edit")}
                 >
-                  표준 스펙 편집
+                  Edit specification
                 </button>
               </nav>
               {tab === "edit" && (
                 <label className="field">
-                  표준 정의 JSON
+                  Standard definition JSON
                   <textarea
                     className="package-code"
-                    aria-label="표준 정의 JSON"
+                    aria-label="Standard definition JSON"
                     spellCheck={false}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                   />
                   <small>
-                    이름·버전·단계 배치·검사·기능 디렉토리를 편집합니다. 공유
-                    버전의 내용이 달라지면 version을 올려 주세요.
+                    Edit name, version, stage assignments, checks and feature
+                    directories. Increment the version when shared content
+                    changes.
                   </small>
                 </label>
               )}
               {tab === "files" && (
                 <div className="package-browser">
-                  <nav aria-label="하네스 파일">
+                  <nav aria-label="Harness files">
                     {Object.keys(editedFiles)
                       .sort()
                       .map((p) => (
@@ -358,7 +359,7 @@ export default function PackageSettings({
                     {file.endsWith(".md") ? (
                       <>
                         <textarea
-                          aria-label="하네스 Markdown"
+                          aria-label="Harness Markdown"
                           value={editedFiles[file] ?? ""}
                           onChange={(e) => editMarkdown(file, e.target.value)}
                         />
@@ -373,9 +374,9 @@ export default function PackageSettings({
               {tab === "overview" && (
                 <section className="package-overview">
                   <label className="field">
-                    적용할 표준 프로필
+                    Profile to apply
                     <select
-                      aria-label="표준 프로필"
+                      aria-label="Standard profile"
                       value={profileId}
                       onChange={(e) => setProfileId(e.target.value)}
                     >
@@ -399,40 +400,42 @@ export default function PackageSettings({
                                   (d) => d.id === a.agentId,
                                 )?.name
                               }
-                              <small>{a.required ? "필수" : "선택"}</small>
+                              <small>
+                                {a.required ? "Required" : "Optional"}
+                              </small>
                             </p>
                           ))}
                       </section>
                     ))}
                   </div>
-                  <h3>프로젝트 적용 전후</h3>
+                  <h3>Before and after</h3>
                   <table>
                     <thead>
                       <tr>
-                        <th>항목</th>
-                        <th>현재</th>
-                        <th>적용할 내용</th>
+                        <th>Setting</th>
+                        <th>Current</th>
+                        <th>Proposed</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td>표준 버전</td>
+                        <td>Standard version</td>
                         <td>
                           {installed
                             ? `${installed.package.id}@${installed.package.version}`
-                            : "개별 설정"}
+                            : "Custom settings"}
                         </td>
                         <td>
                           {candidate.package.id}@{candidate.package.version}
                         </td>
                       </tr>
                       <tr>
-                        <td>배치</td>
-                        <td>{project?.workflow?.assignments.length ?? 0}개</td>
-                        <td>{profile?.assignments.length}개</td>
+                        <td>Assignment</td>
+                        <td>{project?.workflow?.assignments.length ?? 0}</td>
+                        <td>{profile?.assignments.length}</td>
                       </tr>
                       <tr>
-                        <td>필수 검사</td>
+                        <td>Required checks</td>
                         <td>{project?.requiredChecks.join(", ")}</td>
                         <td>
                           {[
@@ -441,27 +444,33 @@ export default function PackageSettings({
                               ...(profile?.requiredChecks ?? []),
                             ]),
                           ].join(", ")}{" "}
-                          (기존 필수 유지)
+                          (existing required checks preserved)
                         </td>
                       </tr>
                       <tr>
-                        <td>설계</td>
-                        <td>{featureCount}개 기능에 게시된 설계</td>
-                        <td>적용 시 재게시·본인 재승인 필요</td>
+                        <td>Design</td>
+                        <td>{featureCount} features with published designs</td>
+                        <td>
+                          Republish and approve your design after applying
+                        </td>
                       </tr>
                     </tbody>
                   </table>
                   <details>
-                    <summary>프로젝트 지침 변경 원문</summary>
+                    <summary>Project instruction changes</summary>
                     <div className="runtime-grid">
                       <pre>
-                        {project?.instructions || "현재 추가 지침 없음"}
+                        {project?.instructions ||
+                          "No current additional instructions"}
                       </pre>
-                      <pre>{profile?.instructions || "새 추가 지침 없음"}</pre>
+                      <pre>
+                        {profile?.instructions ||
+                          "No new additional instructions"}
+                      </pre>
                     </div>
                   </details>
                   <details>
-                    <summary>검사 명령·단계 지침 전체 비교</summary>
+                    <summary>Compare commands and stage instructions</summary>
                     <div className="runtime-grid">
                       <pre>
                         {JSON.stringify(
@@ -484,7 +493,9 @@ export default function PackageSettings({
                     </div>
                   </details>
                   <details>
-                    <summary>회사·에이전트 지침과 전체 표준 비교</summary>
+                    <summary>
+                      Compare company, agent and standard instructions
+                    </summary>
                     <div className="runtime-grid">
                       <pre>
                         {JSON.stringify(
@@ -505,9 +516,9 @@ export default function PackageSettings({
                   </details>
                   {aliases.map((alias) => (
                     <label key={alias} className="field">
-                      연결 매핑 · {alias}
+                      Connection mapping · {alias}
                       <select
-                        aria-label={`연결 ${alias}`}
+                        aria-label={`Connection ${alias}`}
                         value={
                           Object.hasOwn(bindings, alias) ? bindings[alias] : ""
                         }
@@ -515,7 +526,7 @@ export default function PackageSettings({
                           setBindings({ ...bindings, [alias]: e.target.value })
                         }
                       >
-                        <option value="">이 Mac의 연결 선택</option>
+                        <option value="">Choose a local connection</option>
                         {connections.map((c) => (
                           <option value={c.id} key={c.id}>
                             {c.name} · {c.model}
@@ -525,15 +536,15 @@ export default function PackageSettings({
                     </label>
                   ))}
                   <p className="muted">
-                    project 연결은 대상 프로젝트 설정을 상속합니다. 모델 연결
-                    검사는 별도이며 가져오기로 과금 호출하지 않습니다.
+                    A project connection inherits the target project's settings.
+                    Importing does not test models or incur model charges.
                   </p>
                 </section>
               )}
               {changed && (
                 <p role="status" className="package-warning">
-                  편집한 내용이 아직 검증되지 않았습니다. 검증 후
-                  적용·내보내기할 수 있습니다.
+                  Changes have not been validated. Validate before applying or
+                  exporting.
                 </p>
               )}
               <div className="package-actions">
@@ -547,23 +558,24 @@ export default function PackageSettings({
                           text: draft,
                         }),
                       );
-                      setNotice("스펙 검증 완료. 구성을 비교하고 적용하세요.");
+                      setNotice(
+                        "Specification validated. Review changes before applying.",
+                      );
                     })
                   }
                 >
-                  편집 내용 검증
+                  Validate changes
                 </button>
                 <button
                   disabled={busy || changed}
                   onClick={() =>
                     void act(async () => {
                       const path = await api.harnessExport(candidate.token);
-                      if (path)
-                        setNotice(`하네스 폴더를 내보냈습니다: ${path}`);
+                      if (path) setNotice(`Harness folder exported: ${path}`);
                     })
                   }
                 >
-                  폴더로 내보내기
+                  Export folder
                 </button>
                 <button
                   disabled={busy}
@@ -572,11 +584,13 @@ export default function PackageSettings({
                       const current = await api.snapshot();
                       setBaseline(current.revision);
                       await refresh();
-                      setNotice("최신 프로젝트 상태로 비교를 갱신했습니다.");
+                      setNotice(
+                        "Comparison refreshed with the latest project state.",
+                      );
                     })
                   }
                 >
-                  비교 새로고침
+                  Refresh comparison
                 </button>
                 <button
                   className="primary"
@@ -600,22 +614,22 @@ export default function PackageSettings({
                       });
                       await refresh();
                       setNotice(
-                        "표준을 적용했습니다. 실행 전 설정을 확인하고 설계를 다시 승인하세요.",
+                        "Standard applied. Check settings and approve your design again before running.",
                       );
                     })
                   }
                 >
-                  프로젝트에 적용
+                  Apply to project
                 </button>
               </div>
             </>
           )}
           {installed && (
             <section className="package-scopes">
-              <h2>기능별 디렉토리·지침</h2>
+              <h2>Feature directories & instructions</h2>
               <p>
-                선택한 범위의 지침을 적용하고 범위 밖 코드 변경은 차단합니다.
-                범위 변경 시 해당 기능 설계의 재승인이 필요합니다.
+                Instructions apply within the chosen scope. Changes outside it
+                are blocked. Changing scope requires a new design approval.
               </p>
               {snapshot.features
                 .filter((f) => f.projectId === projectId)
@@ -623,7 +637,7 @@ export default function PackageSettings({
                   <label key={f.id} className="field">
                     {f.title}
                     <select
-                      aria-label={`${f.title} 기능 범위`}
+                      aria-label={`${f.title} Feature scope`}
                       disabled={busy}
                       value={f.harnessScope ?? ""}
                       onChange={(e) =>
@@ -638,7 +652,7 @@ export default function PackageSettings({
                         })
                       }
                     >
-                      <option value="">프로젝트 전체</option>
+                      <option value="">Entire project</option>
                       {profileOf(installed).scopes.map((s) => (
                         <option value={s.id} key={s.id}>
                           {s.name} · {s.paths.join(", ")}

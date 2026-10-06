@@ -2,11 +2,11 @@ import type { Feature, Run, Snapshot } from "../../../shared/contracts";
 import { activeStatuses } from "../../../shared/runtime";
 
 const statusLabel: Record<string, string> = {
-  preparing: "환경 준비",
-  implementing: "구현 중",
-  verifying: "검증 중",
-  reviewing: "AI 리뷰 중",
-  repairing: "수정 중",
+  preparing: "Environment setup",
+  implementing: "Implementing",
+  verifying: "Verifying",
+  reviewing: "AI reviewing",
+  repairing: "Repairing",
 };
 
 export type PortfolioRef = {
@@ -34,7 +34,7 @@ export type PortfolioItem = {
   phase: number;
   label: string;
   next: string;
-  owner: "사람" | "시스템";
+  owner: "Human" | "System";
   freshness: Freshness;
 };
 
@@ -44,7 +44,7 @@ export type AttentionItem = {
   reason: AttentionReason;
   title: string;
   detail: string;
-  owner: "사람" | "시스템";
+  owner: "Human" | "System";
   destination: "design" | "execution" | "review";
 };
 
@@ -117,50 +117,55 @@ export function describePortfolioRun(
   if (!gate)
     return [
       0,
-      "상태 정보 오류",
-      "설계와 실행 기록의 연결을 확인하세요",
-      "시스템",
+      "Status data error",
+      "Check the link between design and run records",
+      "System",
     ] as const;
   if (!run) {
     if (gate.status === "in_review")
       return [
         1,
-        "설계 승인 필요",
-        "설계와 승인 조건을 확인하세요",
-        "사람",
+        "Design approval required",
+        "Check the design and approval requirements",
+        "Human",
       ] as const;
     if (gate.status === "changes_requested" || gate.blockers)
       return [
         1,
-        "수정 요청",
-        "차단 의견과 수정 요청을 확인하세요",
-        "사람",
+        "Changes requested",
+        "Review blocking comments and change requests",
+        "Human",
       ] as const;
     return [
       gate.eligible ? 2 : 0,
-      gate.eligible ? "개발 준비" : "설계 초안",
+      gate.eligible ? "Ready to build" : "Design draft",
       gate.eligible
-        ? "기존 실행 설정을 확인하세요"
-        : "설계를 작성하고 리뷰를 요청하세요",
-      "사람",
+        ? "Check execution settings"
+        : "Write a design and request review",
+      "Human",
     ] as const;
   }
   if (run.runtime?.terminationConfirmed === false && !running.has(run.status))
     return [
       3,
-      "종료 확인 중",
-      "종료 확인 전 자동 재실행하지 않습니다",
-      "시스템",
+      "Confirming termination",
+      "No automatic restart before termination is confirmed",
+      "System",
     ] as const;
   if (run.status === "queued")
     return [
       run.runtime?.kind === "planning" ? 1 : 2,
-      "실행 대기",
-      "실행기 확인을 기다립니다",
-      "시스템",
+      "Queued",
+      "Waiting for the runner",
+      "System",
     ] as const;
   if (run.status === "preparing")
-    return [2, "환경 준비", "실행 환경을 준비하고 있습니다", "시스템"] as const;
+    return [
+      2,
+      "Environment setup",
+      "Preparing the execution environment",
+      "System",
+    ] as const;
   if (running.has(run.status)) {
     const agent = run.runtime?.agents?.find(
       (candidate) =>
@@ -173,37 +178,37 @@ export function describePortfolioRun(
         : run.status === "verifying" || run.status === "reviewing"
           ? 3
           : 2,
-      statusLabel[run.status] || "실행 중",
+      statusLabel[run.status] || "Running",
       agent && !run.runtime?.cancelRequested
-        ? `${agent.name} 작업 기록을 확인하세요`
+        ? `${agent.name} Inspect the execution record`
         : run.runtime?.cancelRequested
-          ? "중단 요청 처리와 종료 확인을 기다립니다"
-          : "실행기 상태를 기다립니다",
-      "시스템",
+          ? "Waiting for stop and termination confirmation"
+          : "Waiting for runner status",
+      "System",
     ] as const;
   }
   if (run.status === "ready_for_merge")
     return [
       4,
-      "결과 검토 대기",
-      "변경과 검증 결과를 검토하세요",
-      "사람",
+      "Ready for review",
+      "Review changes and verification results",
+      "Human",
     ] as const;
   if (["failed", "interrupted", "blocked"].includes(run.status))
     return [
       2,
-      run.status === "blocked" ? "승인 확인 필요" : "실패 기록",
-      "실패 근거와 복구 조건을 확인하세요",
-      "사람",
+      run.status === "blocked" ? "Approval required" : "Failed run",
+      "Inspect failure evidence and recovery requirements",
+      "Human",
     ] as const;
   if (run.runtime?.kind === "planning")
     return [
       1,
-      "계획 초안 작성 완료",
-      "설계와 승인 조건을 검토하세요",
-      "사람",
+      "Plan drafted",
+      "Review the design and approval requirements",
+      "Human",
     ] as const;
-  return [2, "실행 기록", "실행 결과를 확인하세요", "사람"] as const;
+  return [2, "Run history", "Inspect execution results", "Human"] as const;
 }
 
 /**
@@ -318,7 +323,7 @@ export function projectPortfolio(
       reason: AttentionReason,
       title: string,
       detail: string,
-      owner: "사람" | "시스템",
+      owner: "Human" | "System",
       destination: AttentionItem["destination"],
     ) =>
       attention.push({
@@ -333,33 +338,51 @@ export function projectPortfolio(
     if (!gate)
       add(
         "blocked",
-        "상태 정보 연결 확인",
+        "Check status data",
         item.feature.title,
-        "시스템",
+        "System",
         "execution",
       );
     else {
       if (gate.status === "in_review")
-        add("review", "설계 승인 필요", item.feature.title, "사람", "design");
+        add(
+          "review",
+          "Design approval required",
+          item.feature.title,
+          "Human",
+          "design",
+        );
       if (gate.status === "changes_requested" || gate.blockers)
         add(
           "changes",
-          "차단 의견 또는 수정 요청",
+          "Blocking comments or changes requested",
           item.feature.title,
-          "사람",
+          "Human",
           "design",
         );
     }
     if (item.run?.status === "ready_for_merge")
-      add("ready", "결과 검토 필요", item.feature.title, "사람", "review");
+      add(
+        "ready",
+        "Results need review",
+        item.feature.title,
+        "Human",
+        "review",
+      );
     if (["failed", "interrupted"].includes(item.run?.status || ""))
-      add("failed", "실패 기록 확인", item.feature.title, "사람", "execution");
+      add(
+        "failed",
+        "Inspect failed run",
+        item.feature.title,
+        "Human",
+        "execution",
+      );
     if (item.run?.status === "blocked")
       add(
         "blocked",
-        "승인 또는 정책 확인",
+        "Check approvals or policies",
         item.feature.title,
-        "사람",
+        "Human",
         "design",
       );
     if (
@@ -369,9 +392,9 @@ export function projectPortfolio(
     )
       add(
         "stale",
-        "실행 상태 확인 필요",
+        "Confirm execution status",
         item.feature.title,
-        "시스템",
+        "System",
         "execution",
       );
   }
@@ -392,9 +415,9 @@ export function projectPortfolio(
         attempt: run.runtime?.attempt,
       },
       reason: "termination",
-      title: "종료 확인 필요",
+      title: "Confirm termination",
       detail: feature.title,
-      owner: "시스템",
+      owner: "System",
       destination: "execution",
     });
   }
@@ -404,10 +427,10 @@ export function projectPortfolio(
       ref: { featureId: "" },
       reason: !snapshot.runnerConnected ? "runner" : "stale",
       title: !snapshot.runnerConnected
-        ? "실행기 연결 확인 필요"
-        : "화면 최신성 확인 필요",
-      detail: acceptedAt || "마지막 성공 조회 없음",
-      owner: "시스템",
+        ? "Check runner connection"
+        : "Check workspace freshness",
+      detail: acceptedAt || "No successful sync yet",
+      owner: "System",
       destination: "execution",
     });
   const reported = runtimeRuns.filter(

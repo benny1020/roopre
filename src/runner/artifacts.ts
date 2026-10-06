@@ -78,17 +78,18 @@ export async function checkedArtifact(
 ) {
   const root = await realpath(checkout);
   const target = await realpath(resolve(root, path));
-  if (!target.startsWith(root + sep))
-    throw Error("산출물 경로가 올바르지 않습니다.");
+  if (!target.startsWith(root + sep)) throw Error("Invalid artifact path.");
   const stat = await lstat(target);
   if (!stat.isFile() || stat.size > 20_000_000)
-    throw Error("산출물을 열 수 없습니다.");
+    throw Error("Could not open the artifact.");
   if (
     createHash("sha256")
       .update(await readWorkspaceFile(root, path, 20_000_000))
       .digest("hex") !== hash
   )
-    throw Error("산출물이 변경됐습니다. 해당 실행의 원본 근거를 확인하세요.");
+    throw Error(
+      "Artifact changed. Inspect the original evidence for this run.",
+    );
   return target;
 }
 
@@ -107,7 +108,9 @@ export async function archiveArtifacts(
       signal,
     );
     if (createHash("sha256").update(bytes).digest("hex") !== file.hash)
-      throw Error("산출물이 변경됐습니다. 해당 실행의 원본 근거를 확인하세요.");
+      throw Error(
+        "Artifact changed. Inspect the original evidence for this run.",
+      );
     const path = join(`attempt-${file.attempt}`, file.path);
     const target = join(destination, path);
     await mkdir(dirname(target), { recursive: true, mode: 0o700 });

@@ -97,7 +97,7 @@ test("quality projection reports missing evidence, review, harness and costs wit
   assert.equal(quality.invalidTimestampRuns, 1);
   assert.equal(quality.missingRuntimeRuns, 1);
   assert.equal(quality.missingHarnessRuns, 2);
-  assert.equal(quality.harnesses[0].label, "Harness 기록 없음");
+  assert.equal(quality.harnesses[0].label, "No harness record");
   assert.equal(quality.projects[0].reportedCostRuns, 0);
   assert.equal(quality.projects[0].unreportedCost, 1);
   assert.equal(quality.projects[0].invalidCost, 1);

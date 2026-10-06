@@ -1,3 +1,21 @@
+# English workspace and practical workflow polish — 2026-10-07
+
+[English workspace design](design/ENGLISH-WORKSPACE.md) records this change. Product-owned UI, new agent defaults, generated designs and runtime messages now use English. User-authored content, installed standards and existing approval records remain unchanged. The bundled standard is version 1.1.0; legacy and English design headings share the existing review section keys.
+
+- `pnpm check`: formatting, documentation integrity, types, Electron build and **148 tests passed**, including PostgreSQL/API and language compatibility regressions.
+- `pnpm test:web`: **51 passed**. Covers database-backed workflows, human approval, keyboard navigation, harness editing, graph interactions, memory, evidence and WCAG A/AA axe checks in light/dark and compact layouts. A subsequent focused graph/attention-queue run passed both tests after adding a picker screenshot.
+- `pnpm test:desktop`: **1 passed** with actual Electron startup, onboarding, theme and restart persistence.
+- `pnpm test:conversation`: **1 passed** through Electron main/preload/IPC, including confirmation binding and persisted consultation. Provider responses use a fixture.
+- `pnpm runner:image` and `pnpm test:runner`: image build and **5 integration tests passed**. Covers Java 21/Gradle, agent memory snapshots, parallel isolation/fan-in, read-only review, cancellation, runner cleanup, dedicated PostgreSQL ownership, restart identity and backup/migration preservation. Claude execution uses a test program.
+- `pnpm check:mac`: temporary macOS application packaging, included resources, security fuses and code-signing integrity passed. No ZIP was produced. This is not Developer ID signing or notarization.
+- Visually inspected rendered Home, design confirmation, workflow editor, execution graph, agent picker and native onboarding. Fixed active-stage text overlap and confirmed the resulting graph geometry with a browser assertion. Screenshots in `artifacts/` are fixture evidence, not user runs.
+
+The Docker engine was restored without resetting volumes. This supersedes the historical unavailable local database results below; those entries remain as the original audit history. Setup now reuses an existing PostgreSQL image and downloads only when absent, with regressions for both paths.
+
+Real paid-provider development, enterprise SSO/RBAC, Developer ID signing, notarization and installation on a separate Mac were not performed. The application remains a local-owner beta; passing these checks does not establish absolute code quality or App Store readiness. Dedicated PR review and current-head CI are required before merge.
+
+---
+
 # Quality Intelligence — 2026-10-01
 
 [Quality Intelligence 설계](design/QUALITY-INTELLIGENCE.md)에 따라 구현 실행의 결과율, 첫 시도 완료, 검사·독립 리뷰 근거, provider 보고 비용을 분자와 분모가 드러나는 지표로 추가했다. planning·진행·대기·취소는 결과율에서 제외하고, 표본 3개 미만·비용 미보고·Harness revision 누락을 성공으로 보정하지 않는다. 프로젝트와 실행 당시 workflow revision별 결과를 비교하고 최근 실행에서 정확한 run 근거로 이동한다.

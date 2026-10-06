@@ -26,12 +26,12 @@ export default function AgentRefinement({
   }, []);
   return (
     <details className="agent-refinement">
-      <summary>간단히 적고 AI로 구체화</summary>
+      <summary>Describe the role, then refine with AI</summary>
       <label className="field">
-        원하는 역할
+        Agent purpose
         <textarea
           maxLength={6000}
-          placeholder="예: 접근성과 작은 화면에서 깨지는 UI를 검사해줘"
+          placeholder="e.g. Check accessibility and layout on smaller screens"
           value={brief}
           disabled={busy}
           onChange={(e) => {
@@ -41,13 +41,13 @@ export default function AgentRefinement({
         />
       </label>
       <label className="field">
-        초안을 만들 AI 연결
+        Connection for drafting
         <select
           value={connection}
           disabled={busy}
           onChange={(e) => setConnection(e.target.value)}
         >
-          <option value="">연결 선택</option>
+          <option value="">Choose connection</option>
           {connections.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} · {c.model}
@@ -56,12 +56,12 @@ export default function AgentRefinement({
         </select>
       </label>
       <p className="muted">
-        입력한 역할과 단계만 선택한 AI 연결에 전송합니다. 모델 사용 비용이
-        발생할 수 있습니다. 결과는 검토 후 편집기에 적용하며 자동 저장하지
-        않습니다.
+        Only this role and stage are sent to the selected connection. Model
+        charges may apply. Review the result before applying; it is not saved
+        automatically.
       </p>
       {!connections.length && (
-        <p>설정의 AI 연결에서 API key와 endpoint를 먼저 등록하세요.</p>
+        <p>Add an API key and endpoint in AI connections first.</p>
       )}
       <button
         disabled={
@@ -88,7 +88,7 @@ export default function AgentRefinement({
           }
         }}
       >
-        {busy ? "AI 초안 작성 중…" : "AI로 구체화"}
+        {busy ? "Drafting with AI…" : "Refine with AI"}
       </button>
       {error && (
         <p className="error-banner" role="alert">
@@ -96,13 +96,13 @@ export default function AgentRefinement({
         </p>
       )}
       {result && (
-        <section aria-label="AI 에이전트 제안">
+        <section aria-label="Suggested agent">
           <h3>{result.name}</h3>
           <p>{result.description}</p>
           <MarkdownPreview text={result.markdown} />
           <p className="muted">
-            적용하면 현재 이름·설명·Markdown을 이 제안으로 바꿉니다. 권한·공유
-            범위·연결 설정은 유지합니다.
+            Applying replaces the name, description and Markdown. Permissions,
+            scope and connection settings are preserved.
           </p>
           <div className="button-row">
             <button
@@ -111,9 +111,11 @@ export default function AgentRefinement({
                 setResult(undefined);
               }}
             >
-              제안을 편집기에 적용
+              Apply to editor
             </button>
-            <button onClick={() => setResult(undefined)}>제안 버리기</button>
+            <button onClick={() => setResult(undefined)}>
+              Discard suggestion
+            </button>
           </div>
         </section>
       )}

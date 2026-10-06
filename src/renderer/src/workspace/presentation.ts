@@ -2,20 +2,26 @@ import type { Feature, Snapshot } from "../../../shared/contracts";
 import { activeStatuses } from "../../../shared/runtime";
 
 export const runNames: Record<string, string> = {
-  completed: "초안 작성 완료",
-  queued: "실행 대기",
-  preparing: "환경 준비",
-  implementing: "구현 중",
-  verifying: "검증 중",
-  reviewing: "AI 리뷰",
-  repairing: "수정 중",
-  ready_for_merge: "결과 검토 대기",
-  interrupted: "중단됨",
-  failed: "실패",
-  cancelled: "취소됨",
-  blocked: "승인 확인 필요",
+  completed: "Draft complete",
+  queued: "Queued",
+  preparing: "Environment setup",
+  implementing: "Implementing",
+  verifying: "Verifying",
+  reviewing: "AI review",
+  repairing: "Repairing",
+  ready_for_merge: "Ready for review",
+  interrupted: "Interrupted",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  blocked: "Approval required",
 };
-export const phases = ["요구사항", "설계", "구현", "검증", "결과 검토"];
+export const phases = [
+  "Requirements",
+  "Design",
+  "Implementation",
+  "Verification",
+  "Result review",
+];
 export type WorkState = {
   phase: number;
   label: string;
@@ -29,21 +35,24 @@ export function workState(snapshot: Snapshot, feature: Feature): WorkState {
   const run = snapshot.runs.filter((r) => r.featureId === feature.id).at(-1);
   const base: WorkState = {
     phase: feature.draft.requirements.trim() ? 1 : 0,
-    label:
-      gate.status === "draft"
-        ? "설계 초안"
+    label: !feature.draft.requirements.trim()
+      ? "Define intent"
+      : gate.status === "draft"
+        ? "Design draft"
         : gate.status === "changes_requested"
-          ? "수정 요청"
+          ? "Changes requested"
           : gate.eligible
-            ? "개발 준비"
-            : "설계 리뷰",
-    next: gate.eligible
-      ? "승인된 설계로 개발을 시작하세요"
-      : gate.blockers
-        ? `차단 의견 ${gate.blockers}개를 해결하세요`
-        : gate.status === "draft"
-          ? "설계를 작성하고 리뷰를 요청하세요"
-          : "설계와 승인 조건을 확인하세요",
+            ? "Ready to build"
+            : "Design review",
+    next: !feature.draft.requirements.trim()
+      ? "Add requirements and acceptance criteria"
+      : gate.eligible
+        ? "Start implementation with the approved design"
+        : gate.blockers
+          ? `Blocking comments ${gate.blockers} to resolve`
+          : gate.status === "draft"
+            ? "Write a design and request review"
+            : "Review design and approvals",
     tone: gate.blockers ? "attention" : "quiet",
     actor: "HUMAN",
     attention:
@@ -58,8 +67,8 @@ export function workState(snapshot: Snapshot, feature: Feature): WorkState {
   )
     return {
       phase: 2,
-      label: "종료 확인 중",
-      next: "Docker 연결 복구 후 종료를 다시 확인합니다. 작업은 자동 재실행하지 않습니다",
+      label: "Confirming termination",
+      next: "Recheck termination after Docker reconnects. Work will not restart automatically",
       actor: "SYSTEM",
       tone: "attention",
       attention: true,
@@ -81,11 +90,11 @@ export function workState(snapshot: Snapshot, feature: Feature): WorkState {
       phase,
       label:
         run.runtime?.kind === "planning"
-          ? `계획 · ${runNames[run.status]}`
+          ? `Planning · ${runNames[run.status]}`
           : runNames[run.status],
       next: liveAgent
-        ? `${liveAgent.name} 에이전트 작업 중`
-        : run.runtime?.events.at(-1)?.message || "실행기 상태를 기다리는 중",
+        ? `${liveAgent.name} is working`
+        : run.runtime?.events.at(-1)?.message || "Waiting for runner status",
       actor: ["queued", "preparing", "verifying"].includes(run.status)
         ? "SYSTEM"
         : "AGENT",
@@ -98,10 +107,13 @@ export function workState(snapshot: Snapshot, feature: Feature): WorkState {
     next:
       run.reason ||
       (run.status === "ready_for_merge"
-        ? "변경·검증 근거를 검토하세요. 병합은 별도입니다."
-        : "실행 결과와 복구 조건을 확인하세요"),
+        ? "Review changes and verification evidence. Merge is a separate action."
+        : "Inspect execution results and recovery requirements"),
     actor: "HUMAN",
     tone: run.status === "failed" ? "danger" : "attention",
     attention: true,
   };
 }
+
+export const countLabel = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;

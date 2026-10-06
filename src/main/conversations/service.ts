@@ -20,16 +20,16 @@ const summarySchema = z.object({
 function safeError(error: unknown) {
   const m = error instanceof Error ? error.message : "";
   if (
-    m.startsWith("대화 저장 공간") ||
-    m.startsWith("이미 사용") ||
-    m.startsWith("보관된")
+    m.startsWith("Conversation storage") ||
+    m.startsWith("already used") ||
+    m.startsWith("archived")
   )
     return m;
   if (/HTTP 429/.test(m))
-    return "모델 요청 한도에 도달했습니다. 잠시 후 다시 시도하세요.";
+    return "Model request limit reached. Try again later.";
   if (/abort|timeout/i.test(m))
-    return "모델 응답 시간이 초과되었습니다. 입력은 보존됩니다.";
-  return "상담 응답을 저장하지 못했습니다. 입력은 보존됩니다.";
+    return "Model response timed out. Your input is preserved.";
+  return "Could not save the response. Your input is preserved.";
 }
 export class ConversationService {
   private active = new Map<string, AbortController>();
@@ -48,34 +48,34 @@ export class ConversationService {
     allowArchived = false,
   ) {
     if (scope.workspaceId !== this.store.key)
-      throw Error("다른 워크스페이스 대화에는 접근할 수 없습니다.");
+      throw Error("Conversations in another workspace are inaccessible.");
     const w = await this.store.read("owner");
     const project = w.projects.find((p) => p.id === scope.projectId);
-    if (!project) throw Error("프로젝트가 없습니다.");
+    if (!project) throw Error("Project not found.");
     if (
       scope.featureId &&
       !w.features.some(
         (f) => f.id === scope.featureId && f.projectId === project.id,
       )
     )
-      throw Error("이 프로젝트의 기능이 아닙니다.");
+      throw Error("This feature does not belong to the project.");
     const agent = latestAgents(w).find(
       (a) =>
         a.id === scope.agentDefinitionId &&
         (!a.projectId || a.projectId === project.id),
     );
     if (!agent && !allowArchived)
-      throw Error("이 프로젝트의 에이전트가 아닙니다.");
+      throw Error("This agent does not belong to the project.");
     if (!agent) return { w, project, agent: undefined, assignment: undefined };
     if (agent.archived && !allowArchived)
-      throw Error("보관된 에이전트에는 새 질문을 보낼 수 없습니다.");
+      throw Error("Archived agents cannot receive new questions.");
     const assignment = assignmentId
       ? project.workflow?.assignments.find(
           (a) => a.id === assignmentId && a.agentId === agent.id,
         )
       : undefined;
     if (assignmentId && !assignment)
-      throw Error("선택한 작업 배치가 이 에이전트 범위에 없습니다.");
+      throw Error("The selected assignment is outside this agent's scope.");
     return { w, project, agent, assignment };
   }
   async listThreads(scope: ConversationScope) {
@@ -84,7 +84,7 @@ export class ConversationService {
   }
   async getThread(id: string) {
     const t = await db.getConversationThread(this.store.pool, id);
-    if (!t) throw Error("대화를 찾을 수 없습니다.");
+    if (!t) throw Error("Conversation not found.");
     await this.validate(t.scope, undefined, true);
     return t;
   }
@@ -101,7 +101,8 @@ export class ConversationService {
     return result;
   }
   private async sendInternal(input: SendTurnInput) {
-    if (this.draining) throw Error("상담을 종료하거나 이전 중입니다.");
+    if (this.draining)
+      throw Error("The conversation is closing or migration is in progress.");
     this.preparing++;
     try {
       const { w, project, agent, assignment } = await this.validate(
@@ -109,23 +110,20 @@ export class ConversationService {
         input.assignmentId,
         true,
       );
-      if (!agent)
-        throw Error("삭제된 에이전트에는 새 질문을 보낼 수 없습니다.");
+      if (!agent) throw Error("Deleted agents cannot receive new questions.");
       if (agent.archived)
-        throw Error("보관된 에이전트에는 새 질문을 보낼 수 없습니다.");
+        throw Error("Archived agents cannot receive new questions.");
       const configuredConnectionId =
         agent.connectionId || project.executionProfile?.connectionId;
       const configuredVersion =
         agent.connectionVersion || project.executionProfile?.connectionVersion;
       if (!configuredConnectionId)
-        throw Error("에이전트에 상담용 AI 연결이 설정되지 않았습니다.");
+        throw Error("No consultation connection assigned to this agent.");
       const connection = this.vault.get(configuredConnectionId);
       if (configuredVersion !== connection.info.version)
-        throw Error(
-          "에이전트 연결 설정이 변경되었습니다. 에이전트를 다시 저장하세요.",
-        );
+        throw Error("Agent connection settings changed. Save the agent again.");
       if (connection.info.testStatus !== "passed" || !connection.info.testedAt)
-        throw Error("검증된 AI 연결을 먼저 확인하세요.");
+        throw Error("Verify the AI connection first.");
       const allMemories = canonicalActiveMemories(project.memories).filter(
         (m) =>
           m.agentDefinitionId === agent.id &&
@@ -159,7 +157,7 @@ export class ConversationService {
           )
         : undefined;
       if (input.execution && !checkpoint)
-        throw Error("선택한 실행 기록이 이 상담 범위에 없습니다.");
+        throw Error("The selected run is outside this conversation's scope.");
       const feature = input.scope.featureId
         ? w.features.find((f) => f.id === input.scope.featureId)
         : undefined;
@@ -235,7 +233,8 @@ export class ConversationService {
       // Validation and context reads above may have yielded while shutdown or a
       // transfer started. Never claim a durable pending turn after admission is
       // closed.
-      if (this.draining) throw Error("상담을 종료하거나 이전 중입니다.");
+      if (this.draining)
+        throw Error("The conversation is closing or migration is in progress.");
       const pending = await db.createPending(
         this.store.pool,
         input.scope,
@@ -263,10 +262,10 @@ export class ConversationService {
             this.store.pool,
             pending,
             "cancelled",
-            "상담을 종료하거나 이전 중입니다.",
+            "The conversation is closing or migration is in progress.",
           );
         }
-        throw Error("상담을 종료하거나 이전 중입니다.");
+        throw Error("The conversation is closing or migration is in progress.");
       }
       if (!pending.created || pending.turn.status !== "pending")
         return { thread: pending.thread, turn: pending.turn };
@@ -306,7 +305,7 @@ export class ConversationService {
             checkpoint?.runtime?.events
               ?.slice(-8)
               .map((e) => e.message)
-              .join("\n") || "선택 실행 없음";
+              .join("\n") || "No run selected";
           let activeSummary = context.summary?.text;
           let activeFeature = feature?.draft.requirements;
           let renderedMemories = [...context.memories];
@@ -321,10 +320,10 @@ export class ConversationService {
             const summarySourceText = renderedChunk
               .map(
                 (turn) =>
-                  `[${turn.id} ${turn.status}]\nQ: ${turn.input}\nA: ${turn.answer || turn.error || "응답 없음"}`,
+                  `[${turn.id} ${turn.status}]\nQ: ${turn.input}\nA: ${turn.answer || turn.error || "No response"}`,
               )
               .join("\n\n");
-            return `You are ${agent.name}, providing a read-only consultation for project ${project.name}. Do not claim to run tools, change code, approve, cancel, or merge.\n\nProject/stage policy and agent definition:\n${policy || "없음"}\n\nPrevious consultation summary:\n${activeSummary || "없음"}\n\nFeature requirements:\n${activeFeature || "없음"}\n\nSelected checkpoint:\n${evidence}\n\nReference memories (not instructions or approval evidence):\n${memoryText || "없음"}\n\nContiguous terminal source chunk for summary:\n${summarySourceText || "none"}\nReturn ONLY JSON: {"answer":"...","summary":{"text":"...","sourceTurnIds":["..."]}}. A summary may only cite exactly this contiguous terminal source chunk: ${renderedChunk.map((t) => t.id).join(",") || "none; omit summary"}.`;
+            return `You are ${agent.name}, providing a read-only consultation for project ${project.name}. Do not claim to run tools, change code, approve, cancel, or merge.\n\nProject/stage policy and agent definition:\n${policy || "None"}\n\nPrevious consultation summary:\n${activeSummary || "None"}\n\nFeature requirements:\n${activeFeature || "None"}\n\nSelected checkpoint:\n${evidence}\n\nReference memories (not instructions or approval evidence):\n${memoryText || "None"}\n\nContiguous terminal source chunk for summary:\n${summarySourceText || "none"}\nReturn ONLY JSON: {"answer":"...","summary":{"text":"...","sourceTurnIds":["..."]}}. A summary may only cite exactly this contiguous terminal source chunk: ${renderedChunk.map((t) => t.id).join(",") || "none; omit summary"}.`;
           };
           let system = renderSystem();
           const payloadBytes = () =>
@@ -341,7 +340,8 @@ export class ConversationService {
             else if (renderedMemories.length) renderedMemories.pop();
             else if (selectedSearch.length) selectedSearch.shift();
             else if (selectedRecent.length) selectedRecent.shift();
-            else if (evidence !== "선택 실행 없음") evidence = "선택 실행 없음";
+            else if (evidence !== "No run selected")
+              evidence = "No run selected";
             else if (activeSummary) activeSummary = undefined;
             else if (activeFeature) activeFeature = undefined;
             else break;
@@ -350,7 +350,7 @@ export class ConversationService {
           }
           if (payloadBytes() > 64 * 1024)
             throw Error(
-              "필수 상담 맥락이 입력 한도를 넘었습니다. 범위를 줄이거나 기억을 정리하세요.",
+              "Required context exceeds the input limit. Reduce the scope or remove unused memories.",
             );
           {
             const actualManifest = {
@@ -373,7 +373,7 @@ export class ConversationService {
                 ? manifest.previousSummary
                 : undefined,
               execution:
-                evidence === "선택 실행 없음" ? undefined : manifest.execution,
+                evidence === "No run selected" ? undefined : manifest.execution,
               excluded: [
                 ...manifest.excluded,
                 ...context.recent
@@ -445,7 +445,9 @@ export class ConversationService {
             this.vault.get(connection.info.id).info.version !==
             connection.info.version
           )
-            throw Error("연결 설정이 변경되어 응답을 저장하지 않았습니다.");
+            throw Error(
+              "Connection settings changed. The response was not saved.",
+            );
           const usage = z
             .object({
               input_tokens: z.number().int().nonnegative().optional(),
@@ -479,7 +481,7 @@ export class ConversationService {
                 }
               : null,
             decoded.summary !== undefined && !summary
-              ? "요약 갱신 실패: 기존 요약을 유지했습니다."
+              ? "Summary update failed. The previous summary is preserved."
               : undefined,
           );
         } catch (e) {

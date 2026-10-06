@@ -58,15 +58,15 @@ export default function EventLog({ events }: { events: Event[] }) {
       <div className="log-controls">
         <span>
           {trimmed
-            ? "이전 기록 일부가 보존 범위를 벗어났습니다"
+            ? "Some earlier records are outside the retained history"
             : following
-              ? "최신 기록 따라가는 중"
-              : "이전 기록 읽는 중"}
+              ? "Following latest activity"
+              : "Reading earlier activity"}
         </span>
         <button
           className="soft"
           aria-label={
-            following ? "기록 자동 스크롤 일시정지" : "최신 기록으로 이동"
+            following ? "Pause log follow" : "Jump to latest activity"
           }
           onClick={() => {
             if (following) {
@@ -77,14 +77,18 @@ export default function EventLog({ events }: { events: Event[] }) {
           }}
         >
           {following ? <Pause size={12} /> : <ArrowDown size={12} />}
-          {following ? "일시정지" : unread ? "새 기록 · 최신으로" : "최신으로"}
+          {following
+            ? "Paused"
+            : unread
+              ? "New activity · Jump to latest"
+              : "Jump to latest"}
         </button>
       </div>
       <div
         ref={root}
         className="output-scroll"
         tabIndex={0}
-        aria-label="진행 기록 로그"
+        aria-label="Activity log"
         onScroll={() => {
           const container = root.current!;
           const bottom =
@@ -115,7 +119,7 @@ export default function EventLog({ events }: { events: Event[] }) {
             ))}
           </ol>
         ) : (
-          <p className="quiet-empty">실행기에서 진행 기록을 기다립니다.</p>
+          <p className="quiet-empty">Waiting for activity from the runner.</p>
         )}
       </div>
     </div>

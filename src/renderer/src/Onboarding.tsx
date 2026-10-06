@@ -14,11 +14,11 @@ import {
 import icon from "../../../resources/icon.png";
 import "./style.css";
 const titles = [
-  "AI 연결",
-  "환경 준비",
-  "내 프로젝트",
-  "개발 기준",
-  "첫 요구사항",
+  "AI connections",
+  "Environment setup",
+  "Your project",
+  "Development standards",
+  "First requirement",
 ];
 export default function DesktopRoot() {
   const [status, setStatus] = useState<BootstrapStatus>();
@@ -63,8 +63,8 @@ export default function DesktopRoot() {
     return (
       <div className="onboarding-loading">
         <img src={icon} />
-        <h1>루프리 시작 중</h1>
-        <p role="status">{error || "저장된 설정을 확인합니다."}</p>
+        <h1>Starting Roopre</h1>
+        <p role="status">{error || "Checking saved settings."}</p>
       </div>
     );
   if (status.connected && status.progress.dismissed) return <App />;
@@ -247,17 +247,17 @@ function Onboarding({
       <aside className="onboarding-rail">
         <div className="onboarding-brand">
           <img src={icon} alt="" />
-          <strong>루프리</strong>
+          <strong>Roopre</strong>
         </div>
         <h1>
-          내 팀의 방식으로
+          Your team's standards.
           <br />
-          개발을 시작하세요.
+          Your development workspace.
         </h1>
         <p>
-          요구사항과 설계를 정리하고,
+          Define requirements and a design,
           <br />
-          본인 승인 후 구현·검증을 진행합니다.
+          then approve the plan before agents implement and verify it.
         </p>
         <ol>
           {titles.map((t, i) => (
@@ -268,23 +268,22 @@ function Onboarding({
           ))}
         </ol>
         <small>
-          입력한 설정은 다음 단계에서도 변경할 수 있습니다. API key는 암호화해서
-          보관합니다.
+          You can change these settings later. API keys are stored encrypted.
         </small>
       </aside>
       <main className="onboarding-main">
         <header>
-          <span>시작 가이드 · {index + 1} / 5</span>
+          <span>Setup · {index + 1} / 5</span>
           <select
-            aria-label="시작 화면 테마"
+            aria-label="Setup appearance"
             defaultValue={JSON.parse(
               localStorage.getItem("theme") || '"system"',
             )}
             onChange={(e) => theme(e.target.value)}
           >
-            <option value="system">시스템 테마</option>
-            <option value="light">라이트</option>
-            <option value="dark">다크</option>
+            <option value="system">System theme</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
           </select>
         </header>
         <div className="onboarding-content">
@@ -298,12 +297,12 @@ function Onboarding({
           {step === "connection" && (
             <>
               <p>
-                사용할 모델과 API 연결을 등록하세요. 현재 Anthropic Messages
-                호환 endpoint를 지원합니다.
+                Add a model and API connection. Anthropic Messages-compatible
+                endpoints are supported.
               </p>
               <div className="onboarding-form">
                 <label className="field">
-                  연결 이름
+                  Connection name
                   <input
                     value={connectionName}
                     onChange={(e) => setConnectionName(e.target.value)}
@@ -318,14 +317,14 @@ function Onboarding({
                 </label>
                 <div className="runtime-grid">
                   <label className="field">
-                    모델
+                    Model
                     <input
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
                     />
                   </label>
                   <label className="field">
-                    인증 방식
+                    Authentication
                     <select
                       value={auth}
                       onChange={(e) => setAuth(e.target.value as typeof auth)}
@@ -360,12 +359,12 @@ function Onboarding({
                       setConnectionId(list.at(-1)!.id);
                       setKey("");
                       setNotice(
-                        "연결을 저장했습니다. 실제 사용 전 연결 검사를 실행하세요.",
+                        "Connection saved. Run a connection test before using it.",
                       );
                     })
                   }
                 >
-                  연결 저장
+                  Save connection
                 </button>
               </div>
               {connections.map((c) => (
@@ -375,10 +374,10 @@ function Onboarding({
                     <p>
                       {c.model} ·{" "}
                       {c.testStatus === "passed"
-                        ? "연결 확인됨"
+                        ? "Connection verified"
                         : c.testStatus === "failed"
-                          ? "연결 검사 실패"
-                          : "검사 전"}
+                          ? "Connection test failed"
+                          : "Not tested"}
                     </p>
                   </div>
                   <button
@@ -389,36 +388,36 @@ function Onboarding({
                       })
                     }
                   >
-                    연결 검사
+                    Test connection
                   </button>
                 </div>
               ))}
               <p className="muted">
-                연결 검사는 소량의 실제 모델 요청으로 과금될 수 있습니다.
-                저장만으로는 요청을 보내지 않습니다.
+                Testing sends a small model request and may incur charges.
+                Saving does not send a request.
               </p>
             </>
           )}
           {step === "environment" && (
             <>
               <p>
-                Git과 Docker를 확인하고 루프리 전용 데이터베이스와 격리 실행
-                이미지를 준비합니다.
+                Check Git and Docker, then prepare Roopre's database and
+                isolated runner image.
               </p>
               <div className="onboarding-check">
                 <div>
                   <strong>{status.stage}</strong>
                   <p>
                     {status.connected
-                      ? "데이터베이스 연결됨"
-                      : "데이터베이스 준비 필요"}{" "}
+                      ? "Database connected"
+                      : "Database setup required"}{" "}
                     ·{" "}
                     {status.managed
-                      ? "루프리 전용 환경"
-                      : "기존 환경 유지 가능"}
+                      ? "Dedicated Roopre environment"
+                      : "Existing environment available"}
                   </p>
                 </div>
-                {status.busy && <span role="status">준비 중…</span>}
+                {status.busy && <span role="status">Preparing…</span>}
               </div>
               {status.error && (
                 <p className="error-banner" role="alert">
@@ -426,8 +425,9 @@ function Onboarding({
                 </p>
               )}
               <p>
-                처음 준비할 때 컨테이너 이미지를 다운로드하므로 시간이 걸릴 수
-                있습니다. 기존 프로젝트와 DB 볼륨은 삭제하지 않습니다.
+                Initial setup downloads container images and may take a few
+                minutes. Existing repositories and database volumes are
+                preserved.
               </p>
               <div className="button-row">
                 <button
@@ -439,7 +439,7 @@ function Onboarding({
                     })
                   }
                 >
-                  환경 준비
+                  Environment setup
                 </button>
                 {status.connected && !status.managed && (
                   <button
@@ -450,7 +450,7 @@ function Onboarding({
                       })
                     }
                   >
-                    백업 후 전용 DB로 이전
+                    Back up and migrate database
                   </button>
                 )}
                 {status.busy && (
@@ -461,29 +461,28 @@ function Onboarding({
                       })
                     }
                   >
-                    준비 중단
+                    Stop setup
                   </button>
                 )}
               </div>
               <p className="muted">
-                Docker Desktop과 Git이 설치되어 실행 중이어야 합니다. 권한
-                동의·설치는 사용자가 진행합니다. 환경을 준비한 뒤 다음으로
-                이동하세요.
+                Install and start Docker Desktop and Git. Complete any system
+                permission prompts, then continue after setup finishes.
               </p>
             </>
           )}
           {step === "project" && (
             <>
               <p>
-                실제 저장소를 연결하세요. 코드 변경과 패키지 설치는 아직
-                실행하지 않습니다.
+                Connect your repository. This step does not change code or
+                install packages.
               </p>
               {!status.connected ? (
-                <p>환경 준비를 먼저 완료하세요.</p>
+                <p>Complete environment setup first.</p>
               ) : (
                 <>
                   <label className="field">
-                    저장된 프로젝트
+                    Saved project
                     <select
                       value={projectId}
                       onChange={(e) => {
@@ -505,7 +504,7 @@ function Onboarding({
                         }
                       }}
                     >
-                      <option value="">새 프로젝트</option>
+                      <option value="">New project</option>
                       {snapshot?.projects.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
@@ -514,7 +513,7 @@ function Onboarding({
                     </select>
                   </label>
                   <label className="field">
-                    프로젝트 이름
+                    Project name
                     <input
                       value={name}
                       onChange={(e) => setName(e.target.value)}
@@ -543,25 +542,25 @@ function Onboarding({
                         })
                       }
                     >
-                      저장소 폴더 선택
+                      Choose repository folder
                     </button>
-                    <span>{path || "선택한 저장소 없음"}</span>
+                    <span>{path || "No repository selected"}</span>
                   </div>
                   <div className="runtime-grid">
                     <label className="field">
-                      기준 브랜치
+                      Base branch
                       <input
                         value={branch}
                         onChange={(e) => setBranch(e.target.value)}
                       />
                     </label>
                     <label className="field">
-                      프로젝트 AI 연결
+                      Project AI connection
                       <select
                         value={connectionId}
                         onChange={(e) => setConnectionId(e.target.value)}
                       >
-                        <option value="">연결 선택</option>
+                        <option value="">Choose connection</option>
                         {connections.map((c) => (
                           <option value={c.id} key={c.id}>
                             {c.name} · {c.model}
@@ -570,21 +569,21 @@ function Onboarding({
                       </select>
                     </label>
                     <label className="field">
-                      프로젝트 런타임
+                      Project runtime
                       <select
                         value={runtime}
                         onChange={(e) =>
                           setRuntime(e.target.value as ProjectRuntime)
                         }
                       >
-                        <option value="node">Node.js / 웹</option>
+                        <option value="node">Node.js / Web</option>
                         <option value="java-gradle">
                           Java · Gradle / Spring Boot
                         </option>
                       </select>
                     </label>
                     <label className="field">
-                      실행당 추정 예산 (USD)
+                      Estimated budget per run (USD)
                       <input
                         type="number"
                         min="0.01"
@@ -595,7 +594,7 @@ function Onboarding({
                     </label>
                   </div>
                   <label className="field">
-                    필수 검사 명령 (JSON)
+                    Required check commands (JSON)
                     <textarea
                       value={checks}
                       onChange={(e) => setChecks(e.target.value)}
@@ -603,11 +602,11 @@ function Onboarding({
                   </label>
                   <p className="muted">
                     {runtime === "java-gradle"
-                      ? "Java 21·Gradle 8 기준 classes와 test 명령을 제안합니다. Spring Boot 통합 검사는 test task에 포함하세요."
-                      : "Node 프로젝트의 실제 명령에 맞게 수정하세요. e2e를 포함해 승인된 명령을 고정 실행합니다."}
+                      ? "Suggested commands use Java 21 and Gradle 8: classes and test. Include Spring Boot integration checks in the test task."
+                      : "Match these to your repository's commands. Approved checks, including e2e, run as configured."}
                   </p>
                   <label className="field">
-                    프로젝트 Markdown 지침
+                    Project Markdown instructions
                     <textarea
                       value={projectInstructions}
                       onChange={(e) => setProjectInstructions(e.target.value)}
@@ -622,11 +621,11 @@ function Onboarding({
                       })
                     }
                   >
-                    지침 파일 가져오기
+                    Import instructions
                   </button>
                   <p className="muted">
-                    가져온 문서는 이 프로젝트에만 적용됩니다. 파일의 명령이나
-                    hooks를 자동 실행하지 않습니다.
+                    Imported instructions apply only to this project. Commands
+                    and hooks in the file are not run automatically.
                   </p>
                   <button
                     className="primary"
@@ -671,11 +670,11 @@ function Onboarding({
                           requiredChecks: ["typecheck", "test", "review"],
                           reviewerIds: ["owner"],
                         });
-                        setNotice("프로젝트와 실행 기준을 저장했습니다.");
+                        setNotice("Project and execution settings saved.");
                       })
                     }
                   >
-                    프로젝트 연결 저장
+                    Save project connection
                   </button>
                 </>
               )}
@@ -692,30 +691,32 @@ function Onboarding({
                   onProjectChange={setProjectId}
                 />
               ) : (
-                <p>환경 준비와 프로젝트 등록을 먼저 완료하세요.</p>
+                <p>
+                  Complete environment setup and project registration first.
+                </p>
               )}
             </>
           )}
           {step === "requirements" && (
             <>
-              <section className="settings-card" aria-label="시작 체크리스트">
-                <h3>실제 작업 기록</h3>
+              <section className="settings-card" aria-label="Setup checklist">
+                <h3>Recorded progress</h3>
                 <p className="muted">
-                  저장된 설정과 작업으로 집계합니다. 과거 완료 기록이 현재 실행
-                  승인을 대신하지 않습니다.
+                  Progress comes from saved settings and actual runs. Earlier
+                  results do not authorize a new run.
                 </p>
                 <ul>
                   {[
                     [
-                      "모델 연결 검사",
+                      "Model connection test",
                       connections.some((c) => c.testStatus === "passed"),
                     ],
                     [
-                      "프로젝트 실행 설정",
+                      "Project execution settings",
                       snapshot?.projects.some((p) => !!p.executionProfile),
                     ],
                     [
-                      "단계별 개발 기준",
+                      "Stage standards",
                       snapshot?.projects.some(
                         (p) =>
                           p.workflow &&
@@ -723,11 +724,11 @@ function Onboarding({
                       ),
                     ],
                     [
-                      "첫 설계 게시",
+                      "First design published",
                       snapshot?.features.some((f) => f.designs.length > 0),
                     ],
                     [
-                      "본인 설계 승인 기록",
+                      "Your design approval",
                       snapshot?.features.some((f) =>
                         f.designs.some((d) =>
                           d.decisions.some((r) => r.decision === "approve"),
@@ -735,7 +736,7 @@ function Onboarding({
                       ),
                     ],
                     [
-                      "검사·리뷰 완료",
+                      "Checks and review complete",
                       snapshot?.runs.some(
                         (r) => r.status === "ready_for_merge",
                       ),
@@ -748,16 +749,16 @@ function Onboarding({
                 </ul>
               </section>
               <p>
-                첫 기능의 목표와 완료 기준을 작성하세요. 모델 실행과 설계 승인은
-                다음 화면에서 별도로 진행합니다.
+                Define your first feature's goal and acceptance criteria. Model
+                execution and design approval happen in the workspace.
               </p>
               <label className="field">
-                첫 기능 프로젝트
+                First feature project
                 <select
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
                 >
-                  <option value="">프로젝트 선택</option>
+                  <option value="">Choose project</option>
                   {snapshot?.projects.map((p) => (
                     <option value={p.id} key={p.id}>
                       {p.name}
@@ -766,18 +767,18 @@ function Onboarding({
                 </select>
               </label>
               <label className="field">
-                기능 이름
+                Feature name
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </label>
               <label className="field">
-                요구사항과 완료 기준
+                Requirements and acceptance criteria
                 <textarea
                   value={requirements}
                   onChange={(e) => setRequirements(e.target.value)}
-                  placeholder="해결할 문제와 AC01, AC02처럼 확인 가능한 완료 기준을 작성하세요."
+                  placeholder="Describe the problem and measurable criteria such as AC01 and AC02."
                 />
               </label>
               <button
@@ -802,11 +803,11 @@ function Onboarding({
                   })
                 }
               >
-                첫 요구사항 만들기
+                Create first requirement
               </button>
               <p className="muted">
-                가상 프로젝트나 실행 결과는 생성하지 않습니다. 설정하지 않은
-                항목은 앱의 시작 가이드에서 이어서 완료할 수 있습니다.
+                No sample projects or fabricated results are created. Finish any
+                remaining setup from Getting started.
               </p>
             </>
           )}
@@ -816,14 +817,14 @@ function Onboarding({
             disabled={busy || status.busy || index === 0}
             onClick={() => void act(() => advance(index - 1))}
           >
-            뒤로
+            Back
           </button>
           <div className="button-row">
             <button
               disabled={busy || status.busy || !status.connected}
               onClick={() => void act(finish)}
             >
-              나중에 · 앱 열기
+              Skip for now · Open app
             </button>
             {index < 4 ? (
               <button
@@ -831,7 +832,7 @@ function Onboarding({
                 disabled={busy || status.busy}
                 onClick={() => void act(() => advance(index + 1))}
               >
-                다음
+                Next
               </button>
             ) : (
               <button
@@ -839,7 +840,7 @@ function Onboarding({
                 disabled={busy || !status.connected}
                 onClick={() => void act(finish)}
               >
-                앱 열기
+                Open app
               </button>
             )}
           </div>

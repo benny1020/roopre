@@ -63,14 +63,18 @@ test("a queued draft autosave cannot overwrite a newer onboarding step", async (
     };
   });
   await page.goto("/");
-  await page.getByRole("heading", { name: "AI 연결", exact: true }).waitFor();
-  await page.getByLabel("연결 이름", { exact: true }).fill("Queued draft");
+  await page
+    .getByRole("heading", { name: "AI connections", exact: true })
+    .waitFor();
+  await page
+    .getByLabel("Connection name", { exact: true })
+    .fill("Queued draft");
   await expect
     .poll(() =>
       page.evaluate(() => (globalThis as any).__onboardingCalls.length),
     )
     .toBe(1);
-  await page.getByRole("button", { name: "다음", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect
     .poll(() =>
       page.evaluate(() => (globalThis as any).__onboardingCalls.length),
@@ -89,7 +93,9 @@ test("a queued draft autosave cannot overwrite a newer onboarding step", async (
     )
     .toBe(2);
   await page.evaluate(() => (globalThis as any).__resolveNavigation());
-  await page.getByRole("heading", { name: "환경 준비", exact: true }).waitFor();
+  await page
+    .getByRole("heading", { name: "Environment setup", exact: true })
+    .waitFor();
   await expect
     .poll(() =>
       page.evaluate(() =>

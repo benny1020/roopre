@@ -1,4 +1,13 @@
-# 변경 이력
+# Changelog
+
+## Unreleased · English workspace
+
+- Natural English product UI, onboarding, model/runner feedback and new agent/instruction defaults.
+- Preserve user-authored content and legacy design review wire keys; validate both English and Korean document headings.
+- Home opens the complete attention queue; empty requirements start at intent.
+- Stage agent picker explains execution mode and role purpose; compact search and distinct navigation landmarks.
+- Project overview shows the configured concurrency limit; approval and evidence remain explicit.
+- English README and packaged setup/recovery guide, including password-free design confirmation.
 
 ## 미출시 · Quality Intelligence
 

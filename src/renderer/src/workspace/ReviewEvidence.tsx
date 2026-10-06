@@ -21,17 +21,17 @@ export default function ReviewEvidence({ value }: { value: string }) {
   return (
     <div className="structured-review">
       <section>
-        <h3>에이전트 판정</h3>
+        <h3>Agent verdict</h3>
         <p className={report.passed ? "ok" : "failure-text"}>
-          {report.passed ? "통과 의견" : "수정 필요"}
+          {report.passed ? "Pass recommendation" : "Changes needed"}
         </p>
         <p className="muted">
-          에이전트 의견입니다. 시스템의 필수 검사와 승인 조건은 별도로
-          확인합니다.
+          This is an agent recommendation. System checks and approval gates are
+          evaluated separately.
         </p>
       </section>
       <section>
-        <h3>수용 기준별 근거</h3>
+        <h3>Evidence by acceptance criterion</h3>
         {report.acceptance.map((ac, i) => (
           <div className="acceptance-result" key={`${ac.id}:${i}`}>
             {ac.passed ? (
@@ -41,15 +41,15 @@ export default function ReviewEvidence({ value }: { value: string }) {
             )}
             <div>
               <strong>
-                {ac.id} · {ac.passed ? "충족 의견" : "미충족"}
+                {ac.id} · {ac.passed ? "Met" : "Not met"}
               </strong>
-              <p className="preserve">{ac.evidence || "근거 없음"}</p>
+              <p className="preserve">{ac.evidence || "No evidence"}</p>
             </div>
           </div>
         ))}
       </section>
       <section>
-        <h3>리뷰 지적 · {report.findings.length}개</h3>
+        <h3>Review findings · {report.findings.length}</h3>
         {report.findings.length ? (
           <ul>
             {report.findings.map((finding, i) => (
@@ -57,11 +57,11 @@ export default function ReviewEvidence({ value }: { value: string }) {
             ))}
           </ul>
         ) : (
-          <p>기록된 차단 지적이 없습니다.</p>
+          <p>No blocking findings recorded.</p>
         )}
       </section>
       <details>
-        <summary>원본 보고서</summary>
+        <summary>Original report</summary>
         <pre className="output-text">{value}</pre>
       </details>
     </div>

@@ -45,7 +45,7 @@ export default function WorkflowEditor({
     if (!a || !d || locked) return;
     if (!compatible(d, to)) {
       setNotice(
-        "이동할 수 없습니다. 코드 수정 에이전트는 구현 단계에, 읽기 전용 에이전트는 다른 단계에 배치하세요.",
+        "This move is unavailable. Write-access agents belong in implementation; other stages require read-only agents.",
       );
       return;
     }
@@ -58,7 +58,7 @@ export default function WorkflowEditor({
     });
     setSelected(id);
     setNotice(
-      `${d.name}: ${stageNames[to]} 단계로 이동했습니다. 저장 전까지 실행에 적용되지 않습니다.`,
+      `${d.name}: ${stageNames[to]} stage. Save the workflow to apply this move.`,
     );
   };
   const items = useMemo(
@@ -67,9 +67,8 @@ export default function WorkflowEditor({
         id: a.id,
         stage: a.stage,
         name:
-          agents.find((d) => d.id === a.agentId)?.name ??
-          "사용할 수 없는 에이전트",
-        detail: a.required ? "필수 역할" : "선택 역할",
+          agents.find((d) => d.id === a.agentId)?.name ?? "Agent unavailable",
+        detail: a.required ? "Required role" : "Optional role",
         state: "idle" as const,
       })),
     [flow.assignments, agents],
@@ -96,7 +95,7 @@ export default function WorkflowEditor({
   return (
     <>
       <div className="graph-draft-bar">
-        <p>편집 초안 · 저장 시 관련 설계 재승인 필요</p>
+        <p>Draft · saving requires affected designs to be approved again</p>
         <button
           disabled={locked || !history.length}
           onClick={() => {
@@ -104,17 +103,17 @@ export default function WorkflowEditor({
             if (last) {
               onChange(last);
               setHistory((h) => h.slice(0, -1));
-              setNotice("마지막 변경을 되돌렸습니다.");
+              setNotice("Last change undone.");
             }
           }}
         >
-          되돌리기
+          Undo
         </button>
       </div>
       {notice && <p role="status">{notice}</p>}
       <div className="graph-editor">
         <WorkflowGraph
-          label="개발 흐름 그래프"
+          label="Workflow graph"
           items={items}
           selected={selected}
           onSelect={setSelected}
@@ -124,17 +123,21 @@ export default function WorkflowEditor({
           onAdd={openPicker}
           addDisabled={locked || flow.assignments.length >= 30}
         />
-        <aside className="graph-inspector" aria-label="선택한 흐름 설정">
+        <aside
+          className="graph-inspector"
+          aria-label="Selected workflow settings"
+        >
           <h3>
-            {assignment ? "에이전트 배치" : "선택한 단계"} · {stageNames[stage]}
+            {assignment ? "Agent assignment" : "Selected stage"} ·{" "}
+            {stageNames[stage]}
           </h3>
           <fieldset disabled={locked}>
             {assignment ? (
               <>
                 <label className="field">
-                  에이전트
+                  Agents
                   <select
-                    aria-label={`${stageNames[stage]} 에이전트`}
+                    aria-label={`${stageNames[stage]} Agents`}
                     value={assignment.agentId}
                     onChange={(e) =>
                       update({
@@ -155,9 +158,9 @@ export default function WorkflowEditor({
                   </select>
                 </label>
                 <label className="field">
-                  담당 단계
+                  Assigned stage
                   <select
-                    aria-label="에이전트 담당 단계"
+                    aria-label="Agent stage"
                     value={stage}
                     onChange={(e) =>
                       move(assignment.id, e.target.value as Stage)
@@ -194,7 +197,7 @@ export default function WorkflowEditor({
                       })
                     }
                   />
-                  필수 결과
+                  Required result
                 </label>
                 <div className="button-row">
                   <button
@@ -214,7 +217,7 @@ export default function WorkflowEditor({
                       }
                     }}
                   >
-                    순서 올리기
+                    Move up
                   </button>
                   <button
                     onClick={() => {
@@ -227,20 +230,20 @@ export default function WorkflowEditor({
                       setSelected(stage);
                     }}
                   >
-                    배치 제거
+                    Remove assignment
                   </button>
                 </div>
                 <p className="muted">
-                  에이전트 정의는 유지됩니다. 단계 설정은 그래프의 단계 제목을
-                  선택하세요.
+                  The agent definition is preserved. Select a stage heading to
+                  edit stage settings.
                 </p>
               </>
             ) : (
               <>
                 <label className="field">
-                  실행 방식
+                  Execution mode
                   <select
-                    aria-label={`${stageNames[stage]} 실행 방식`}
+                    aria-label={`${stageNames[stage]} Execution mode`}
                     value={flow.execution?.[stage] ?? "parallel"}
                     onChange={(e) =>
                       update({
@@ -252,14 +255,16 @@ export default function WorkflowEditor({
                       })
                     }
                   >
-                    <option value="parallel">병렬 · 기본</option>
-                    <option value="sequential">순차 · 한 명씩 실행</option>
+                    <option value="parallel">Parallel · Default</option>
+                    <option value="sequential">
+                      Sequential · One at a time
+                    </option>
                   </select>
                 </label>
                 <label className="field">
-                  {stageNames[stage]} 단계 지침
+                  {stageNames[stage]} Stage instructions
                   <textarea
-                    aria-label={`${stageNames[stage]} 단계 지침`}
+                    aria-label={`${stageNames[stage]} Stage instructions`}
                     maxLength={10000}
                     value={flow.instructions[stage]}
                     onChange={(e) =>
@@ -277,7 +282,7 @@ export default function WorkflowEditor({
                   onClick={() => openPicker(stage)}
                   disabled={flow.assignments.length >= 30}
                 >
-                  {stageNames[stage]} 에이전트 추가
+                  Add agent to {stageNames[stage]}
                 </button>
                 {flow.assignments
                   .filter((a) => a.stage === stage)
@@ -285,9 +290,9 @@ export default function WorkflowEditor({
                     <div className="graph-assignment" key={a.id}>
                       <button onClick={() => setSelected(a.id)}>
                         {agents.find((d) => d.id === a.agentId)?.name ??
-                          "사용 불가"}
+                          "Unavailable"}
                       </button>
-                      <small>{a.required ? "필수" : "선택"}</small>
+                      <small>{a.required ? "Required" : "Optional"}</small>
                     </div>
                   ))}
               </>
@@ -297,17 +302,24 @@ export default function WorkflowEditor({
       </div>
       {picker && (
         <Dialog
-          label={`${stageNames[picker]} 에이전트 추가`}
+          label={`Add agent to ${stageNames[picker]}`}
           onClose={() => setPicker(undefined)}
           className="command-dialog graph-picker"
         >
-          <h2>{stageNames[picker]}에 에이전트 추가</h2>
+          <h2>Add agent to {stageNames[picker]}</h2>
+          <p className="muted">
+            Choose an existing role or create one. Agents in this stage run{" "}
+            {flow.execution?.[picker] === "sequential"
+              ? "sequentially"
+              : "in parallel"}
+            .
+          </p>
           <label className="field">
-            기존 에이전트 검색
+            Search existing agents
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="이름 또는 역할 검색"
+              placeholder="Search name or role"
             />
           </label>
           <div className="graph-picker-list">
@@ -328,27 +340,29 @@ export default function WorkflowEditor({
                   setSelected(id);
                   setPicker(undefined);
                   setNotice(
-                    "에이전트를 초안에 배치했습니다. 개발 흐름을 저장해 적용하세요.",
+                    "Agent added to the draft. Save the workflow to apply it.",
                   );
                 }}
               >
-                {a.name}
+                <span className="graph-picker-copy">
+                  <strong>{a.name}</strong>
+                  <small>{a.description || "No description"}</small>
+                </span>
                 <small>
-                  v{a.revision} · {a.projectId ? "프로젝트" : "전역"}
+                  v{a.revision} · {a.projectId ? "Projects" : "Global"}
                 </small>
               </button>
             ))}
           </div>
           {!matches.length && query.trim() && (
             <p role="status">
-              “{query}”에 맞는 에이전트가 없습니다. 다른 이름으로 검색하거나 새
-              역할을 만드세요.
+              No agents match “{query}”. Try another name or create a role.
             </p>
           )}
           {!agents.some((a) => compatible(a, picker)) && (
             <p>
-              이 단계에 배치할 에이전트가 없습니다. 새 역할을 만들거나
-              Markdown을 가져오세요.
+              No agents available for this stage. Create a role or import
+              Markdown.
             </p>
           )}
           <div className="button-row">
@@ -360,9 +374,9 @@ export default function WorkflowEditor({
                 setPicker(undefined);
               }}
             >
-              새 역할 만들기 · Markdown
+              Create role · Markdown
             </button>
-            <button onClick={() => setPicker(undefined)}>닫기</button>
+            <button onClick={() => setPicker(undefined)}>Close</button>
           </div>
         </Dialog>
       )}

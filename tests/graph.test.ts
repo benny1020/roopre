@@ -37,9 +37,9 @@ test("graph separates current attempt, terminal uncertainty and transport loss",
   assert.equal(executionGraph(run, false)[0].state, "unknown");
   run.status = "cancelled";
   assert.equal(executionGraph(run, true)[0].state, "unknown");
-  assert.match(executionGraph(run, true)[0].detail, /종료 확인/);
+  assert.match(executionGraph(run, true)[0].detail, /termination/);
   run.runtime!.terminationConfirmed = true;
-  assert.match(executionGraph(run, true)[0].detail, /결과 미확인/);
+  assert.match(executionGraph(run, true)[0].detail, /result unconfirmed/);
 });
 test("graph includes frozen assignments only for this run kind", () => {
   const run = adeFixture().runs.at(-1)!;

@@ -6,7 +6,12 @@ import {
 } from "./parallel.ts";
 import { profileOf } from "../shared/harness-package.ts";
 import { z } from "zod";
-import { sections } from "../shared/contracts.ts";
+import {
+  sections,
+  sectionLabels,
+  hasDesignSections,
+  hasDesignPlaceholders,
+} from "../shared/contracts.ts";
 import type { ResolvedAgent, AgentExecution } from "../shared/harness.ts";
 import { collectArtifacts, archiveArtifacts } from "./artifacts.ts";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
@@ -144,7 +149,7 @@ export class RunnerManager {
     void this.tick();
   }
   private names(id: string) {
-    if (!/^run-[a-f0-9-]+$/.test(id)) throw Error("실행 ID 오류");
+    if (!/^run-[a-f0-9-]+$/.test(id)) throw Error("Invalid run ID");
     return {
       container: `roopre-${id}`,
       proxy: `roopre-proxy-${id}`,
@@ -169,7 +174,7 @@ export class RunnerManager {
         !/No such (object|container)/i.test(result.output)
       )
         throw Error(
-          "이전 컨테이너 종료를 확인하지 못했습니다. Docker 연결이 복구되면 자동으로 다시 확인합니다.",
+          "Previous container termination is unconfirmed. It will be checked again when Docker reconnects.",
         );
     }
   }
@@ -244,12 +249,13 @@ export class RunnerManager {
       if (activeStatuses.includes(r.status) && r.status !== "queued") {
         r.status = "interrupted";
         r.reason =
-          "이전 실행이 중단됐습니다. 변경과 근거를 보존했습니다. 종료 확인 후 직접 재시도하세요.";
+          "Previous run interrupted. Changes and evidence are preserved. Retry manually after termination is confirmed.";
       }
       for (const agent of r.runtime!.agents ?? []) {
         if (agent.status === "running") {
           agent.status = "failed";
-          agent.error = "실행이 중단되어 결과를 확인하지 못했습니다.";
+          agent.error =
+            "Execution interrupted before its result could be confirmed.";
           agent.endedAt = new Date().toISOString();
         }
       }
@@ -384,7 +390,7 @@ export class RunnerManager {
   private async valid(id: string) {
     const w = await this.store.read("owner");
     const r = w.runs.find((r) => r.id === id)!;
-    if (!r?.runtime) throw Error("실행 계약이 없습니다.");
+    if (!r?.runtime) throw Error("Missing execution contract.");
     const connections = [
       {
         connectionId: r.runtime.profile.connectionId,
@@ -396,7 +402,7 @@ export class RunnerManager {
       const info = this.vault.get(c.connectionId).info;
       if (info.version !== c.connectionVersion || info.testStatus !== "passed")
         throw Error(
-          "AI 연결이 변경되거나 검증되지 않았습니다. 실행 계약을 갱신하세요.",
+          "AI connection changed or is unverified. Refresh the execution contract.",
         );
     }
     const f = w.features.find((f) => f.id === r.featureId)!;
@@ -410,7 +416,7 @@ export class RunnerManager {
           !gate(w, f, approvalBinding(w, f)).eligible ||
           r.runtime.binding !== approvalBinding(w, f))
     )
-      throw Error("설계·지침·초안 또는 승인 계약이 바뀌었습니다.");
+      throw Error("Design, instructions, draft or approval contract changed.");
     return { w, r, f };
   }
   private async docker(
@@ -422,7 +428,7 @@ export class RunnerManager {
     const result = await command("docker", args, { signal, timeout, input });
     if (result.code !== 0)
       throw Error(
-        `격리 환경 명령 실패: docker ${args[0]}. 실행 환경과 저장소 검사를 확인하세요.`,
+        `Isolated environment command failed: docker ${args[0]}. Check the runtime and repository checks.`,
       );
     return result.output.trim();
   }
@@ -430,7 +436,7 @@ export class RunnerManager {
     await this.valid(id);
     await this.update(id, (r) => {
       if (["cancelled", "blocked"].includes(r.status))
-        throw Error("실행이 중단됐습니다.");
+        throw Error("Execution interrupted.");
       r.status = status;
     });
     await this.event(id, message);
@@ -497,12 +503,12 @@ export class RunnerManager {
           )
         )
           throw Error(
-            "승인된 기능 디렉토리 밖의 변경입니다. 범위와 설계를 다시 검토하세요.",
+            "Changes are outside the approved feature directory. Review scope and design again.",
           );
       };
       if (f.dependencies.length)
         throw Error(
-          "선행 기능의 통합을 확인하기 전에는 실행할 수 없습니다. 의존 관계를 정리하고 설계를 재승인하세요.",
+          "Dependencies must be integrated before execution. Update dependencies and approve the design again.",
         );
       const connection = this.vault.get(profile.connectionId);
       const planning = r.runtime!.kind === "planning";
@@ -510,19 +516,21 @@ export class RunnerManager {
         connection.info.version !== profile.connectionVersion ||
         connection.info.testStatus !== "passed"
       )
-        throw Error("AI 연결을 검사하고 해당 연결 버전으로 설계를 승인하세요.");
+        throw Error(
+          "Test the AI connection and approve the design using that connection version.",
+        );
       if (
         (await git(profile.repositoryPath, "rev-parse", profile.baseBranch)) !==
         profile.baseCommit
       )
         throw Error(
-          "기준 브랜치가 변경됐습니다. 실행 프로필과 설계를 갱신하세요.",
+          "Base branch changed. Update execution profile and design.",
         );
       clock = setTimeout(() => abort.abort(), profile.timeoutMinutes * 60000);
       await this.phase(
         id,
         "preparing",
-        "격리된 체크아웃과 테스트 환경을 준비합니다.",
+        "Preparing an isolated checkout and test environment.",
       );
       await this.update(id, (r) => {
         r.runtime!.lease = randomUUID();
@@ -585,7 +593,7 @@ export class RunnerManager {
       const tracked = await git(checkout, "ls-files", "-z");
       if (tracked.includes("\uFFFD"))
         throw Error(
-          "UTF-8 파일 이름만 지원합니다. 저장소 파일 이름을 확인하세요.",
+          "Only UTF-8 filenames are supported. Check repository filenames.",
         );
       const protectedPaths = tracked.split("\0").filter(isProtectedRunnerPath);
       const fingerprint = async () => {
@@ -620,7 +628,7 @@ export class RunnerManager {
           !previous?.runtime?.worktree ||
           previous.runtime.binding !== r.runtime!.binding
         )
-          throw Error("복구할 실행 계약을 확인하세요.");
+          throw Error("Check the recovery execution contract.");
         await git(previous.runtime.worktree, "add", "-A");
         const patch = await git(
           previous.runtime.worktree,
@@ -631,7 +639,7 @@ export class RunnerManager {
         );
         if (patch.length > 180000)
           throw Error(
-            "복구 변경량이 큽니다. 보존된 작업 공간을 직접 검토하세요.",
+            "Recovery changes exceed the limit. Review the preserved workspace manually.",
           );
         if (patch) {
           const applied = await command(
@@ -647,12 +655,11 @@ export class RunnerManager {
               },
             },
           );
-          if (applied.code !== 0)
-            throw Error("체크포인트를 적용하지 못했습니다.");
+          if (applied.code !== 0) throw Error("Could not apply checkpoint.");
         }
         if ((await fingerprint()) !== baseline)
           throw Error(
-            "복구 변경이 필수 검사/설정에 영향을 줍니다. 설계를 재검토하세요.",
+            "Recovery changes affect required checks or configuration. Review the design again.",
           );
       }
       // Dependency preparation is deterministic and separate from the agent. No host home/config is mounted.
@@ -961,7 +968,7 @@ export class RunnerManager {
           budget ?? Infinity,
           profile.budgetUsd - current.runtime!.costUsd,
         );
-        if (remaining <= 0) throw Error("설정한 추정 예산에 도달했습니다.");
+        if (remaining <= 0) throw Error("Estimated budget limit reached.");
         const args = [
           "exec",
           "-i",
@@ -1012,7 +1019,7 @@ export class RunnerManager {
                   lastEvent = Date.now();
                   void this.event(
                     id,
-                    `Claude Code 도구 작업: ${names.join(", ")}`,
+                    `Claude Code tool activity: ${names.join(", ")}`,
                   ).catch(() => {});
                 }
               }
@@ -1029,14 +1036,14 @@ export class RunnerManager {
             r.runtime!.costReported = true;
           });
           if (result.total_cost_usd > remaining)
-            throw Error("에이전트가 할당 예산을 초과했습니다.");
+            throw Error("Agent exceeded its allocated budget.");
         } else if (result && !result.is_error)
           throw Error(
-            "CLI 비용 정보가 없어 자동 실행을 중단했습니다. 청구 상태를 확인하세요.",
+            "CLI cost data is unavailable. Execution stopped; check billing status.",
           );
         if (output.code !== 0 || !result || result.is_error)
           throw Error(
-            "Claude Code가 정상 완료하지 못했습니다. 연결·예산·권한을 확인하세요.",
+            "Claude Code did not complete successfully. Check connection, budget and permissions.",
           );
         return redact(String(result.result ?? ""));
       };
@@ -1053,12 +1060,12 @@ export class RunnerManager {
           target.connection.info.version !== assignment.connectionVersion ||
           target.connection.info.testStatus !== "passed"
         )
-          throw Error("에이전트 연결을 다시 검증하세요.");
+          throw Error("Verify the agent connection again.");
         await gateway(target);
         await createContainer(readonly, target);
         await git(target.checkout, "add", "-A");
         const inputTree = await git(target.checkout, "write-tree");
-        const instructions = `${assignment.instructions}\n\n# 기능 입력\n${prompt}`;
+        const instructions = `${assignment.instructions}\n\n# Feature input\n${prompt}`;
         const execution: AgentExecution = {
           id: randomUUID(),
           assignmentId: assignment.id,
@@ -1084,7 +1091,7 @@ export class RunnerManager {
         await this.update(id, (r) => {
           (r.runtime!.agents ??= []).push(execution);
         });
-        await this.event(id, `${assignment.agent.name} 실행 중`);
+        await this.event(id, `${assignment.agent.name} Running`);
         try {
           let output: string;
           try {
@@ -1094,12 +1101,12 @@ export class RunnerManager {
             await stopTarget(target);
           }
           if (output.length > 60000)
-            throw Error("에이전트 결과가 저장 한도를 넘었습니다.");
+            throw Error("Agent result exceeds the storage limit.");
           await this.valid(id);
           await git(target.checkout, "add", "-A");
           const outputTree = await git(target.checkout, "write-tree");
           if (readonly && outputTree !== inputTree)
-            throw Error("읽기 전용 단계에서 소스가 변경됐습니다.");
+            throw Error("Source changed during a read-only stage.");
           await this.update(id, (r) => {
             Object.assign(
               r.runtime!.agents!.find((a) => a.id === execution.id)!,
@@ -1169,7 +1176,7 @@ export class RunnerManager {
                     .costUsd;
                   const remaining = profile.budgetUsd - cost;
                   if (remaining <= 0)
-                    throw Error("설정한 추정 예산에 도달했습니다.");
+                    throw Error("Estimated budget limit reached.");
                   return remaining / count;
                 }),
               );
@@ -1231,7 +1238,7 @@ export class RunnerManager {
         await this.valid(id);
         abort.signal.throwIfAborted();
         if (!readonly) {
-          await this.event(id, "병렬 구현 결과를 통합합니다.");
+          await this.event(id, "Integrating parallel implementation results.");
           await integrateStage(
             checkout,
             snapshot.tree,
@@ -1257,8 +1264,11 @@ export class RunnerManager {
         agent: {
           id: `default-${stage}`,
           revision: 1,
-          name: stage === "implementation" ? "기본 구현자" : "기본 리뷰어",
-          description: "기존 실행 계약",
+          name:
+            stage === "implementation"
+              ? "Default implementer"
+              : "Default reviewer",
+          description: "Existing execution contract",
           capability:
             stage === "implementation" ? "implementation" : "read-only",
           markdown: "",
@@ -1269,7 +1279,7 @@ export class RunnerManager {
         await this.phase(
           id,
           "reviewing",
-          "저장소를 읽고 요구사항·설계 초안을 작성합니다. 소스는 수정하지 않습니다.",
+          "Inspecting the repository and drafting requirements and design. Source files remain read-only.",
         );
         let draft = { ...f.draft };
         let validDrafts = 0;
@@ -1281,10 +1291,13 @@ export class RunnerManager {
             })
             .parse(JSON.parse(output.replace(/^```(?:json)?\s*|\s*```$/g, "")));
           if (
-            !sections.every((s) => next.body.includes(`## ${s}\n`)) ||
+            !hasDesignSections(next.body) ||
+            hasDesignPlaceholders(next.body) ||
             !/AC[- ]?\d+/i.test(next.requirements)
           )
-            throw Error("설계 항목 또는 완료 기준이 누락됐습니다.");
+            throw Error(
+              "Required design sections or acceptance criteria are missing.",
+            );
           return next;
         };
         for (const stage of ["requirements", "design"] as const) {
@@ -1296,7 +1309,7 @@ export class RunnerManager {
             draft: ReturnType<typeof parseDraft>;
           }[] = [];
           const prompt = () =>
-            `Read the repository without running code. Refine requirements and design. Do not approve or implement. Return ONLY JSON {"requirements":"...", "body":"..."}. Write a concise, plain-language design report under these required headings: ${sections.map((s) => "## " + s).join(", ")}. Cover the decision summary, changed scope and files, exceptions or unresolved questions, AC and testing, and rollback. Requirements must identify AC01 etc.\nCurrent requirements: ${draft.requirements}\nCurrent design: ${draft.body}`;
+            `Read the repository without running code. Refine requirements and design. Do not approve or implement. Return ONLY JSON {"requirements":"...", "body":"..."}. Write a concise, plain-language design report under these required headings: ${sections.map((s) => "## " + sectionLabels[s]).join(", ")}. Cover the decision summary, changed scope and files, exceptions or unresolved questions, AC and testing, and rollback. Requirements must identify AC01 etc.\nCurrent requirements: ${draft.requirements}\nCurrent design: ${draft.body}`;
           await runStage(planAgents, prompt, true, async (a, result) => {
             try {
               const next = parseDraft(result.output);
@@ -1309,13 +1322,13 @@ export class RunnerManager {
                   r.runtime!.agents!.find((a) => a.id === result.executionId)!,
                   {
                     status: "failed",
-                    error: "초안 구조 검증 실패",
+                    error: "Draft structure validation failed",
                   },
                 );
               });
               if (a.required)
                 throw Error(
-                  "필수 설계 에이전트가 유효한 초안을 반환하지 않았습니다.",
+                  "A required design agent returned an invalid draft.",
                 );
             }
           });
@@ -1331,7 +1344,7 @@ export class RunnerManager {
               );
               if (proposals.length > 180000)
                 throw Error(
-                  "병렬 초안이 통합 입력 한도를 넘었습니다. 에이전트 결과를 확인하세요.",
+                  "Parallel drafts exceed the integration input limit. Inspect agent results.",
                 );
               const first = candidates[0].assignment;
               const merged = await runAgent(
@@ -1340,7 +1353,7 @@ export class RunnerManager {
                   required: true,
                   agent: {
                     ...first.agent,
-                    name: `${first.agent.name} · 결과 통합`,
+                    name: `${first.agent.name} · Integrating results`,
                   },
                 },
                 `${prompt()}\nSynthesize ALL independent proposals into one coherent draft. Preserve acceptance criteria, surface disagreements and unresolved issues explicitly. Do not approve.\nPROPOSALS\n${proposals}`,
@@ -1354,18 +1367,23 @@ export class RunnerManager {
                     r.runtime!.agents!.find(
                       (a) => a.id === merged.executionId,
                     )!,
-                    { status: "failed", error: "통합 초안 구조 검증 실패" },
+                    {
+                      status: "failed",
+                      error: "Integrated draft structure validation failed",
+                    },
                   );
                 });
                 throw Error(
-                  "병렬 초안을 통합하지 못했습니다. 기존 초안을 보존합니다.",
+                  "Could not integrate parallel drafts. The existing draft is preserved.",
                 );
               }
             }
           }
         }
         if (!validDrafts)
-          throw Error("유효한 설계 초안이 없어 기존 입력을 보존합니다.");
+          throw Error(
+            "No valid design draft returned. Existing input is preserved.",
+          );
         await this.valid(id);
         await this.store.mutate((w) => {
           const current = w.runs.find((r) => r.id === id)!;
@@ -1376,7 +1394,7 @@ export class RunnerManager {
             current.runtime!.binding !== policyBinding(w, target) ||
             target.draft.revision !== current.runtime!.draftRevision
           )
-            throw Error("초안이 변경됐습니다. 기존 입력을 보존합니다.");
+            throw Error("Draft changed. Existing input is preserved.");
           target.draft = {
             body: draft.body,
             requirements: draft.requirements,
@@ -1385,7 +1403,7 @@ export class RunnerManager {
           target.updatedAt = new Date().toISOString();
           current.status = "completed";
           current.reason =
-            "새 설계 초안을 저장했습니다. 내용을 검토하고 게시한 뒤 본인 승인하세요.";
+            "Design draft saved. Review and publish it, then confirm your approval.";
         });
         return;
       }
@@ -1399,8 +1417,8 @@ export class RunnerManager {
           id,
           attempt ? "repairing" : "implementing",
           attempt
-            ? "검증 실패를 승인 범위 안에서 수정합니다."
-            : "승인한 설계에 따라 Claude Code가 구현합니다.",
+            ? "Repairing verification failures within the approved scope."
+            : "Claude Code is implementing the approved design.",
         );
         await runStage(
           r.runtime!.harness?.agents.filter(
@@ -1412,7 +1430,7 @@ export class RunnerManager {
         );
         if ((await fingerprint()) !== baseline)
           throw Error(
-            "필수 검사·설정·의존성 파일이 변경됐습니다. 설계와 검사 기준 재검토가 필요합니다.",
+            "Required checks, configuration or dependencies changed. Review design and verification criteria again.",
           );
         // Verify the candidate Git tree, never ignored outputs/caches left by the agent.
         await this.docker(["rm", "-f", n.container], abort.signal);
@@ -1422,7 +1440,7 @@ export class RunnerManager {
         await this.phase(
           id,
           "verifying",
-          "고정 검사와 웹 시나리오를 실행합니다.",
+          "Running fixed checks and web scenarios.",
         );
         await git(checkout, "add", "-A");
         await checkScope();
@@ -1452,7 +1470,7 @@ export class RunnerManager {
             // Killing docker exec's client does not kill the container's process.
             // Leave this attempt immediately; finally destroys and verifies it.
             throw Error(
-              `검사 ${check.name} 시간 한도 또는 중단: 컨테이너를 종료하고 후속 검사를 중지합니다.`,
+              `Checks ${check.name} Time limit reached or run stopped. Terminating the container and stopping further checks.`,
             );
           }
         }
@@ -1472,11 +1490,13 @@ export class RunnerManager {
           ];
         });
         if ((await fingerprint()) !== baseline)
-          throw Error("검사 중 필수 테스트/설정이 변경됐습니다.");
+          throw Error(
+            "Required tests or configuration changed during verification.",
+          );
         await git(checkout, "add", "-A");
         if ((await git(checkout, "write-tree")) !== tree)
           throw Error(
-            "검사 도중 소스가 변경되어 증거가 오래됐습니다. 변경 내용을 검토하세요.",
+            "Source changed during checks, invalidating evidence. Review the changes.",
           );
         if (evidence.some((e) => e.status === "failed")) {
           feedback = evidence
@@ -1488,7 +1508,7 @@ export class RunnerManager {
         await this.phase(
           id,
           "reviewing",
-          "읽기 전용 검토자가 설계·diff·완료 기준을 대조합니다.",
+          "Read-only reviewer is comparing design, diff and acceptance criteria.",
         );
         const diff = await git(
           checkout,
@@ -1498,7 +1518,7 @@ export class RunnerManager {
         );
         if (diff.length > 150000)
           throw Error(
-            "변경량이 검토 한도를 넘었습니다. 기능을 나눠 검토하세요.",
+            "Changes exceed the review limit. Split the feature into smaller reviews.",
           );
         const ac = [
           ...new Set(
@@ -1550,7 +1570,7 @@ export class RunnerManager {
                     r.runtime!.agents!.find((a) => a.id === executionId)!,
                     {
                       status: "failed",
-                      error: "리뷰 통과 기준 또는 결과 형식 미충족",
+                      error: "Review criteria or result format not satisfied",
                     },
                   );
                 });
@@ -1569,7 +1589,7 @@ export class RunnerManager {
         await this.valid(id);
         await git(checkout, "add", "-A");
         if ((await git(checkout, "write-tree")) !== tree)
-          throw Error("리뷰 이후 소스가 변경됐습니다.");
+          throw Error("Source changed after review.");
         await checkScope();
         await git(
           checkout,
@@ -1589,10 +1609,10 @@ export class RunnerManager {
             !gate(w, f, approvalBinding(w, f)).eligible ||
             r.runtime!.binding !== approvalBinding(w, f)
           )
-            throw Error("완료 직전 승인이 변경됐습니다.");
+            throw Error("Approval changed before completion.");
           r.status = "ready_for_merge";
           r.reason =
-            "필수 검사와 별도 리뷰를 통과했습니다. 변경 내용 확인 후 기존 병합 절차를 따르세요.";
+            "Required checks and independent review passed. Inspect changes and follow your merge process.";
           r.runtime!.head = head;
         });
         finished = true;
@@ -1600,14 +1620,14 @@ export class RunnerManager {
       }
       if (!finished)
         throw Error(
-          "자동 수정 횟수 한도에 도달했습니다. 실패 근거를 확인하세요.",
+          "Automatic repair limit reached. Inspect failure evidence.",
         );
     } catch (error) {
       await this.update(id, (r) => {
         if (r.status !== "cancelled" && r.status !== "blocked") {
           r.status = abort.signal.aborted ? "interrupted" : "failed";
           r.reason = abort.signal.aborted
-            ? "시간 한도 또는 실행 중단. 변경 내용과 근거를 보존했습니다."
+            ? "Time limit reached or execution interrupted. Changes and evidence are preserved."
             : (error as Error).message;
         }
       }).catch(() => {});
@@ -1626,7 +1646,7 @@ export class RunnerManager {
             if (!["failed", "interrupted"].includes(r.status))
               r.status = "interrupted";
             r.reason =
-              "컨테이너 종료 확인이 필요합니다. Docker 연결이 복구되면 자동으로 다시 확인합니다. 변경과 근거는 보존했습니다.";
+              "Container termination needs confirmation. It will be rechecked when Docker reconnects. Changes and evidence are preserved.";
           }
           r.runtime!.terminationConfirmed = false;
         }).catch(() => {});
@@ -1634,7 +1654,8 @@ export class RunnerManager {
     }
   }
   async retry(id: string) {
-    if (this.active.has(id)) throw Error("이전 실행 종료를 기다리세요.");
+    if (this.active.has(id))
+      throw Error("Wait for the previous run to terminate.");
     await this.validForRetry(id);
     const entityId = `run-${randomUUID().slice(0, 12)}`;
     await this.store.mutate((w) => {
@@ -1648,21 +1669,21 @@ export class RunnerManager {
         !gate(w, f, approvalBinding(w, f)).eligible ||
         old.runtime.binding !== approvalBinding(w, f)
       )
-        throw Error("현재 설계를 다시 승인하세요.");
+        throw Error("Approve the current design again.");
       if (
         w.runs.some(
           (r) => r.featureId === f.id && activeStatuses.includes(r.status),
         )
       )
-        throw Error("진행 중인 실행이 있습니다.");
+        throw Error("A run is already active.");
       const checkpoint = old.runtime.worktree ? id : undefined;
       old.status = "cancelled";
-      old.reason = `${entityId} 실행으로 이어서 재시작했습니다.`;
+      old.reason = `${entityId} Resumed preserved changes in run`;
       w.runs.push({
         ...structuredClone(old),
         id: entityId,
         status: "queued",
-        reason: "보존한 변경으로 새 실행을 준비합니다.",
+        reason: "Start a new run with preserved changes.",
         at: new Date().toISOString(),
         runtime: {
           profile: structuredClone(old.runtime.profile),
@@ -1689,22 +1710,22 @@ export class RunnerManager {
       r.runtime.terminationConfirmed !== true ||
       !["failed", "interrupted"].includes(r.status)
     )
-      throw Error("실패/중단된 실행만 재시도할 수 있습니다.");
+      throw Error("Only failed or interrupted runs can be retried.");
     const f = w.features.find((f) => f.id === r.featureId)!;
     if (r.runtime.kind === "planning")
-      throw Error("계획 작업은 최신 초안에서 새로 요청하세요.");
+      throw Error("Request planning again from the latest draft.");
     if (
       !latestDesign(f) ||
       !gate(w, f, approvalBinding(w, f)).eligible ||
       r.runtime.binding !== approvalBinding(w, f)
     )
-      throw Error("현재 설계를 다시 승인하세요.");
+      throw Error("Approve the current design again.");
     return { w, r, f };
   }
   async diff(id: string) {
     const w = await this.store.read("owner");
     const r = w.runs.find((r) => r.id === id);
-    if (!r?.runtime?.worktree) throw Error("변경 파일이 아직 없습니다.");
+    if (!r?.runtime?.worktree) throw Error("No changed files yet.");
     return git(r.runtime.worktree, "diff", r.runtime.profile.baseCommit, "--");
   }
   async stop() {

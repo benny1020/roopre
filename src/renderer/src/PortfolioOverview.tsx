@@ -157,10 +157,11 @@ export default function PortfolioOverview({
     <div className="content-page portfolio-page" ref={root}>
       <div className="page-heading portfolio-heading">
         <div>
-          <div className="eyebrow">워크스페이스 · 읽기 전용 관제</div>
-          <h1>전역 관제</h1>
+          <div className="eyebrow">Workspace · read-only overview</div>
+          <h1>Workspace overview</h1>
           <p>
-            현재 기록과 다음 판단을 확인하고, 기존 상세 화면으로 이동합니다.
+            Inspect current activity and pending decisions, then open the
+            relevant workspace.
           </p>
         </div>
       </div>
@@ -169,51 +170,52 @@ export default function PortfolioOverview({
         <div className="portfolio-banner" role="status">
           <Clock3 size={15} />{" "}
           {projection.freshness === "stale"
-            ? `오래된 화면 · 마지막 성공 조회 ${acceptedAt ? new Date(acceptedAt).toLocaleTimeString() : "미확인"}`
+            ? `Stale view · last successful sync ${acceptedAt ? new Date(acceptedAt).toLocaleTimeString() : "Unknown"}`
             : filteredProjection.attention.some(
                   (item) => item.reason === "runner",
                 )
-              ? "실행기 연결 확인 필요 · 마지막 기록을 유지합니다"
-              : "조회 시각을 확인하는 중"}
+              ? "Check runner connection · showing last known state"
+              : "Checking sync time"}
         </div>
       )}
-      <div className="portfolio-summary" aria-label="전역 상태 요약">
+      <div className="portfolio-summary" aria-label="Workspace status">
         <span>
           <strong>
             {projection.occupied}/{capacity.maxConcurrentRuns}
           </strong>
           <small>
-            전역 기록상 슬롯 점유 · 선택 범위 큐 {filteredProjection.queued}
+            Global occupied slots · queue in scope {filteredProjection.queued}
           </small>
         </span>
         <span>
           <strong>{filteredProjection.activeAgents}</strong>
-          <small>선택 범위 에이전트 작업 중</small>
+          <small>Active agents in scope</small>
         </span>
         <span>
           <strong>{filteredProjection.attention.length}</strong>
-          <small>선택 범위 판단·확인 사유</small>
+          <small>Decisions and blockers in scope</small>
         </span>
         <span>
           <strong>
             {filteredProjection.reportedRuns
-              ? `$${filteredProjection.reportedCost.toFixed(2)}${filteredProjection.unreportedRuns || filteredProjection.invalidCostRuns ? " 일부" : ""}`
-              : "미보고"}
+              ? `$${filteredProjection.reportedCost.toFixed(2)}${filteredProjection.unreportedRuns || filteredProjection.invalidCostRuns ? " · Partial" : ""}`
+              : "Not reported"}
           </strong>
           <small>
-            선택 범위 보고된 누적 추정 · 보고 {filteredProjection.reportedRuns}
-            개 · 미보고 {filteredProjection.unreportedRuns}개 run
+            Reported estimated cost in scope · reported{" "}
+            {filteredProjection.reportedRuns}· missing{" "}
+            {filteredProjection.unreportedRuns} runs
             {filteredProjection.invalidCostRuns
-              ? ` · 비용 정보 오류 ${filteredProjection.invalidCostRuns}개`
+              ? ` · Cost data error ${filteredProjection.invalidCostRuns}`
               : ""}
           </small>
         </span>
       </div>
       {filteredProjection.terminationPending > 0 && (
         <p className="portfolio-note">
-          <CircleAlert size={14} /> 선택 범위 종료 확인 중{" "}
+          <CircleAlert size={14} /> Awaiting termination confirmation in scope{" "}
           {filteredProjection.terminationPending}
-          개는 슬롯 점유를 유지합니다.
+          still occupy execution slots.
         </p>
       )}
       <section
@@ -221,9 +223,9 @@ export default function PortfolioOverview({
         aria-labelledby="portfolio-attention"
       >
         <div className="section-heading">
-          <h2 id="portfolio-attention">판단할 일</h2>
+          <h2 id="portfolio-attention">Needs attention</h2>
           <small>
-            기능{" "}
+            Feature{" "}
             {
               new Set(
                 filteredProjection.attention
@@ -231,12 +233,12 @@ export default function PortfolioOverview({
                   .filter(Boolean),
               ).size
             }
-            개 · 사유{" "}
+            · reasons{" "}
             {
               filteredProjection.attention.filter((item) => item.ref.featureId)
                 .length
             }
-            개
+            total
           </small>
         </div>
         {filteredProjection.attention
@@ -268,30 +270,30 @@ export default function PortfolioOverview({
             onClick={() => setShowAllAttention((value) => !value)}
           >
             {showAllAttention
-              ? "판단할 일 접기"
-              : `판단할 일 ${filteredProjection.attention.filter((item) => item.ref.featureId).length - 2}개 더 보기`}
+              ? "Collapse decisions"
+              : `Needs attention ${filteredProjection.attention.filter((item) => item.ref.featureId).length - 2} more`}
           </button>
         )}
         {!filteredProjection.attention.some((item) => item.ref.featureId) && (
-          <p className="muted">현재 snapshot에서 판단할 기능이 없습니다.</p>
+          <p className="muted">No features need a decision in this snapshot.</p>
         )}
       </section>
       <div className="portfolio-toolbar">
         <label className="inline-search">
           <Search size={15} />
           <input
-            aria-label="전역 기능 검색"
-            placeholder="프로젝트와 기능 검색"
+            aria-label="Search workspace features"
+            placeholder="Search projects and features"
             value={query}
             onChange={(event) => update({ query: event.target.value })}
           />
         </label>
         <select
-          aria-label="프로젝트 범위"
+          aria-label="Project scope"
           value={projectScope}
           onChange={(event) => update({ projectScope: event.target.value })}
         >
-          <option value="all">전체 프로젝트</option>
+          <option value="all">All projects</option>
           {snapshot.projects.map((project) => (
             <option key={project.id} value={project.id}>
               {project.name}
@@ -303,29 +305,29 @@ export default function PortfolioOverview({
           aria-pressed={attentionOnly}
           onClick={() => update({ attentionOnly: !attentionOnly })}
         >
-          판단·확인 필요만
+          Needs attention only
         </button>
-        <div className="view-tabs" aria-label="관제 보기">
+        <div className="view-tabs" aria-label="Overview view">
           <button
             className={view === "flow" ? "active" : ""}
             aria-pressed={view === "flow"}
             onClick={() => update({ view: "flow" })}
           >
-            프로젝트 흐름
+            Project flow
           </button>
           <button
             className={view === "roles" ? "active" : ""}
             aria-pressed={view === "roles"}
             onClick={() => update({ view: "roles" })}
           >
-            역할별 운영 맵
+            Roles
           </button>
           <button
             className={view === "workroom" ? "active" : ""}
             aria-pressed={view === "workroom"}
             onClick={() => update({ view: "workroom" })}
           >
-            에이전트 작업실
+            Agent workspace
           </button>
         </div>
       </div>
@@ -333,6 +335,7 @@ export default function PortfolioOverview({
         <section className="portfolio-main">
           {view === "flow" ? (
             <Flow
+              projectRunLimit={capacity.maxConcurrentRunsPerProject}
               groups={groups}
               selected={selected}
               collapsed={collapsed}
@@ -362,8 +365,8 @@ export default function PortfolioOverview({
           )}
           {!items.length && (
             <div className="empty">
-              <h3>선택한 범위에 기능이 없습니다</h3>
-              <p>검색어나 필터를 해제해 다른 기록을 확인하세요.</p>
+              <h3>No features in this scope</h3>
+              <p>Clear the search or filters to see other work.</p>
             </div>
           )}
         </section>
@@ -380,12 +383,14 @@ export default function PortfolioOverview({
 
 function Flow({
   groups,
+  projectRunLimit,
   selected,
   collapsed,
   toggle,
   onSelect,
 }: {
   groups: { project: Snapshot["projects"][number]; items: PortfolioItem[] }[];
+  projectRunLimit: number;
   selected?: PortfolioRef;
   collapsed: Set<string>;
   toggle: (id: string) => void;
@@ -395,10 +400,10 @@ function Flow({
     <div
       className="portfolio-flow"
       role="region"
-      aria-label="프로젝트 단계 관제"
+      aria-label="Project stage overview"
     >
       <div className="portfolio-table-head">
-        <span>프로젝트 / 기능</span>
+        <span>Project / Feature</span>
         {phases.map((phase) => (
           <span key={phase}>{phase}</span>
         ))}
@@ -416,7 +421,9 @@ function Flow({
               <ChevronDown size={14} />
             )}{" "}
             <strong>{project.name}</strong>
-            <small>{items.length}개 기능 · 프로젝트 동시 run 1개</small>
+            <small>
+              {items.length} features · Up to {projectRunLimit} runs per project
+            </small>
           </button>
           {!collapsed.has(project.id) &&
             items.map((item) => (
@@ -465,11 +472,11 @@ function RoleMap({
     "review",
   ];
   const labels: Record<string, string> = {
-    requirements: "요구사항",
-    design: "설계",
-    implementation: "구현",
-    verification: "검증",
-    review: "리뷰",
+    requirements: "Requirements",
+    design: "Design",
+    implementation: "Implementation",
+    verification: "Verification",
+    review: "Review",
   };
   return (
     <div className="portfolio-role-map">
@@ -478,7 +485,7 @@ function RoleMap({
         return (
           <section key={stage}>
             <h2>
-              {labels[stage]} <small>실행 {cards.length}</small>
+              {labels[stage]} <small>Run {cards.length}</small>
             </h2>
             {cards.length ? (
               cards.map((agent) => (
@@ -498,22 +505,22 @@ function RoleMap({
                     {agent.projectName} / {agent.featureTitle}
                   </small>
                   <small>
-                    {agent.ref.runId} · 시도 {agent.ref.attempt}
+                    {agent.ref.runId} · Attempt {agent.ref.attempt}
                   </small>
                   <small>
                     {agent.model} · v{agent.revision} ·{" "}
                     {agent.status === "running"
-                      ? "작업 중"
+                      ? "Working"
                       : agent.status === "stopping"
-                        ? "중단 요청 처리 중"
+                        ? "Stopping"
                         : agent.status === "residual"
-                          ? "종료된 run의 잔여 기록"
-                          : "마지막 기록: 실행 중 · 현재 확인 불가"}
+                          ? "Residual records from a finished run"
+                          : "Last known: running · current state unavailable"}
                   </small>
                 </button>
               ))
             ) : (
-              <p className="muted">현재 실행 기록 없음</p>
+              <p className="muted">No current run</p>
             )}
           </section>
         );
@@ -534,9 +541,9 @@ function Inspector({
 }) {
   if (!ref)
     return (
-      <aside className="portfolio-inspector" aria-label="선택한 작업">
+      <aside className="portfolio-inspector" aria-label="Selected work">
         <p className="muted">
-          기능 행 또는 실행 카드를 선택하면 상태 근거와 상세 이동을 표시합니다.
+          Select a feature or run to inspect its status and open its workspace.
         </p>
       </aside>
     );
@@ -551,23 +558,25 @@ function Inspector({
     : undefined;
   if (!feature)
     return (
-      <aside className="portfolio-inspector" aria-label="선택한 작업">
-        <p className="muted">선택한 기능이 현재 snapshot에 없습니다.</p>
+      <aside className="portfolio-inspector" aria-label="Selected work">
+        <p className="muted">
+          This feature is no longer in the current snapshot.
+        </p>
       </aside>
     );
   if (!run)
     return (
-      <aside className="portfolio-inspector" aria-label="선택한 작업">
+      <aside className="portfolio-inspector" aria-label="Selected work">
         <small>
           {
             snapshot.projects.find(
               (project) => project.id === feature.projectId,
             )?.name
           }{" "}
-          / 선택한 기능
+          / Selected feature
         </small>
         <h2>{feature.title}</h2>
-        <p className="portfolio-state">아직 실행 전</p>
+        <p className="portfolio-state">Not started</p>
         <InspectorTabs
           key={JSON.stringify([feature.id, null, null, null])}
           scopeBase={{
@@ -581,13 +590,13 @@ function Inspector({
           work={
             <>
               <dl>
-                <dt>다음 행동</dt>
-                <dd>설계 작성과 승인 조건을 확인하세요.</dd>
-                <dt>요구사항</dt>
+                <dt>Next action</dt>
+                <dd>Check the design and approval requirements.</dd>
+                <dt>Requirements</dt>
                 <dd>{feature.draft.requirements}</dd>
               </dl>
               <button className="soft" onClick={() => onOpen(ref, "design")}>
-                기존 설계·승인 상세 보기 <ArrowUpRight size={13} />
+                Open design and approvals <ArrowUpRight size={13} />
               </button>
             </>
           }
@@ -622,11 +631,11 @@ function Inspector({
     );
   const agents = agentsForProject(snapshot, project?.id);
   return (
-    <aside className="portfolio-inspector" aria-label="선택한 작업">
-      <small>{project?.name} / 선택한 기능</small>
+    <aside className="portfolio-inspector" aria-label="Selected work">
+      <small>{project?.name} / Selected feature</small>
       <h2>{feature.title}</h2>
       <p className="portfolio-state">
-        {runLabel} · {historical ? "과거 실행" : "현재 실행"}
+        {runLabel} · {historical ? "Previous run" : "Current run"}
       </p>
       <InspectorTabs
         key={JSON.stringify([
@@ -673,55 +682,55 @@ function Inspector({
         work={
           <>
             <dl>
-              <dt>다음 담당과 행동</dt>
+              <dt>Next owner and action</dt>
               <dd>
                 {run?.runtime?.cancelRequested
-                  ? "시스템 · 중단 요청 처리와 종료 확인을 기다립니다"
+                  ? "System · waiting for execution to stop and termination to be confirmed"
                   : activeAgent?.status === "running"
-                    ? `에이전트 · ${activeAgent.name} 작업 기록을 확인하세요`
+                    ? `Agent · ${activeAgent.name} Inspect the execution record`
                     : activeAgent?.status === "stale"
-                      ? "시스템 · 마지막 기록은 실행 중이나 현재 상태를 확인할 수 없습니다"
+                      ? "System · last known state is running; current status is unavailable"
                       : `${owner} · ${nextAction}`}
               </dd>
-              <dt>실행 ID</dt>
+              <dt>Run ID</dt>
               <dd>
-                <code title={run?.id}>{run?.id || "실행 정보 없음"}</code>
+                <code title={run?.id}>{run?.id || "No run details"}</code>
               </dd>
-              <dt>선택한 시도</dt>
-              <dd>시도 {current ?? "기록 없음"}</dd>
-              <dt>최근 기록</dt>
-              <dd>{latestEvent ? latestEvent.message : "기록 없음"}</dd>
-              <dt>실행기 마지막 확인</dt>
+              <dt>Selected attempt</dt>
+              <dd>Attempt {current ?? "No records"}</dd>
+              <dt>Latest activity</dt>
+              <dd>{latestEvent ? latestEvent.message : "No records"}</dd>
+              <dt>Runner last seen</dt>
               <dd>
                 {runtime?.heartbeat
                   ? new Date(runtime.heartbeat).toLocaleTimeString()
-                  : "기록 없음"}
+                  : "No records"}
               </dd>
-              <dt>적용 설계·지침</dt>
+              <dt>Design & instructions</dt>
               <dd>
                 {run
-                  ? `${run.designId} · 정책 v${run.policyVersion}`
-                  : "기록 없음"}
+                  ? `${run.designId} · Policy v${run.policyVersion}`
+                  : "No records"}
               </dd>
-              <dt>현재 시도 근거</dt>
+              <dt>Evidence for this attempt</dt>
               <dd>
                 {currentEvidence.length
-                  ? `검사 ${currentEvidence.length}개 · 산출물 ${(runtime?.artifacts || []).filter((artifact) => artifact.attempt === current).length}개`
-                  : "현재 시도 근거 없음"}
+                  ? `Checks ${currentEvidence.length} · Artifacts ${(runtime?.artifacts || []).filter((artifact) => artifact.attempt === current).length}`
+                  : "No evidence for this attempt"}
               </dd>
-              <dt>비용</dt>
+              <dt>Cost</dt>
               <dd>
                 {runtime?.costReported
                   ? Number.isFinite(runtime.costUsd) && runtime.costUsd >= 0
-                    ? `$${runtime.costUsd.toFixed(4)} · 보고된 누적 추정`
-                    : "비용 정보 오류"
-                  : "비용 미보고"}
+                    ? `$${runtime.costUsd.toFixed(4)} · Reported cumulative estimate`
+                    : "Invalid cost data"
+                  : "Cost not reported"}
               </dd>
-              <dt>현재 기록</dt>
+              <dt>Current record</dt>
               <dd>
                 {projection.snapshotAt
                   ? new Date(projection.snapshotAt).toLocaleTimeString()
-                  : "미확인"}
+                  : "Unknown"}
               </dd>
             </dl>
             {run && (
@@ -734,11 +743,11 @@ function Inspector({
                   )
                 }
               >
-                기존 실행·근거 상세 보기 <ArrowUpRight size={13} />
+                Open execution and evidence <ArrowUpRight size={13} />
               </button>
             )}
             <button className="soft" onClick={() => onOpen(ref, "design")}>
-              기존 설계·승인 상세 보기 <ArrowUpRight size={13} />
+              Open design and approvals <ArrowUpRight size={13} />
             </button>
           </>
         }
@@ -827,35 +836,35 @@ function InspectorTabs({
       <div
         className="inspector-tab-list"
         role="tablist"
-        aria-label="작업 상세 맥락"
+        aria-label="Work context"
       >
         <button
           role="tab"
           aria-selected={tab === "work"}
           onClick={() => setTab("work")}
         >
-          작업
+          Work
         </button>
         <button
           role="tab"
           aria-selected={tab === "conversation"}
           onClick={() => setTab("conversation")}
         >
-          대화
+          Conversation
         </button>
         <button
           role="tab"
           aria-selected={tab === "memory"}
           onClick={() => setTab("memory")}
         >
-          기억
+          Memory
         </button>
       </div>
       {(tab === "conversation" || tab === "memory") && (
         <label className="inspector-agent-select">
-          상담 에이전트
+          Agent to consult
           <select
-            aria-label="상담 에이전트"
+            aria-label="Agent to consult"
             value={agentId}
             onChange={(event) => {
               const nextAgentId = event.target.value;
@@ -867,11 +876,11 @@ function InspectorTabs({
               );
             }}
           >
-            {!agents.length && <option value="">배치된 에이전트 없음</option>}
+            {!agents.length && <option value="">No assigned agents</option>}
             {agents.map((agent) => (
               <option key={agent.id} value={agent.id}>
                 {agent.name} · v{agent.revision}
-                {agent.archived ? " · 보관됨" : ""}
+                {agent.archived ? "· Archived" : ""}
               </option>
             ))}
           </select>
@@ -880,16 +889,16 @@ function InspectorTabs({
       {(tab === "conversation" || tab === "memory") &&
         agentAssignments.length > 1 && (
           <label className="inspector-agent-select">
-            배치 맥락
+            Assignment context
             <select
-              aria-label="상담 배치"
+              aria-label="Consultation assignment"
               value={assignmentId}
               onChange={(event) => setAssignmentId(event.target.value)}
             >
-              <option value="">현재 정의만 사용</option>
+              <option value="">Use current definition only</option>
               {agentAssignments.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.stage || "단계"} · {item.id}
+                  {item.stage || "Stage"} · {item.id}
                 </option>
               ))}
             </select>
@@ -897,16 +906,16 @@ function InspectorTabs({
         )}
       {(tab === "conversation" || tab === "memory") && (
         <label className="inspector-agent-select">
-          대화 범위
+          Conversation scope
           <select
-            aria-label="대화 범위"
+            aria-label="Conversation scope"
             value={projectWide ? "project" : "feature"}
             onChange={(event) =>
               setProjectWide(event.target.value === "project")
             }
           >
-            <option value="feature">이 기능</option>
-            <option value="project">프로젝트 전체</option>
+            <option value="feature">This feature</option>
+            <option value="project">Entire project</option>
           </select>
         </label>
       )}
@@ -942,7 +951,7 @@ function InspectorTabs({
           archived={agent.archived}
           onSaveTurn={(turn) => {
             setMemorySeed({
-              title: "대화에서 확인한 작업 기억",
+              title: "Confirmed work memory",
               body: turn.answer || turn.input,
               sourceRef: {
                 type: "conversation",
@@ -961,8 +970,8 @@ function InspectorTabs({
       )}
       {tab === "conversation" && !agent && (
         <p className="muted">
-          이 프로젝트에 설정된 에이전트가 없습니다. 배치 관리에서 역할을
-          연결하세요.
+          No agents are configured for this project. Assign roles in workflow
+          settings.
         </p>
       )}
       {tab === "memory" && (

@@ -66,7 +66,7 @@ export function parseDiff(patch: string): DiffFile[] {
     if (text.startsWith("diff --git ") || !file) {
       file = {
         id: text,
-        path: text.startsWith("diff --git ") ? text.slice(11) : "변경 출력",
+        path: text.startsWith("diff --git ") ? text.slice(11) : "Change output",
         lines: [],
         additions: 0,
         removals: 0,

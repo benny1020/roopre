@@ -9,7 +9,7 @@ export async function runBatches<T, R>(
   signal: AbortSignal,
 ): Promise<R[]> {
   if (!Number.isInteger(concurrency) || concurrency < 1)
-    throw Error("동시 실행 한도 오류");
+    throw Error("Invalid execution capacity");
   const results: R[] = [];
   for (let offset = 0; offset < items.length; offset += concurrency) {
     signal.throwIfAborted();
@@ -95,7 +95,7 @@ export async function integrateStage(
           previous.startsWith(path + "/")
         )
           throw Error(
-            `병렬 구현 충돌: ${name} / ${worker.name} · ${path}. 각 작업 공간을 보존했습니다. 역할 범위를 나누거나 순차 실행으로 변경하세요.`,
+            `Parallel implementation conflict: ${name} / ${worker.name} · ${path}. Each workspace is preserved. Separate agent scopes or use sequential execution.`,
           );
     }
     for (const path of paths) claimed.set(path, worker.name);
@@ -111,11 +111,11 @@ export async function integrateStage(
   if (!patches.length) return;
   await git(checkout, "add", "-A");
   if ((await git(checkout, "write-tree")) !== inputTree)
-    throw Error("통합 대상 소스가 단계 시작 이후 변경됐습니다.");
+    throw Error("Integration source changed after the stage started.");
   const patch = patches.join("");
   if (patch.length > 180000)
     throw Error(
-      "병렬 변경량이 통합 한도를 넘었습니다. 작업 공간을 확인하세요.",
+      "Parallel changes exceed the integration limit. Inspect the workspaces.",
     );
   // Without --reject, git apply checks every hunk before modifying any files.
   const result = await command(
@@ -133,6 +133,6 @@ export async function integrateStage(
   );
   if (result.code !== 0)
     throw Error(
-      "병렬 결과를 통합하지 못했습니다. 개별 작업 공간을 보존했습니다.",
+      "Could not integrate parallel results. Individual workspaces are preserved.",
     );
 }

@@ -16,31 +16,30 @@ export default function RunOverview({
     <div className="content-page execution-overview">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">전체 프로젝트 · 실행기</div>
-          <h1>실행 현황</h1>
+          <div className="eyebrow">All projects · Runner</div>
+          <h1>Execution</h1>
           <p>
-            전체 최대 {capacity.maxConcurrentRuns}개 · 프로젝트당 최대{" "}
-            {capacity.maxConcurrentRunsPerProject}개 동시 실행 · 단계당 최대{" "}
-            {capacity.maxAgentsPerStage}개 에이전트 병렬
+            Up to {capacity.maxConcurrentRuns} runs · Up to{" "}
+            {capacity.maxConcurrentRunsPerProject} per project · Up to{" "}
+            {capacity.maxAgentsPerStage} parallel agents per stage
           </p>
         </div>
         <span className="work-state active">
           <i />
-          {runs.filter((r) => activeStatuses.includes(r.status)).length}개 진행
-          중
+          {runs.filter((r) => activeStatuses.includes(r.status)).length} active
         </span>
       </div>
       {!runs.length ? (
-        <Empty title="아직 실행한 작업이 없습니다">
-          기능의 설계와 승인 조건을 확인하고 개발을 시작하세요.
+        <Empty title="No runs yet">
+          Review and approve a feature's design, then start implementation.
         </Empty>
       ) : (
         <div className="run-table">
           <div className="run-table-heading">
-            <span>프로젝트 / 기능</span>
-            <span>상태</span>
-            <span>현재 시도 검사</span>
-            <span>최근 확인</span>
+            <span>Project / Feature</span>
+            <span>Status</span>
+            <span>Current-attempt checks</span>
+            <span>Last seen</span>
           </div>
           {runs.map((run) => {
             const f = snapshot.features.find((f) => f.id === run.featureId);
@@ -59,7 +58,7 @@ export default function RunOverview({
                   <strong>{f.title}</strong>
                   <small>
                     {snapshot.projects.find((p) => p.id === f.projectId)?.name}{" "}
-                    · {run.id.slice(0, 8)} · 시도 {run.runtime?.attempt ?? 1}
+                    · {run.id.slice(0, 8)} · Attempt {run.runtime?.attempt ?? 1}
                   </small>
                 </span>
                 <span
@@ -69,8 +68,8 @@ export default function RunOverview({
                   {runNames[run.status]}
                 </span>
                 <span>
-                  {checks.filter((e) => e.status === "passed").length} 통과 /{" "}
-                  {checks.filter((e) => e.status === "failed").length} 실패
+                  {checks.filter((e) => e.status === "passed").length} passed /{" "}
+                  {checks.filter((e) => e.status === "failed").length} Failed
                 </span>
                 <span>
                   {new Date(

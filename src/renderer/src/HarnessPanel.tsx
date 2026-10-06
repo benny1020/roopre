@@ -131,7 +131,7 @@ export default function HarnessPanel({
       );
     } catch {
       setError(
-        "편집 초안을 이 기기에 보관하지 못했습니다. 화면을 닫기 전에 개발 흐름을 저장하세요.",
+        "Your workflow draft could not be saved locally. Save the workflow before closing this window.",
       );
     }
   }, [flow, flowBase, projectId, snapshot.teamId]);
@@ -178,7 +178,7 @@ export default function HarnessPanel({
     name: "",
     description: "",
     capability: "read-only",
-    markdown: "# 역할\n\n# 검토 기준\n",
+    markdown: "# Role\n\n# Review criteria\n",
     archived: false,
   });
   const applyDefault = () =>
@@ -186,17 +186,17 @@ export default function HarnessPanel({
       if (locked) return;
       const definitions = stages.map((stage) => ({
         ...fresh(),
-        name: `${stageNames[stage]} 에이전트`,
+        name: `${stageNames[stage]} Agents`,
         projectId,
         capability:
           stage === "implementation"
             ? ("implementation" as const)
             : ("read-only" as const),
-        description: `${stageNames[stage]} 단계의 기본 역할`,
+        description: `${stageNames[stage]} default stage role`,
         markdown:
           stage === "implementation"
-            ? "승인된 설계 범위에서 구현한다. 필수 검사와 승인 규칙을 변경하지 않는다."
-            : "요구사항·설계·지침과 실제 저장소 근거를 대조한다. 확인하지 못한 항목은 통과로 보고하지 않는다.",
+            ? "Implement within the approved design. Do not change required checks or approval rules."
+            : "Compare requirements, design and instructions with repository evidence. Never report an unverified check as passed.",
       }));
       for (const agent of definitions)
         await send({
@@ -222,15 +222,15 @@ export default function HarnessPanel({
       });
       setFlow(next);
       setFlowBase(next.revision);
-      setNotice("기본 흐름을 적용했습니다.");
+      setNotice("Default workflow applied.");
       setResetDefault(false);
     });
   return (
     <div className="content-page harness-panel">
       <div className="page-heading">
         <div>
-          <h1>에이전트 · 개발 흐름</h1>
-          <p>역할을 Markdown으로 정의하고 프로젝트의 각 단계에 배치하세요.</p>
+          <h1>Agents & workflow</h1>
+          <p>Define agents in Markdown and assign them to workflow stages.</p>
         </div>
         <button
           className="primary"
@@ -241,7 +241,7 @@ export default function HarnessPanel({
             setPreview(false);
           }}
         >
-          에이전트 만들기
+          Create agent
         </button>
       </div>
       {error && !editing && !resetDefault && (
@@ -252,7 +252,7 @@ export default function HarnessPanel({
       {notice && <p role="status">{notice}</p>}
       {editing && (
         <Dialog
-          label="에이전트 편집"
+          label="Edit agent"
           onClose={() => {
             if (!busy) {
               setEditing(undefined);
@@ -263,9 +263,9 @@ export default function HarnessPanel({
         >
           <section
             className="runtime-card agent-editor"
-            aria-label="에이전트 편집"
+            aria-label="Edit agent"
           >
-            <h2>{editing.name || "새 에이전트"}</h2>
+            <h2>{editing.name || "New agent"}</h2>
             {error && (
               <p className="error-banner" role="alert">
                 {error}
@@ -288,7 +288,7 @@ export default function HarnessPanel({
             />
             <div className="runtime-grid">
               <label className="field">
-                에이전트 이름
+                Agent name
                 <input
                   value={editing.name}
                   onChange={(e) =>
@@ -297,7 +297,7 @@ export default function HarnessPanel({
                 />
               </label>
               <label className="field">
-                공유 범위
+                Scope
                 <select
                   value={editing.projectId ?? ""}
                   onChange={(e) =>
@@ -307,7 +307,7 @@ export default function HarnessPanel({
                     })
                   }
                 >
-                  <option value="">전역</option>
+                  <option value="">Global</option>
                   {snapshot.projects.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -316,7 +316,7 @@ export default function HarnessPanel({
                 </select>
               </label>
               <label className="field">
-                권한
+                Permissions
                 <select
                   value={editing.capability}
                   onChange={(e) =>
@@ -327,12 +327,16 @@ export default function HarnessPanel({
                     })
                   }
                 >
-                  <option value="read-only">읽기 전용 · 설계/검증/리뷰</option>
-                  <option value="implementation">코드 수정 · 구현</option>
+                  <option value="read-only">
+                    Read-only · planning, verification & review
+                  </option>
+                  <option value="implementation">
+                    Write access · implementation
+                  </option>
                 </select>
               </label>
               <label className="field">
-                모델 연결
+                Model connection
                 <select
                   value={editing.connectionId ?? ""}
                   onChange={(e) =>
@@ -345,7 +349,7 @@ export default function HarnessPanel({
                     })
                   }
                 >
-                  <option value="">프로젝트 연결 상속</option>
+                  <option value="">Inherit project connection</option>
                   {connections.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} · {c.model}
@@ -355,7 +359,7 @@ export default function HarnessPanel({
               </label>
             </div>
             <label className="field">
-              설명
+              Description
               <input
                 value={editing.description}
                 onChange={(e) =>
@@ -365,7 +369,7 @@ export default function HarnessPanel({
             </label>
             <div className="button-row">
               <button onClick={() => setPreview(!preview)}>
-                {preview ? "원문 편집" : "미리보기"}
+                {preview ? "Source" : "Preview"}
               </button>
               {window.roopre?.readMarkdown && (
                 <button
@@ -380,7 +384,7 @@ export default function HarnessPanel({
                     })
                   }
                 >
-                  Markdown 가져오기
+                  Import Markdown
                 </button>
               )}
             </div>
@@ -388,9 +392,9 @@ export default function HarnessPanel({
               <MarkdownPreview text={editing.markdown} />
             ) : (
               <label className="field">
-                Markdown 지침
+                Markdown instructions
                 <textarea
-                  aria-label="Markdown 지침"
+                  aria-label="Markdown instructions"
                   className="instruction-editor"
                   value={editing.markdown}
                   onChange={(e) =>
@@ -407,17 +411,17 @@ export default function HarnessPanel({
                   setEditing({ ...editing, archived: e.target.checked })
                 }
               />
-              보관 처리 · 과거 실행 기록은 유지
+              Archive · preserve run history
             </label>
             {editingLocked && (
               <p className="error-banner">
-                공유 표준에서 관리하거나 실행 중인 역할은 여기서 저장할 수
-                없습니다. 실행을 종료하거나 하네스 표준에서 수정하세요.
+                This agent is managed by a shared standard or is currently
+                running. Edit the standard or wait for the run to finish.
               </p>
             )}
             <p className="muted">
-              사용 중인 정의를 변경하면 관련 설계의 승인이 해제되고 실행이
-              중단됩니다.
+              Changing an active definition invalidates affected approvals and
+              interrupts execution.
             </p>
             <div className="button-row">
               <button
@@ -457,15 +461,15 @@ export default function HarnessPanel({
                         ],
                       }));
                       setNotice(
-                        "에이전트를 저장하고 초안에 배치했습니다. 개발 흐름을 저장해 적용하세요.",
+                        "Agent saved and added to the draft. Save the workflow to apply it.",
                       );
-                    } else setNotice("에이전트 버전을 저장했습니다.");
+                    } else setNotice("Agent version saved.");
                     setPendingStage(undefined);
                     setEditing(undefined);
                   })
                 }
               >
-                에이전트 저장
+                Save agent
               </button>
               <button
                 onClick={() => {
@@ -473,7 +477,7 @@ export default function HarnessPanel({
                   setPendingStage(undefined);
                 }}
               >
-                편집 닫기
+                Close editor
               </button>
             </div>
           </section>
@@ -482,7 +486,7 @@ export default function HarnessPanel({
       <section className="runtime-card workflow-settings">
         <div className="workflow-project-toolbar">
           <label className="field">
-            개발 흐름 프로젝트
+            Workflow project
             <select
               value={projectId}
               onChange={(e) => selectProject(e.target.value)}
@@ -504,27 +508,25 @@ export default function HarnessPanel({
                   : void applyDefault()
               }
             >
-              기본 흐름 적용
+              Use default workflow
             </button>
           )}
         </div>
         {!project && (
-          <p>
-            프로젝트를 먼저 만드세요. 전역 에이전트는 지금 작성할 수 있습니다.
-          </p>
+          <p>Create a project first. Global agents can be defined now.</p>
         )}
         {project && (
           <>
             {activeProject && (
               <p className="error-banner">
-                이 프로젝트의 실행이 종료될 때까지 흐름 편집을 잠급니다. 종료 후
-                새 버전을 저장하세요.
+                Workflow editing is locked while this project has an active run.
+                Save a new version after execution ends.
               </p>
             )}
             {project.harness && (
               <p className="muted">
-                공유 표준으로 관리하는 흐름입니다. 하네스 설정에서 새 버전을
-                가져오거나 편집하세요.
+                This workflow is managed by a shared standard. Import or edit a
+                new version in Harness settings.
               </p>
             )}
             <WorkflowEditor
@@ -545,25 +547,26 @@ export default function HarnessPanel({
               }}
             />
             <details className="workflow-policy-hint">
-              <summary>병렬 실행과 승인 규칙</summary>{" "}
+              <summary>Parallel execution & approval gates</summary>{" "}
               <p className="muted">
-                단계 안에서는 기본 병렬로 최대 {capacity.maxAgentsPerStage}개씩
-                실행하며, 모두 끝나면 다음 단계로 넘어갑니다. 이전 에이전트
-                결과가 필요한 단계는 순차를 선택하세요. 구현 파일이 겹치면
-                통합을 중단하고 결과를 보존합니다. 실행 방식을 저장하면 설계를
-                재승인해야 합니다.
+                Each stage runs agents in parallel, up to{" "}
+                {capacity.maxAgentsPerStage} at a time. The next stage waits for
+                every agent. Use sequential execution when agents depend on
+                earlier results. Conflicting implementation changes stop
+                integration and preserve each result. Saving execution changes
+                requires design approval again.
               </p>
             </details>
             <div className="workflow-savebar">
               <p className="muted">
                 {dirty
-                  ? "저장하지 않은 초안 · 이 기기에 자동 보관됨"
-                  : "저장된 흐름과 동일"}{" "}
-                · 기준 v{flowBase}
+                  ? "Unsaved draft · saved locally"
+                  : "Matches saved workflow"}{" "}
+                · Base v{flowBase}
               </p>
               {flowIssues.length > 0 && (
                 <p className="muted" role="status">
-                  저장 전 확인: {flowIssues.join(" ")}
+                  Before saving: {flowIssues.join(" ")}
                 </p>
               )}
               <div className="button-row">
@@ -581,11 +584,11 @@ export default function HarnessPanel({
                       });
                       setFlow(next);
                       setFlowBase(next.revision);
-                      setNotice("개발 흐름을 저장했습니다.");
+                      setNotice("Workflow saved.");
                     })
                   }
                 >
-                  개발 흐름 저장
+                  Save workflow
                 </button>
                 <button
                   onClick={() => {
@@ -602,7 +605,7 @@ export default function HarnessPanel({
                     }
                   }}
                 >
-                  적용 지침 확인
+                  Inspect instructions
                 </button>
                 <button
                   onClick={() => {
@@ -613,7 +616,7 @@ export default function HarnessPanel({
                     }
                   }}
                 >
-                  최신 저장본 불러오기
+                  Reload saved version
                 </button>
               </div>
             </div>
@@ -622,45 +625,46 @@ export default function HarnessPanel({
       </section>
       {resetDefault && (
         <Dialog
-          label="기본 흐름으로 교체"
+          label="Reset to default workflow"
           onClose={() => {
             if (!busy) setResetDefault(false);
           }}
           className="command-dialog graph-picker"
         >
-          <h2>현재 흐름을 기본 역할 5개로 교체할까요?</h2>
+          <h2>Replace this workflow with the five default roles?</h2>
           {error && (
             <p className="error-banner" role="alert">
               {error}
             </p>
           )}
           <p>
-            현재 배치와 단계 지침을 바꾸고 관련 설계의 승인을 해제합니다. 기존
-            에이전트 정의와 실행 기록은 유지됩니다.
+            Stage assignments and instructions will be replaced, invalidating
+            affected design approvals. Agent definitions and run history are
+            preserved.
           </p>
           <div className="button-row">
             <button disabled={busy} onClick={() => setResetDefault(false)}>
-              계속 편집
+              Keep editing
             </button>
             <button disabled={locked} onClick={() => void applyDefault()}>
-              기본 흐름으로 교체
+              Reset to default workflow
             </button>
           </div>
         </Dialog>
       )}
       {discard && (
         <Dialog
-          label="편집 초안 버리기"
+          label="Discard workflow draft"
           onClose={() => setDiscard(false)}
           className="command-dialog graph-picker"
         >
-          <h2>저장하지 않은 흐름 변경을 버릴까요?</h2>
+          <h2>Discard unsaved workflow changes?</h2>
           <p>
-            현재 프로젝트의 로컬 초안을 지우고 최신 저장본을 불러옵니다. 다른
-            프로젝트의 초안은 유지됩니다.
+            Remove this project's local draft and reload the saved workflow.
+            Other project drafts are preserved.
           </p>
           <div className="button-row">
-            <button onClick={() => setDiscard(false)}>계속 편집</button>
+            <button onClick={() => setDiscard(false)}>Keep editing</button>
             <button
               onClick={() => {
                 localStorage.removeItem(draftKey(projectId));
@@ -668,13 +672,13 @@ export default function HarnessPanel({
                 setDiscard(false);
               }}
             >
-              초안 버리고 불러오기
+              Discard and reload
             </button>
           </div>
         </Dialog>
       )}
       <details className="agent-library-section">
-        <summary>에이전트 라이브러리 · {agents.length}개</summary>
+        <summary>Agent library · {agents.length}</summary>
         <div className="agent-library">
           {agents.map((a) => (
             <article className="runtime-card" key={a.id}>
@@ -684,13 +688,13 @@ export default function HarnessPanel({
                   v{a.revision} ·{" "}
                   {a.projectId
                     ? snapshot.projects.find((p) => p.id === a.projectId)?.name
-                    : "전역"}{" "}
+                    : "Global"}{" "}
                   ·{" "}
                   {a.archived
-                    ? "보관됨"
+                    ? "Archived"
                     : a.capability === "implementation"
-                      ? "코드 수정"
-                      : "읽기 전용"}
+                      ? "Write access"
+                      : "Read-only"}
                 </small>
               </div>
               <p>{a.description}</p>
@@ -703,7 +707,7 @@ export default function HarnessPanel({
                     setPreview(false);
                   }}
                 >
-                  편집
+                  Edit
                 </button>
                 <button
                   disabled={busy}
@@ -713,13 +717,13 @@ export default function HarnessPanel({
                       ...a,
                       id: crypto.randomUUID(),
                       revision: 1,
-                      name: `${a.name} 복사`,
+                      name: `${a.name} copy`,
                       archived: false,
                     });
                     setPreview(false);
                   }}
                 >
-                  복제
+                  Duplicate
                 </button>
                 {window.roopre?.exportAgent && (
                   <button
@@ -730,7 +734,7 @@ export default function HarnessPanel({
                       })
                     }
                   >
-                    Markdown 내보내기
+                    Export Markdown
                   </button>
                 )}
               </div>
@@ -739,14 +743,14 @@ export default function HarnessPanel({
         </div>
         {!agents.length && (
           <p className="muted">
-            아직 에이전트가 없습니다. 직접 만들거나 프로젝트에 기본 흐름을
-            적용하세요.
+            No agents yet. Create one or apply the default workflow to a
+            project.
           </p>
         )}
       </details>
       {composed && (
         <section className="runtime-card">
-          <h2>현재 편집 중인 흐름의 지침 미리보기</h2>
+          <h2>Instructions for the workflow draft</h2>
           <MarkdownPreview text={composed} />
         </section>
       )}

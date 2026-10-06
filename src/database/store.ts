@@ -37,7 +37,7 @@ export class Store {
     // would terminate the app; failed foreground operations still reject.
     this.pool.on("error", () => {
       console.error(
-        "PostgreSQL 연결이 끊어졌습니다. 다음 요청에서 재연결합니다.",
+        "PostgreSQL disconnected. The next request will reconnect.",
       );
     });
   }
@@ -81,7 +81,11 @@ export class Store {
     if (
       !state.people.some((p) => p.id === actorId && p.teamId === state.teamId)
     )
-      throw new DomainError("forbidden", "이 팀에 접근할 수 없습니다.", 403);
+      throw new DomainError(
+        "forbidden",
+        "You do not have access to this workspace.",
+        403,
+      );
   }
   async read(actorId: string): Promise<Snapshot> {
     // Read state and sequence in the same statement snapshot to avoid missing an event during subscription.
@@ -147,7 +151,7 @@ export class Store {
         if (prior.actor_id !== actorId || prior.digest !== digest)
           throw new DomainError(
             "idempotency_conflict",
-            "이미 사용된 요청 ID입니다.",
+            "This request ID has already been used.",
           );
         await client.query("COMMIT");
         return prior.response;
@@ -202,8 +206,7 @@ export class Store {
     command: Extract<Command, { type: "save_memory" }>,
   ) {
     const project = state.projects.find((p) => p.id === command.projectId);
-    if (!project)
-      throw new DomainError("not_found", "프로젝트가 없습니다.", 404);
+    if (!project) throw new DomainError("not_found", "Project not found.", 404);
     const existing = (project.memories ?? []).find(
       (memory) => memory.id === command.memory.id,
     );
@@ -255,7 +258,7 @@ export class Store {
         if (!row)
           throw new DomainError(
             "forbidden",
-            "대화 출처가 기억 범위와 일치하지 않습니다.",
+            "Conversation source does not match the memory scope.",
             403,
           );
         continue;
@@ -282,7 +285,7 @@ export class Store {
       )
         throw new DomainError(
           "forbidden",
-          "실행 출처가 기억 범위와 일치하지 않습니다.",
+          "Run source does not match the memory scope.",
           403,
         );
     }
@@ -355,7 +358,7 @@ export class Store {
           [threadId, this.key],
         )
       ).rows[0];
-      if (!thread) throw Error("대화를 찾을 수 없습니다.");
+      if (!thread) throw Error("Conversation not found.");
       assertMemoryMutationAllowed(state, thread.project_id);
       const project = state.projects.find((p) => p.id === thread.project_id)!;
       const eligible = (project.memories ?? []).filter(
@@ -366,7 +369,7 @@ export class Store {
           ),
       );
       if (eligible.length !== deactivateMemoryIds.length)
-        throw Error("중지할 파생 기억 범위를 확인하세요.");
+        throw Error("Check the scope of derived memories to deactivate.");
       const pending = Number(
         (
           await client.query(
@@ -375,7 +378,8 @@ export class Store {
           )
         ).rows[0].n,
       );
-      if (pending) throw Error("진행 중인 상담을 취소한 뒤 삭제하세요.");
+      if (pending)
+        throw Error("Stop the active consultation before deleting it.");
       const digests = (
         await client.query(
           "SELECT request_id,input_digest FROM conversation_turns WHERE thread_id=$1",

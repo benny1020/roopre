@@ -8,7 +8,7 @@ import { fuses } from "../distribution/fuses.mjs";
 const metadata = JSON.parse(await readFile("package.json", "utf8"));
 const app = resolve(
   process.argv[2] ??
-    `release/${metadata.version}/루프리-darwin-arm64/루프리.app`,
+    `release/${metadata.version}/${metadata.productName}-darwin-arm64/${metadata.productName}.app`,
 );
 const archive = join(app, "Contents/Resources/app.asar");
 const files = listPackage(archive);
