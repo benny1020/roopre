@@ -60,7 +60,7 @@ export async function installDesktop() {
     {
       encrypt: (s) => {
         if (!safeStorage.isEncryptionAvailable())
-          throw Error("macOS 비밀 저장 기능을 사용할 수 없습니다.");
+          throw Error("macOS secret storage is unavailable.");
         return safeStorage.encryptString(s);
       },
       decrypt: (b) => safeStorage.decryptString(b),
@@ -72,7 +72,7 @@ export async function installDesktop() {
     {
       encrypt: (s) => {
         if (!safeStorage.isEncryptionAvailable())
-          throw Error("macOS 비밀 저장 기능을 사용할 수 없습니다.");
+          throw Error("macOS secret storage is unavailable.");
         return safeStorage.encryptString(s);
       },
       decrypt: (b) => safeStorage.decryptString(b),
@@ -91,7 +91,7 @@ export async function installDesktop() {
     try {
       await next.init();
       await interruptPendingConversations(next.pool, next.key);
-      if (closing) throw Error("앱 종료 중입니다.");
+      if (closing) throw Error("App is closing.");
       await nextRunner.init();
     } catch (error) {
       await nextRunner.stop();
@@ -107,7 +107,7 @@ export async function installDesktop() {
     {
       encrypt: (s) => {
         if (!safeStorage.isEncryptionAvailable())
-          throw Error("macOS 비밀 저장 기능을 사용할 수 없습니다.");
+          throw Error("macOS secret storage is unavailable.");
         return safeStorage.encryptString(s);
       },
       decrypt: (b) => safeStorage.decryptString(b),
@@ -138,9 +138,9 @@ export async function installDesktop() {
           !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
         )
       )
-        return { ok: false, error: "허용되지 않은 앱 요청입니다." };
+        return { ok: false, error: "App request is not allowed." };
       try {
-        if (closing) throw Error("앱 종료 중입니다.");
+        if (closing) throw Error("App is closing.");
         let value: unknown;
         if (
           migrating &&
@@ -152,7 +152,7 @@ export async function installDesktop() {
           ].includes(operation)
         )
           throw Error(
-            "데이터 이전 중입니다. 완료될 때까지 변경을 기다려 주세요.",
+            "Data migration is in progress. Wait before making changes.",
           );
         if (
           ![
@@ -176,11 +176,11 @@ export async function installDesktop() {
           ].includes(operation) &&
           !store
         )
-          throw Error("시작 가이드에서 환경을 먼저 준비하세요.");
+          throw Error("Prepare the environment in Getting started first.");
         switch (operation) {
           case "refineAgent":
             if (refining)
-              throw Error("진행 중인 AI 초안 요청이 끝날 때까지 기다리세요.");
+              throw Error("Wait for the active AI draft request to finish.");
             refining = true;
             try {
               value = await refineAgent(vault, payload);
@@ -216,7 +216,7 @@ export async function installDesktop() {
               value = harnessLibrary.add(result.package, result.source);
             } else if (input.kind === "folder") {
               const chosen = await dialog.showOpenDialog(sender, {
-                title: "harness.json이 있는 폴더 선택",
+                title: "Choose a folder containing harness.json",
                 properties: ["openDirectory"],
               });
               value = chosen.canceled
@@ -226,15 +226,16 @@ export async function installDesktop() {
                     { kind: "folder" },
                   );
             } else {
-              if (!store) throw Error("프로젝트 환경을 먼저 준비하세요.");
+              if (!store) throw Error("Prepare the project environment first.");
               const w = await store.read("owner");
               const p = w.projects.find((p) => p.id === input.projectId);
-              if (!p) throw Error("프로젝트가 없습니다.");
+              if (!p) throw Error("Project not found.");
               value = harnessLibrary.add(
                 exportProject(w, p, {
                   id: p.harness?.package.id ?? `project.${p.id}`,
                   version: p.harness?.package.version ?? "1.0.0",
-                  name: p.harness?.package.name ?? `${p.name} 개발 표준`,
+                  name:
+                    p.harness?.package.name ?? `${p.name} Development standard`,
                 }),
                 { kind: "editor" },
               );
@@ -246,7 +247,7 @@ export async function installDesktop() {
               z.string().uuid().parse(payload),
             );
             const chosen = await dialog.showOpenDialog(sender, {
-              title: "하네스 폴더를 만들 위치 선택",
+              title: "Choose an export location",
               properties: ["openDirectory", "createDirectory"],
             });
             value = chosen.canceled
@@ -299,7 +300,7 @@ export async function installDesktop() {
                   r.runtime?.terminationConfirmed === false,
               )
             )
-              throw Error("진행 중인 실행을 종료하고 다시 시도하세요.");
+              throw Error("End active runs and try again.");
             migrating = true;
             let pending: Store | undefined;
             try {
@@ -379,7 +380,7 @@ export async function installDesktop() {
             const agent = latestAgents(await store!.read("owner")).find(
               (a) => a.id === z.string().uuid().parse(payload),
             );
-            if (!agent) throw Error("에이전트가 없습니다.");
+            if (!agent) throw Error("Agent not found.");
             const chosen = await dialog.showSaveDialog(sender, {
               defaultPath: "roopre-agent.md",
               filters: [{ name: "Markdown", extensions: ["md"] }],
@@ -395,7 +396,7 @@ export async function installDesktop() {
               );
               try {
                 if (!(await file.stat()).isFile())
-                  throw Error("일반 파일만 저장할 수 있습니다.");
+                  throw Error("Only regular files can be saved.");
                 await file.truncate(0);
                 await file.writeFile(exportAgentMarkdown(agent));
               } finally {
@@ -460,18 +461,18 @@ export async function installDesktop() {
               ).info.version;
             }
             if (c.type === "apply_harness_package")
-              throw Error("하네스 미리보기 적용 경로를 사용하세요.");
+              throw Error("Apply standards through the harness preview.");
             if (c.type === "configure_execution")
-              throw Error("저장소 선택 경로를 사용하세요.");
+              throw Error("Use the repository selection flow.");
             if (c.type === "review" && c.decision === "approve") {
               const w = await store!.read("owner");
               const f = w.features.find((f) => f.id === c.featureId);
               if (!f || f.designs.at(-1)?.id !== c.designId)
-                throw Error("최신 설계를 확인하세요.");
+                throw Error("Check the latest design.");
               const binding = approvalBinding(w, f);
               if (c.confirmationBinding !== binding)
                 throw Error(
-                  "설계 보고서가 변경됐습니다. 최신 내용을 읽고 다시 승인하세요.",
+                  "Design brief changed. Read the latest version and approve again.",
                 );
               value = await store!.execute("owner", randomUUID(), c, {
                 binding,
@@ -509,7 +510,7 @@ export async function installDesktop() {
           case "chooseRepository": {
             const result = await dialog.showOpenDialog(sender, {
               properties: ["openDirectory"],
-              title: "개발할 Git 저장소 선택",
+              title: "Choose a Git repository",
             });
             if (result.canceled) {
               value = null;
@@ -570,11 +571,11 @@ export async function installDesktop() {
                   hostConnection.kind !== p.gitHost.remote.kind)
               )
                 throw Error(
-                  "Git host 연결과 저장소 remote가 일치하지 않습니다.",
+                  "Git host connection does not match the repository remote.",
                 );
               if (hostConnection.testStatus !== "passed")
                 throw Error(
-                  "Git host 연결을 검사한 뒤 실행 프로필을 저장하세요.",
+                  "Test the Git host connection before saving the execution profile.",
                 );
             }
             const image = await command("docker", [
@@ -586,7 +587,7 @@ export async function installDesktop() {
             ]);
             if (image.code !== 0)
               throw Error(
-                "실행 이미지가 없습니다. 시작 가이드에서 환경을 준비하세요.",
+                "Runner image not found. Prepare the environment in Getting started.",
               );
             p.image = image.output.trim();
             value = await store!.execute("owner", randomUUID(), {
@@ -612,7 +613,7 @@ export async function installDesktop() {
               !run.runtime.terminationConfirmed
             )
               throw Error(
-                "검증과 독립 리뷰가 끝난 실행만 원격에 전달할 수 있습니다.",
+                "Only runs with completed checks and independent review can be published.",
               );
             const feature = workspace.features.find(
               (item) => item.id === run.featureId,
@@ -621,28 +622,32 @@ export async function installDesktop() {
             const binding = profile.gitHost;
             if (!binding)
               throw Error(
-                "프로젝트 실행 설정에서 Git remote를 먼저 감지하세요.",
+                "Detect the Git remote in project execution settings first.",
               );
             const lock = `${feature.projectId}:${binding.remote.host}:${run.runtime.branch}`;
             if (deliveryLocks.has(lock))
-              throw Error("같은 원격 branch의 전달 작업이 진행 중입니다.");
+              throw Error(
+                "A handoff is already in progress for this remote branch.",
+              );
             deliveryLocks.add(lock);
             try {
               const worktree = run.runtime.worktree;
               const branch = run.runtime.branch;
               const head = run.runtime.head;
               if (!worktree || !branch || !head)
-                throw Error("전달할 worktree·branch·commit 근거가 없습니다.");
+                throw Error(
+                  "Missing worktree, branch or commit evidence for handoff.",
+                );
               if ((await git(worktree, "rev-parse", "HEAD")) !== head)
                 throw Error(
-                  "worktree head가 검증 근거와 달라졌습니다. 새 실행이 필요합니다.",
+                  "Worktree head differs from verification evidence. Start a new run.",
                 );
               if (
                 (await git(worktree, "rev-parse", profile.baseBranch)) !==
                 profile.baseCommit
               )
                 throw Error(
-                  "기준 브랜치가 변경됐습니다. 최신 base에서 다시 검증하세요.",
+                  "Base branch changed. Verify again against the latest base.",
                 );
               const remoteHead = await git(
                 worktree,
@@ -654,7 +659,7 @@ export async function installDesktop() {
               const existing = remoteHead.trim().split(/\s+/)[0];
               if (existing && existing !== head)
                 throw Error(
-                  "원격 branch가 다른 commit을 가리킵니다. 새 attempt branch를 사용하세요.",
+                  "Remote branch points to another commit. Use a new attempt branch.",
                 );
               if (!existing)
                 await git(
@@ -667,7 +672,7 @@ export async function installDesktop() {
               if (binding.connectionId) {
                 const connection = gitHostVault.get(binding.connectionId);
                 if (connection.info.testStatus !== "passed")
-                  throw Error("Git host 연결을 다시 검사하세요.");
+                  throw Error("Test the Git host connection again.");
                 const change = await new GitHostAdapter(
                   connection.info,
                   connection.token,
@@ -683,7 +688,7 @@ export async function installDesktop() {
                   change.baseSha !== profile.baseCommit
                 )
                   throw Error(
-                    "Draft PR/MR의 head 또는 base SHA가 검증 근거와 다릅니다.",
+                    "Draft PR/MR head or base SHA does not match verification evidence.",
                   );
                 delivery = {
                   provider: connection.info.kind,
@@ -714,12 +719,12 @@ export async function installDesktop() {
                   currentRun.runtime.profile.baseCommit !== profile.baseCommit
                 )
                   throw Error(
-                    "실행 계약이 변경됐습니다. 원격 전달을 다시 확인하세요.",
+                    "Execution contract changed. Recheck remote handoff.",
                   );
                 currentRun.runtime.delivery = delivery;
                 currentRun.reason = delivery.url
-                  ? "Draft PR/MR을 만들었습니다. host의 검사와 사람 승인을 확인하세요."
-                  : "원격 branch를 게시했습니다. 이 host의 PR/MR은 외부에서 만드세요.";
+                  ? "Draft PR/MR created. Check the host's checks and human approval."
+                  : "Remote branch published. Create the PR/MR on this host manually.";
               });
               value = { url: delivery.url, branch };
             } finally {
@@ -743,7 +748,7 @@ export async function installDesktop() {
               image: image.code === 0,
               approvalHelper: false,
               message:
-                "로컬 파일럿 · 실제 팀 인증은 M3 · 앱 종료/맥 sleep 시 작업 중단 가능",
+                "Local workspace · closes or interrupts work when the app exits or the Mac sleeps",
             };
             break;
           }
@@ -759,7 +764,7 @@ export async function installDesktop() {
             );
             const file = r?.runtime?.artifacts?.[a.index];
             if (!file || !r?.runtime?.artifactRoot)
-              throw Error("산출물이 없습니다.");
+              throw Error("Artifact not found.");
             shell.showItemInFolder(
               await checkedArtifact(
                 r.runtime.artifactRoot,
@@ -781,7 +786,7 @@ export async function installDesktop() {
             break;
           }
           default:
-            throw Error("지원하지 않는 요청입니다.");
+            throw Error("Unsupported request.");
         }
         return { ok: true, value };
       } catch (e) {
@@ -789,18 +794,18 @@ export async function installDesktop() {
           ok: false,
           error:
             e instanceof z.ZodError
-              ? "입력 형식을 확인하세요."
+              ? "Check the input format."
               : operation.startsWith("conversations:") &&
                   !(
                     e instanceof Error &&
-                    /^(프로젝트|이 프로젝트|이 에이전트|보관된|선택한|에이전트 연결|검증된 AI|다른 워크스페이스|대화가|동시에 상담|이미 사용|삭제된 대화|대화 저장 공간|필수 상담 맥락|진행 중인 상담|중지할 파생 기억|대기·실행)/.test(
+                    /^(Project not found\.|This feature does not belong|This agent does not belong|Archived agents|The selected assignment|Agent connection settings changed|Verify the AI connection|Conversations in another workspace|Conversation changed|Up to two consultation|This request ID|This request belongs to a deleted|Conversation storage limit|Required context exceeds|Stop the active consultation|Check the scope of derived|End queued or active)/.test(
                       e.message,
                     )
                   )
-                ? "상담 요청을 처리하지 못했습니다. 입력은 유지됩니다."
+                ? "Could not process the consultation. Your input is preserved."
                 : e instanceof Error
                   ? e.message
-                  : "요청을 처리하지 못했습니다.",
+                  : "Could not process the request.",
         };
       }
     },

@@ -7,58 +7,58 @@ export function defaultPackage(): HarnessPackage {
   const roles = [
     [
       "requirements",
-      "요구사항 정리자",
+      "Requirements analyst",
       "requirements",
-      "목표·범위·완료 기준 AC를 정리하고 불확실한 질문을 명시한다.",
+      "Clarify goals, scope and acceptance criteria. Identify unresolved questions.",
     ],
     [
       "designer",
-      "설계자",
+      "Architect",
       "design",
-      "구조·데이터·예외·영향·검증·복구를 구체적으로 설계한다.",
+      "Design architecture, data contracts, failure handling, impact, verification and recovery in concrete terms.",
     ],
     [
       "design-reviewer",
-      "설계 검토자",
+      "Design reviewer",
       "design",
-      "기존 설계의 누락과 영향·불필요한 복잡성을 검토하고 개선한 초안을 작성한다. 본인 승인을 대신하지 않는다.",
+      "Check the design for gaps, impact and unnecessary complexity, then propose an improved draft. Never replace human approval.",
     ],
     [
       "developer",
-      "개발자",
+      "Implementer",
       "implementation",
-      "승인한 설계 범위에서 구현하고 실패 근거를 반영해 수정한다. 기존 테스트와 정책을 약화하지 않는다.",
+      "Implement within the approved design and repair failures using evidence. Never weaken tests or policies.",
     ],
     [
       "acceptance-reviewer",
-      "요구사항 검증자",
+      "Acceptance verifier",
       "verification",
-      "각 AC를 구현·테스트 근거와 대조한다. 근거 없는 완료는 실패로 보고한다.",
+      "Compare each acceptance criterion with implementation and test evidence. Report unsupported completion claims as failures.",
     ],
     [
       "convention-reviewer",
-      "컨벤션 검증자",
+      "Convention reviewer",
       "verification",
-      "전역·프로젝트 지침과 명명·구조·오류 처리 규칙을 확인한다.",
+      "Check global and project instructions, naming, structure and error-handling conventions.",
     ],
     [
       "code-reviewer",
-      "코드 리뷰어",
+      "Code reviewer",
       "review",
-      "실제 diff를 읽고 결함·회귀·유지보수 문제를 근거와 함께 검토한다.",
+      "Read the actual diff and report defects, regressions and maintainability issues with evidence.",
     ],
   ];
   return harnessPackageSchema.parse({
     schema: "roopre.harness/v1",
     id: "roopre.standard",
-    version: "1.0.0",
-    name: "루프리 기본 개발 표준",
+    version: "1.1.0",
+    name: "Roopre development standard",
     instructions:
-      "사람이 설계를 승인한 후 구현한다. 필수 검사와 리뷰의 근거를 남기고 실패한 작업을 완료로 표시하지 않는다.",
+      "Implement only after human design approval. Preserve required check and review evidence. Never mark failed work as complete.",
     agents: roles.map(([id, name, stage, instructions]) => ({
       id,
       name,
-      description: "기본 역할",
+      description: "Default role",
       capability: stage === "implementation" ? "implementation" : "read-only",
       instructions,
       connection: "project",
@@ -66,7 +66,7 @@ export function defaultPackage(): HarnessPackage {
     profiles: [
       {
         id: "standard",
-        name: "기본 개발 흐름",
+        name: "Default workflow",
         instructions: "",
         stageInstructions: Object.fromEntries(stages.map((s) => [s, ""])),
         assignments: roles.map(([id, , stage]) => ({

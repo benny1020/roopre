@@ -191,7 +191,7 @@ export function qualityProjection(
     .map((id) =>
       summarize(
         id,
-        projects.get(id)?.name ?? "알 수 없는 프로젝트",
+        projects.get(id)?.name ?? "Unknown project",
         runs.filter((row) => row.project.id === id),
       ),
     )
@@ -203,7 +203,7 @@ export function qualityProjection(
     .map((revision) =>
       summarize(
         String(revision),
-        revision === "missing" ? "Harness 기록 없음" : `Workflow v${revision}`,
+        revision === "missing" ? "No harness record" : `Workflow v${revision}`,
         runs.filter((row) => (row.workflowRevision ?? "missing") === revision),
       ),
     )

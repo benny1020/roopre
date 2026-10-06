@@ -6,6 +6,7 @@ import {
   gate,
   latestDesign,
   sections,
+  hasDesignSections,
   commandSchema,
   type Workspace,
   type Command,
@@ -42,12 +43,12 @@ test("T01: both developer identities get the same template and immutable require
     apply(w, actor, {
       type: "create_feature",
       projectId: "platform",
-      title: "새 기능",
+      title: "New feature",
       template: "feature",
       requirements: "AC-01 정상 동작",
     });
   for (const f of w.features.slice(-2)) {
-    assert(sections.every((s) => f.draft.body.includes(`## ${s}`)));
+    assert(hasDesignSections(f.draft.body));
     assert.equal(gate(w, f).eligible, false);
   }
 });
@@ -75,7 +76,7 @@ test("T02/T04: every required human must review all seven sections before queuei
   assert.equal(gate(w, w.features[1]).eligible, true);
   apply(w, "jun", { type: "queue_run", featureId, designId });
   assert.equal(w.runs[0].status, "queued");
-  assert.match(w.runs[0].reason, /미연결/);
+  assert.match(w.runs[0].reason, /disconnected/);
 });
 test("T03: agent, author, and unrecognized actor cannot impersonate required reviewers", () => {
   const w = seed();

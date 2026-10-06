@@ -16,7 +16,7 @@ export const executionCapacitySchema = z
   .refine(
     (value) => value.maxConcurrentRunsPerProject <= value.maxConcurrentRuns,
     {
-      message: "프로젝트당 실행 수는 전체 실행 수를 넘을 수 없습니다.",
+      message: "Per-project run limit cannot exceed the workspace limit.",
       path: ["maxConcurrentRunsPerProject"],
     },
   );
@@ -173,33 +173,33 @@ export type RuntimeDetails = {
 export const standardSteps = [
   {
     id: "requirements",
-    name: "요구사항",
-    artifact: "문제·범위·완료 기준 AC",
-    gate: "검증할 결과 명시",
+    name: "Requirements",
+    artifact: "Problem, scope & acceptance criteria",
+    gate: "Define verifiable outcomes",
   },
   {
     id: "design",
-    name: "설계",
-    artifact: "7개 설계 항목·검증/복구 계획",
-    gate: "본인 OS 인증 승인",
+    name: "Design",
+    artifact: "Seven design sections, verification & recovery plan",
+    gate: "Your explicit approval",
   },
   {
     id: "implementation",
-    name: "구현",
-    artifact: "격리된 작업 공간·변경 diff",
-    gate: "승인 계약 유지",
+    name: "Implementation",
+    artifact: "Isolated workspace & diff",
+    gate: "Maintain approval contract",
   },
   {
     id: "verification",
-    name: "리뷰·테스트",
-    artifact: "고정 검사·AC별 리뷰·웹 테스트",
-    gate: "모든 필수 검사 통과",
+    name: "Review & test",
+    artifact: "Fixed checks, acceptance review & web tests",
+    gate: "All required checks pass",
   },
   {
     id: "delivery",
-    name: "결과 확인",
-    artifact: "commit·검증·수정 이력",
-    gate: "기존 병합 정책 적용",
+    name: "Review results",
+    artifact: "Commit, verification & repair history",
+    gate: "Follow the existing merge policy",
   },
 ] as const;
 
@@ -207,11 +207,11 @@ export function executionProfileIssues(
   profile: ExecutionProfile | undefined,
   requiredChecks: string[],
 ) {
-  if (!profile) return ["저장소와 실행 프로필을 먼저 연결하세요."];
+  if (!profile) return ["Connect a repository and execution profile first."];
   const names = profile.checks.map((check) => check.name);
   const issues: string[] = [];
   if (new Set(names).size !== names.length)
-    issues.push("검사 이름이 중복됐습니다.");
+    issues.push("Duplicate check names.");
   const required = [
     ...new Set([
       ...requiredChecks.filter((name) => name !== "review"),
@@ -220,6 +220,6 @@ export function executionProfileIssues(
   ];
   const missing = required.filter((name) => !names.includes(name));
   if (missing.length)
-    issues.push(`필수 검사 명령을 연결하세요: ${missing.join(", ")}`);
+    issues.push(`Map required check commands: ${missing.join(", ")}`);
   return issues;
 }

@@ -33,10 +33,10 @@ export async function refineAgent(
     if (!response.ok) {
       await response.body?.cancel();
       throw Error(
-        `모델 요청 실패 (HTTP ${response.status}). 연결 설정과 요청 한도를 확인하세요.`,
+        `Model request failed (HTTP ${response.status}). Check connection settings and request limits.`,
       );
     }
-    if (!response.body) throw Error("모델이 응답 본문을 반환하지 않았습니다.");
+    if (!response.body) throw Error("The model returned no response body.");
     const reader = response.body.getReader();
     let bytes = 0;
     const decoder = new TextDecoder();
@@ -48,7 +48,7 @@ export async function refineAgent(
       if (bytes > 128000) {
         await reader.cancel();
         throw Error(
-          "모델 응답이 너무 큽니다. 요청 범위를 줄여 다시 시도하세요.",
+          "Model response is too large. Reduce the request scope and try again.",
         );
       }
       text += decoder.decode(part.value, { stream: true });
@@ -56,7 +56,7 @@ export async function refineAgent(
     const message = JSON.parse(text + decoder.decode());
     if (message.stop_reason !== "end_turn" || !Array.isArray(message.content))
       throw Error(
-        "모델 응답이 완성되지 않았습니다. 요청을 줄여 다시 시도하세요.",
+        "Model response was incomplete. Shorten the request and try again.",
       );
     const content = message.content
       .filter((part: { type?: string }) => part.type === "text")
@@ -69,15 +69,15 @@ export async function refineAgent(
     const parsed = refinementOutputSchema.safeParse(JSON.parse(normalized));
     if (!parsed.success)
       throw Error(
-        "모델이 올바른 에이전트 초안을 반환하지 않았습니다. 요청을 구체화해 다시 시도하세요.",
+        "The model returned an invalid agent draft. Clarify the role and try again.",
       );
     return parsed.data;
   } catch (error) {
     // Never pass provider response bodies, network errors or credentials to renderer/logs.
     const message = error instanceof Error ? error.message : "";
-    if (message.startsWith("모델")) throw Error(message);
+    if (message.startsWith("Model")) throw Error(message);
     throw Error(
-      "AI 초안을 만들지 못했습니다. 연결·응답 형식을 확인하고 다시 시도하세요. 입력은 유지됩니다.",
+      "Could not draft the agent. Check connection and response format, then try again. Your input is preserved.",
     );
   }
 }

@@ -50,7 +50,9 @@ export type GitHostBinding = z.infer<typeof gitHostBindingSchema>;
 
 function rejectSecret(url: URL) {
   if (url.username || url.password || url.search || url.hash)
-    throw Error("Git remote에 인증 정보·query·fragment를 넣을 수 없습니다.");
+    throw Error(
+      "Git remotes cannot contain credentials, query parameters or fragments.",
+    );
 }
 
 function pathParts(path: string) {
@@ -59,10 +61,10 @@ function pathParts(path: string) {
     .split("/")
     .filter(Boolean);
   if (parts.length < 2)
-    throw Error("소유자 또는 그룹과 저장소 이름이 필요합니다.");
+    throw Error("Repository owner or group and name are required.");
   const repository = parts.pop()!.replace(/\.git$/i, "");
   if (!/^[A-Za-z0-9._-]+$/.test(repository))
-    throw Error("저장소 이름 형식이 올바르지 않습니다.");
+    throw Error("Invalid repository name.");
   return { namespace: parts.join("/"), repository };
 }
 
@@ -74,7 +76,7 @@ export function parseGitRemote(value: string): GitRemote {
   if (/^[^/@:\s]+@[^/:\s]+:.+$/.test(raw)) {
     const match = /^([^@]+)@([^/:\s]+):(.+)$/.exec(raw)!;
     if (match[1] !== "git")
-      throw Error("SSH remote 사용자명은 git만 허용합니다.");
+      throw Error("SSH remotes must use the git username.");
     host = match[2].toLowerCase();
     path = match[3];
   } else {
@@ -82,14 +84,14 @@ export function parseGitRemote(value: string): GitRemote {
     try {
       url = new URL(raw);
     } catch {
-      throw Error("HTTPS 또는 git SSH remote URL을 입력하세요.");
+      throw Error("Enter an HTTPS or git SSH remote URL.");
     }
     if (url.protocol === "ssh:") {
       if (url.username !== "git" || url.password || url.search || url.hash)
-        throw Error("SSH remote 형식이 올바르지 않습니다.");
+        throw Error("Invalid SSH remote format.");
     } else {
       if (url.protocol !== "https:")
-        throw Error("Git remote는 HTTPS 또는 git SSH만 허용합니다.");
+        throw Error("Git remotes must use HTTPS or git SSH.");
       rejectSecret(url);
     }
     host = url.hostname.toLowerCase();
@@ -113,7 +115,7 @@ export function validateGitHostEndpoint(value: string) {
     endpoint.search ||
     endpoint.hash
   )
-    throw Error("Git host endpoint는 인증 정보 없는 HTTPS 주소여야 합니다.");
+    throw Error("Git host endpoint must be HTTPS without credentials.");
   return endpoint.href.replace(/\/$/, "");
 }
 

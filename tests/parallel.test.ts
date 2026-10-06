@@ -164,7 +164,7 @@ test("overlapping edits preserve canonical source and both worker results", asyn
         { name: "same name", checkout: a },
         { name: "same name", checkout: b },
       ]),
-      /병렬 구현 충돌/,
+      /Parallel implementation conflict/,
     );
     assert.equal(await git(repo, "write-tree"), snapshot.tree);
     assert.equal(await readFile(join(repo, "base.txt"), "utf8"), "base\n");

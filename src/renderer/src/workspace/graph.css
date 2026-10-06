@@ -490,3 +490,27 @@
 .workflow-settings .graph-editor {
   margin-top: 12px;
 }
+
+/* Activity stays visible without wrapping the stage title into agent rows. */
+.flow-stage-node > strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.flow-stage-node .stage-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-stage-node:has(.stage-add) > strong {
+  padding-right: 22px;
+}
+.flow-stage-node .stage-running {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--blue);
+}

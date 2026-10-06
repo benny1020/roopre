@@ -91,7 +91,7 @@ test("active memory is project/agent/feature scoped, bound canonically, and lega
   const forTwo = resolveHarness(w, p, undefined, two.id)!;
   assert.equal(forOne.agents[0].memory?.[0].id, memory.id);
   assert.equal(forTwo.agents[0].memory?.length, 0);
-  assert.match(forOne.agents[0].instructions, /참고 기록/);
+  assert.match(forOne.agents[0].instructions, /Reference memory/);
   assert.doesNotMatch(
     JSON.stringify(
       exportProject(w, p, { id: "fixture", version: "1.0.0", name: "Fixture" }),
@@ -120,7 +120,7 @@ test("memory edits require expected revision and stop while any project run is q
         promoteToProject: false,
         memory,
       }),
-    /최신/,
+    /latest/,
   );
   w.runs.push({
     id: "run-waiting",
@@ -142,7 +142,7 @@ test("memory edits require expected revision and stop while any project run is q
         promoteToProject: false,
         memory,
       }),
-    /종료/,
+    /End|terminate|termination/,
   );
 });
 

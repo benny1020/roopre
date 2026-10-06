@@ -17,11 +17,11 @@ function limited(read: (path: string) => Promise<string>) {
   let count = 0,
     bytes = 0;
   return async (path: string) => {
-    if (++count > 1000) throw Error("하네스 파일 개수 한도를 넘었습니다.");
+    if (++count > 1000) throw Error("Harness file count limit exceeded.");
     const text = await read(path);
     bytes += Buffer.byteLength(text);
     if (bytes > maxBytes)
-      throw Error("하네스 전체 크기는 4 MB 이내여야 합니다.");
+      throw Error("Harness package must be no larger than 4 MB.");
     return text;
   };
 }
@@ -68,10 +68,10 @@ export async function exportPackageFolder(
     0,
   );
   if (total > maxBytes || Object.keys(files).length > 1000)
-    throw Error("하네스 패키지 크기/파일 수 한도를 넘었습니다.");
+    throw Error("Harness package size or file count limit exceeded.");
   for (const [path, text] of Object.entries(files))
     if (Buffer.byteLength(text) > (path === "harness.json" ? 180000 : 80000))
-      throw Error("하네스 파일 크기 한도를 넘었습니다.");
+      throw Error("Harness file size limit exceeded.");
   const temp = await mkdtemp(join(parent, ".roopre-export-"));
   const target = join(
     parent,
@@ -98,12 +98,12 @@ export function validateGitSource(input: { url: string; ref: string }) {
     url.search ||
     url.hash
   )
-    throw Error("토큰이 없는 HTTPS Git 주소를 사용하세요.");
+    throw Error("Use an HTTPS Git URL without an embedded token.");
   if (
     !/^[a-zA-Z0-9][a-zA-Z0-9/_.-]{0,150}$/.test(input.ref) ||
     input.ref.includes("..")
   )
-    throw Error("브랜치·태그 또는 commit을 확인하세요.");
+    throw Error("Check the branch, tag or commit.");
   return { url: url.toString(), ref: input.ref };
 }
 // No checkout, hooks, submodules, smudge filters or repository commands are run.
@@ -143,7 +143,7 @@ export async function importPackageGit(input: { url: string; ref: string }) {
     );
     if (r.code !== 0 || r.outputTruncated)
       throw Error(
-        "Git 표준을 읽지 못했습니다. 주소·ref·macOS Git 자격 증명 또는 폴더 가져오기를 확인하세요.",
+        "Could not read the Git standard. Check URL, ref and local Git credentials, or import a folder.",
       );
     return r.output;
   };
@@ -158,8 +158,7 @@ export async function importPackageGit(input: { url: string; ref: string }) {
       ref,
     );
     const commit = (await git("rev-parse", "FETCH_HEAD^{commit}")).trim();
-    if (!/^[a-f0-9]{40}$/.test(commit))
-      throw Error("지원하지 않는 Git commit입니다.");
+    if (!/^[a-f0-9]{40}$/.test(commit)) throw Error("Unsupported Git commit.");
     const pack = await readPackageGitTree(git, commit);
     return {
       package: pack,
@@ -182,19 +181,19 @@ export async function readPackageGitTree(
         !/^100644 blob [a-f0-9]{40}\t/.test(mode) ||
         mode.trimEnd().slice(mode.indexOf("\t") + 1) !== path
       )
-        throw Error("일반 하네스 파일만 허용합니다.");
+        throw Error("Only regular harness files are allowed.");
       const result = await git("show", `${commit}:${path}`);
       if (
         Buffer.byteLength(result) > (path === "harness.json" ? 180000 : 80000)
       )
-        throw Error("하네스 파일이 너무 큽니다.");
+        throw Error("Harness file is too large.");
       return result;
     }),
   );
   const lockEntry = await git("ls-tree", commit, "--", "harness.lock.json");
   if (lockEntry.trim()) {
     if (!/^100644 blob [a-f0-9]{40}\t/.test(lockEntry))
-      throw Error("lock은 일반 파일이어야 합니다.");
+      throw Error("Lock must be a regular file.");
     validatePackageLock(
       JSON.parse(await git("show", `${commit}:harness.lock.json`)),
       pack,
@@ -226,7 +225,7 @@ export async function writePackageLock(root: string, p: HarnessPackage) {
   const file = join(root, "harness.lock.json");
   try {
     const stat = await lstat(file);
-    if (!stat.isFile()) throw Error("lock은 일반 파일이어야 합니다.");
+    if (!stat.isFile()) throw Error("Lock must be a regular file.");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }

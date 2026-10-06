@@ -57,14 +57,14 @@ test("conversation DB lifecycle enforces idempotency, retry scope, pending limit
         1,
         manifest,
       ),
-      /이미 사용된/,
+      /already been used/,
     );
-    await assert.rejects(create(), /진행 중인 상담/);
+    await assert.rejects(create(), /consultation|response.*in progress/);
     const secondScope = { ...defaultScope, featureId: "other" };
     const second = await create(secondScope);
     await assert.rejects(
       create({ ...defaultScope, featureId: "third" }),
-      /두 개까지/,
+      /two consultation/,
     );
     assert.equal(
       await db.cancelConversationTurn(
@@ -85,7 +85,10 @@ test("conversation DB lifecycle enforces idempotency, retry scope, pending limit
     );
     const retry = await create(defaultScope, first.turn.id);
     assert.equal(retry.turn.retryOf, first.turn.id);
-    await assert.rejects(create(defaultScope, retry.turn.id), /진행 중인 상담/);
+    await assert.rejects(
+      create(defaultScope, retry.turn.id),
+      /consultation|response.*in progress/,
+    );
     assert.equal(
       await db.cancelConversationTurn(
         store.pool,
@@ -95,7 +98,10 @@ test("conversation DB lifecycle enforces idempotency, retry scope, pending limit
       ),
       true,
     );
-    await assert.rejects(create(secondScope, first.turn.id), /실패·중단·취소/);
+    await assert.rejects(
+      create(secondScope, first.turn.id),
+      /failed, interrupted or cancelled/,
+    );
     await db.interruptPendingConversations(store.pool, store.key);
     const interrupted = await db.listConversationTurns(
       store.pool,
@@ -182,7 +188,7 @@ test("conversation DB rejects quota without partial state and tombstones reject 
         1,
         manifest,
       ),
-      /저장 공간 한도/,
+      /storage limit/,
     );
     assert.equal(
       Number(
@@ -231,7 +237,7 @@ test("conversation DB rejects quota without partial state and tombstones reject 
         1,
         manifest,
       ),
-      /삭제된 대화/,
+      /deleted conversation/,
     );
     const fresh = await db.createPending(
       store.pool,

@@ -18,7 +18,7 @@ export async function createApp(store: Store) {
     )
       return reply.status(403).send({
         code: "forbidden_origin",
-        message: "로컬 개발 화면에서만 접근할 수 있습니다.",
+        message: "Accessible only from the local development UI.",
       });
   });
   await app.register(cors, {
@@ -33,7 +33,7 @@ export async function createApp(store: Store) {
     if (error instanceof z.ZodError)
       return reply.status(400).send({
         code: "invalid_input",
-        message: "입력 항목을 확인하세요.",
+        message: "Check the input fields.",
         details: error.issues.map((i) => ({
           path: i.path.join("."),
           message: i.message,
@@ -42,17 +42,17 @@ export async function createApp(store: Store) {
     if ((error as { statusCode?: number }).statusCode === 400)
       return reply.status(400).send({
         code: "invalid_json",
-        message: "JSON 요청 형식을 확인하세요.",
+        message: "Check the JSON request format.",
       });
     if ((error as { statusCode?: number }).statusCode === 413)
       return reply.status(413).send({
         code: "payload_too_large",
-        message: "요청 크기 한도를 넘었습니다.",
+        message: "Request size limit exceeded.",
       });
-    console.error("Roopre 개발 API 요청 처리 실패");
+    console.error("Roopre development API request failed");
     return reply.status(500).send({
       code: "internal_error",
-      message: "저장하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
+      message: "Could not save. Check the connection and try again.",
     });
   });
   app.get("/health", async () => ({
@@ -87,11 +87,7 @@ export async function createApp(store: Store) {
       Number(request.headers["last-event-id"] || 0),
     );
     if (!Number.isSafeInteger(cursor))
-      throw new DomainError(
-        "invalid_cursor",
-        "이벤트 위치가 올바르지 않습니다.",
-        400,
-      );
+      throw new DomainError("invalid_cursor", "Invalid event position.", 400);
     reply.hijack();
     const origin = request.headers.origin;
     reply.raw.writeHead(200, {

@@ -53,15 +53,15 @@ export default function DiffViewer({ patch }: { patch: string }) {
   };
   if (!files.length)
     return (
-      <Empty title="변경 내용이 없습니다">
-        현재 작업 공간에 표시할 diff가 없습니다.
+      <Empty title="No changes">
+        No diff to display in the current workspace.
       </Empty>
     );
   return (
     <div className="diff-workspace">
-      <nav className="diff-files" aria-label="변경 파일">
+      <nav className="diff-files" aria-label="Changed files">
         <div className="pane-label">
-          변경 파일{" "}
+          Changed files{" "}
           <span>
             {filtered.length} / {files.length}
           </span>
@@ -69,8 +69,8 @@ export default function DiffViewer({ patch }: { patch: string }) {
         <label className="diff-filter">
           <Search size={13} />
           <input
-            aria-label="변경 파일 검색"
-            placeholder="파일 찾기…"
+            aria-label="Search changed files"
+            placeholder="Find a file…"
             value={query}
             maxLength={500}
             onChange={(e) => setQuery(e.target.value)}
@@ -89,28 +89,26 @@ export default function DiffViewer({ patch }: { patch: string }) {
             <small className="failure-text">−{f.removals}</small>
           </button>
         ))}
-        {!filtered.length && (
-          <p className="quiet-empty">일치하는 파일이 없습니다.</p>
-        )}
+        {!filtered.length && <p className="quiet-empty">No matching files.</p>}
       </nav>
-      <section className="diff-source" aria-label="파일 변경 내용">
+      <section className="diff-source" aria-label="File changes">
         {current ? (
           <>
             <header>
               <FileCode2 size={14} />
               <span title={current.path}>{current.path}</span>
-              <small>읽기 전용</small>
+              <small>Read-only</small>
             </header>
             <div className="diff-tools">
               <span>
                 {hunks.length
-                  ? `${hunk < 0 ? "—" : hunk + 1} / ${hunks.length} 변경 구간`
-                  : "파일 메타데이터"}
+                  ? `${hunk < 0 ? "—" : hunk + 1} / ${hunks.length} Change hunks`
+                  : "File metadata"}
               </span>
               <button
                 className="icon-button"
-                aria-label="이전 변경 구간"
-                title="이전 변경 구간"
+                aria-label="Previous hunk"
+                title="Previous hunk"
                 disabled={!hunks.length}
                 onClick={() => jump(-1)}
               >
@@ -118,8 +116,8 @@ export default function DiffViewer({ patch }: { patch: string }) {
               </button>
               <button
                 className="icon-button"
-                aria-label="다음 변경 구간"
-                title="다음 변경 구간"
+                aria-label="Next hunk"
+                title="Next hunk"
                 disabled={!hunks.length}
                 onClick={() => jump(1)}
               >
@@ -127,8 +125,8 @@ export default function DiffViewer({ patch }: { patch: string }) {
               </button>
               <button
                 className="icon-button"
-                aria-label="diff 줄 바꿈"
-                title="긴 줄 바꿈"
+                aria-label="Wrap diff lines"
+                title="Wrap long lines"
                 aria-pressed={wrap}
                 onClick={() => setWrap(!wrap)}
               >
@@ -171,8 +169,8 @@ export default function DiffViewer({ patch }: { patch: string }) {
             </div>
           </>
         ) : (
-          <Empty title="검색 결과가 없습니다">
-            다른 파일 이름을 입력하거나 검색어를 지우세요.
+          <Empty title="No search results">
+            Try another filename or clear the search.
           </Empty>
         )}
       </section>

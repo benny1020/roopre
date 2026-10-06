@@ -11,7 +11,7 @@ test("ADE state distinguishes planning completion, verification and handoff with
   assert.equal(workState(w, f).actor, "SYSTEM");
   r.runtime!.kind = "planning";
   r.status = "completed";
-  assert.equal(workState(w, f).label, "종료 확인 중");
+  assert.equal(workState(w, f).label, "Confirming termination");
   r.runtime!.terminationConfirmed = true;
   assert.equal(workState(w, f).phase, 1);
   assert.equal(workState(w, f).actor, "HUMAN");
@@ -20,7 +20,7 @@ test("ADE state distinguishes planning completion, verification and handoff with
   r.reason = "";
   assert.equal(workState(w, f).phase, 4);
   assert.equal(workState(w, f).attention, true);
-  assert.match(workState(w, f).next, /병합은 별도/);
+  assert.match(workState(w, f).next, /Merge is a separate/);
   r.status = "failed";
   assert.equal(workState(w, f).tone, "danger");
 });
@@ -69,7 +69,7 @@ test("stale running agents and unconfirmed cancellation do not imply active work
   ] as const) {
     r.status = status;
     r.runtime!.terminationConfirmed = false;
-    assert.equal(workState(w, f).label, "종료 확인 중");
+    assert.equal(workState(w, f).label, "Confirming termination");
     assert.equal(workState(w, f).actor, "SYSTEM");
     assert.equal(workState(w, f).attention, true);
   }

@@ -271,8 +271,9 @@ test(
       assert.equal(plan.status, "completed", JSON.stringify(plan));
       assert.equal(plan.runtime!.agents!.length, 6);
       assert.equal(
-        plan.runtime!.agents!.filter((a) => a.name.includes("결과 통합"))
-          .length,
+        plan.runtime!.agents!.filter((a) =>
+          a.name.includes("Integrating results"),
+        ).length,
         2,
       );
       assert.equal(
@@ -332,7 +333,7 @@ test(
         (r) => r.id === conflictId,
       )!;
       assert.equal(conflict.status, "failed");
-      assert.match(conflict.reason, /병렬 구현 충돌/);
+      assert.match(conflict.reason, /Parallel implementation conflict/);
       assert.equal(conflict.runtime!.evidence.length, 0);
       assert.equal(conflict.runtime!.agents!.length, 2);
       await assert.rejects(

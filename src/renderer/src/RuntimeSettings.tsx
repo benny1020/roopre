@@ -125,8 +125,8 @@ export default function RuntimeSettings({
     <div className="content-page runtime-settings">
       <div className="page-heading">
         <div>
-          <h1>표준 · 연결 · 실행 환경</h1>
-          <p>같은 절차로 시작하고, 근거를 확인한 뒤 다음 단계로 진행합니다.</p>
+          <h1>Standards, connections & runtime</h1>
+          <p>Follow consistent steps and review evidence before continuing.</p>
         </div>
       </div>
       {error && (
@@ -137,7 +137,7 @@ export default function RuntimeSettings({
       {message && <p role="status">{message}</p>}
       <details className="runtime-card runtime-standard">
         <summary>
-          적용 중인 팀 표준 v{snapshot.policies.at(-1)!.version}
+          Applied team standard v{snapshot.policies.at(-1)!.version}
         </summary>
         <div className="standard-steps">
           {standardSteps.map((s) => (
@@ -149,16 +149,17 @@ export default function RuntimeSettings({
           ))}
         </div>
         <p className="muted">
-          필수 검사: {snapshot.policies.at(-1)!.requiredChecks.join(" · ")}.
-          프로젝트 설정으로 삭제할 수 없습니다.
+          Required checks:{" "}
+          {snapshot.policies.at(-1)!.requiredChecks.join(" · ")}. Project
+          settings cannot remove these checks.
         </p>
       </details>
       {!desktop ? (
         <section className="runtime-card">
-          <h2>데스크톱 앱에서 연결하세요</h2>
+          <h2>Connect in the desktop app</h2>
           <p>
-            API key 저장·저장소 선택·설계 승인은 데스크톱 앱에서 사용할 수
-            있습니다. 이 브라우저는 로컬 개발 미리보기입니다.
+            API keys, repository selection and design approvals are available in
+            the desktop app. This browser is a local development preview.
           </p>
         </section>
       ) : (
@@ -166,14 +167,14 @@ export default function RuntimeSettings({
           <section className="runtime-card execution-capacity-card">
             <div className="runtime-section-heading">
               <div>
-                <h2>동시 실행 정책</h2>
+                <h2>Execution capacity</h2>
                 <p>
-                  실행기 자원을 나누되, 같은 프로젝트의 기능도 독립 worktree로
-                  함께 진행합니다.
+                  Each feature uses an isolated worktree, including concurrent
+                  features in the same project.
                 </p>
               </div>
               <span className="host-state">
-                최대 {capacity.maxConcurrentRuns} 실행 · 프로젝트당{" "}
+                Up to {capacity.maxConcurrentRuns} runs · Per project{" "}
                 {capacity.maxConcurrentRunsPerProject}
               </span>
             </div>
@@ -188,14 +189,14 @@ export default function RuntimeSettings({
                   });
                   await onSaved();
                   setMessage(
-                    "동시 실행 정책을 저장했습니다. 진행 중인 실행은 유지하고 다음 실행부터 반영합니다.",
+                    "Capacity saved. Active runs continue; new limits apply to subsequent runs.",
                   );
                 });
               }}
             >
               <div className="runtime-grid">
                 <label className="field">
-                  전체 동시 실행
+                  Workspace run limit
                   <input
                     type="number"
                     min="1"
@@ -216,7 +217,7 @@ export default function RuntimeSettings({
                   />
                 </label>
                 <label className="field">
-                  프로젝트당 동시 실행
+                  Runs per project
                   <input
                     type="number"
                     min="1"
@@ -232,7 +233,7 @@ export default function RuntimeSettings({
                   />
                 </label>
                 <label className="field">
-                  단계 안 병렬 에이전트
+                  Parallel agents per stage
                   <input
                     type="number"
                     min="1"
@@ -249,12 +250,12 @@ export default function RuntimeSettings({
                 </label>
               </div>
               <button className="primary" disabled={busy}>
-                동시 실행 정책 저장
+                Save execution capacity
               </button>
               <p className="muted">
-                기본값은 전체 3개·프로젝트당 2개·단계당 3개입니다. 실행 수를
-                낮춰도 이미 시작한 작업은 중단하지 않습니다. 메모리와 Docker
-                상태를 보며 조절하세요.
+                Defaults: 3 workspace runs, 2 per project and 3 agents per
+                stage. Lowering limits does not stop active work. Adjust for
+                available memory and Docker resources.
               </p>
             </form>
           </section>
@@ -262,12 +263,12 @@ export default function RuntimeSettings({
             className="runtime-card"
             ref={connectionSection}
             tabIndex={-1}
-            aria-label="AI 연결 설정"
+            aria-label="AI connections"
           >
-            <h2>AI 연결</h2>
+            <h2>AI connections</h2>
             <p>
-              Claude Code · Anthropic Messages 규격. key는 이 맥의 암호화
-              저장소에 보관합니다.
+              Claude Code · Anthropic Messages-compatible. Keys stay in this
+              Mac's encrypted store.
             </p>
             {connections.map((c) => (
               <div className="connection-row" key={c.id}>
@@ -276,7 +277,7 @@ export default function RuntimeSettings({
                   <small>
                     {c.model} · v{c.version} · {c.endpoint}
                   </small>
-                  <small>{c.diagnostic ?? "연결 검사 전"}</small>
+                  <small>{c.diagnostic ?? "Not tested"}</small>
                 </div>
                 <button
                   disabled={busy}
@@ -286,7 +287,7 @@ export default function RuntimeSettings({
                     })
                   }
                 >
-                  연결 검사
+                  Test connection
                 </button>
                 <button
                   disabled={busy}
@@ -299,7 +300,7 @@ export default function RuntimeSettings({
                     setKey("");
                   }}
                 >
-                  수정
+                  Edit
                 </button>
                 <button
                   disabled={busy}
@@ -307,12 +308,12 @@ export default function RuntimeSettings({
                     void act(async () => {
                       setConnections(await desktop.removeConnection(c.id));
                       setMessage(
-                        "연결을 삭제했습니다. 해당 연결의 실행은 중단됩니다.",
+                        "Connection deleted. Runs using it are interrupted.",
                       );
                     })
                   }
                 >
-                  삭제
+                  Delete
                 </button>
               </div>
             ))}
@@ -332,14 +333,14 @@ export default function RuntimeSettings({
                   setConnections(await desktop.saveConnection(input));
                   setEditing(undefined);
                   setMessage(
-                    "연결을 저장했습니다. 연결 검사 후 실행 프로필을 지정하세요.",
+                    "Connection saved. Test it, then assign it to an execution profile.",
                   );
                 });
               }}
             >
               <div className="runtime-grid">
                 <label className="field">
-                  연결 이름
+                  Connection name
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -347,7 +348,7 @@ export default function RuntimeSettings({
                   />
                 </label>
                 <label className="field">
-                  모델 ID
+                  Model ID
                   <input
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
@@ -364,7 +365,7 @@ export default function RuntimeSettings({
                   />
                 </label>
                 <label className="field">
-                  인증 방식
+                  Authentication
                   <select
                     value={auth}
                     onChange={(e) => setAuth(e.target.value as typeof auth)}
@@ -374,7 +375,9 @@ export default function RuntimeSettings({
                   </select>
                 </label>
                 <label className="field">
-                  {editing ? "새 key (유지하려면 비워 두기)" : "API key"}
+                  {editing
+                    ? "New key (leave blank to keep existing)"
+                    : "API key"}
                   <input
                     type="password"
                     autoComplete="off"
@@ -386,24 +389,24 @@ export default function RuntimeSettings({
                 </label>
               </div>
               <button className="primary" disabled={busy}>
-                {editing ? "연결 변경 저장" : "연결 추가"}
+                {editing ? "Save connection changes" : "Add connection"}
               </button>
               <p className="muted">
-                연결 검사는 소량의 실제 모델 요청으로 과금될 수 있습니다. 저장소
-                코드는 보내지 않습니다.
+                Testing sends a small model request and may incur charges.
+                Repository code is not sent.
               </p>
             </form>
           </section>
           <section
             className="runtime-card git-host-card"
-            aria-label="Git host 연결 설정"
+            aria-label="Git host connections"
           >
             <div className="runtime-section-heading">
               <div>
                 <h2>Git host</h2>
                 <p>
-                  원격 저장소의 provider API 연결입니다. access token은 이 맥의
-                  암호화 저장소에만 보관합니다.
+                  Connect to your repository provider's API. Access tokens stay
+                  in this Mac's encrypted store.
                 </p>
               </div>
               {remote && (
@@ -412,7 +415,7 @@ export default function RuntimeSettings({
                     ? "GitHub"
                     : remote.kind === "gitlab"
                       ? "GitLab"
-                      : "일반 Git"}{" "}
+                      : "Generic Git"}{" "}
                   · {remote.host}
                 </span>
               )}
@@ -422,19 +425,19 @@ export default function RuntimeSettings({
                 <code>
                   {remote.namespace}/{remote.repository}
                 </code>{" "}
-                · 실행은 worktree에서 격리됩니다. 원격 게시와 Draft PR/MR 생성은
-                실행 성공 후 별도로 선택합니다.
+                · Execution is isolated in worktrees. Publish a branch or create
+                a draft PR/MR after a successful run.
               </p>
             ) : (
               <p className="muted">
-                저장소 폴더를 선택하면 origin remote를 안전하게 감지합니다. 알
-                수 없는 host도 로컬 Git 실행은 그대로 사용할 수 있습니다.
+                Choosing a folder detects its origin safely. Unrecognized hosts
+                still support local Git execution.
               </p>
             )}
             {!gitHostSupported && (
               <p className="muted">
-                이 미리보기는 Git host 연결 API를 제공하지 않습니다. macOS
-                앱에서 연결을 추가할 수 있습니다.
+                Git host connections are unavailable in this preview. Add them
+                in the macOS app.
               </p>
             )}
             {gitConnections.map((connection) => (
@@ -445,7 +448,7 @@ export default function RuntimeSettings({
                     {connection.kind === "github" ? "GitHub" : "GitLab"} ·{" "}
                     {connection.host} · v{connection.version}
                   </small>
-                  <small>{connection.diagnostic ?? "연결 검사 전"}</small>
+                  <small>{connection.diagnostic ?? "Not tested"}</small>
                 </div>
                 <button
                   disabled={busy}
@@ -457,7 +460,7 @@ export default function RuntimeSettings({
                     )
                   }
                 >
-                  연결 검사
+                  Test connection
                 </button>
                 <button
                   disabled={busy}
@@ -471,7 +474,7 @@ export default function RuntimeSettings({
                     })
                   }
                 >
-                  삭제
+                  Delete
                 </button>
               </div>
             ))}
@@ -492,14 +495,14 @@ export default function RuntimeSettings({
                   setGitConnections(next);
                   setGitConnectionId(next.at(-1)?.id ?? "");
                   setMessage(
-                    "Git host 연결을 저장했습니다. 연결 검사를 마친 뒤 프로젝트에 연결하세요.",
+                    "Git host connection saved. Test it before assigning it to a project.",
                   );
                 });
               }}
             >
               <div className="runtime-grid">
                 <label className="field">
-                  연결 이름
+                  Connection name
                   <input
                     value={gitName}
                     onChange={(e) => setGitName(e.target.value)}
@@ -524,7 +527,7 @@ export default function RuntimeSettings({
                     }}
                   >
                     <option value="github">GitHub / GitHub Enterprise</option>
-                    <option value="gitlab">GitLab / 사내 GitLab</option>
+                    <option value="gitlab">GitLab / Self-managed GitLab</option>
                   </select>
                 </label>
                 <label className="field">
@@ -558,12 +561,12 @@ export default function RuntimeSettings({
                 </label>
               </div>
               <button disabled={busy || !gitHostSupported}>
-                Git host 연결 추가
+                Add Git host connection
               </button>
               <p className="muted">
-                GitHub는 API endpoint를, GitLab은 instance 기본 URL을
-                입력합니다. HTTP·인증서 우회·remote URL의 token은 허용하지
-                않습니다.
+                For GitHub, enter the API endpoint; for GitLab, the instance
+                URL. HTTP, certificate bypasses and tokens embedded in remote
+                URLs are not supported.
               </p>
             </form>
           </section>
@@ -571,12 +574,13 @@ export default function RuntimeSettings({
             className="runtime-card"
             ref={profileSection}
             tabIndex={-1}
-            aria-label="프로젝트 실행 프로필 설정"
+            aria-label="Project execution profiles"
           >
-            <h2>프로젝트 실행 프로필</h2>
+            <h2>Project execution profile</h2>
             {!project && (
               <p className="muted">
-                프로젝트를 먼저 만든 뒤 저장소와 실행 프로필을 연결하세요.
+                Create a project, then connect its repository and execution
+                profile.
               </p>
             )}
             <form
@@ -610,14 +614,14 @@ export default function RuntimeSettings({
                   await desktop.configureProject(projectId, profile);
                   await onSaved();
                   setMessage(
-                    "실행 프로필을 저장했습니다. 이 기준으로 설계를 게시하고 승인하세요.",
+                    "Execution profile saved. Publish and approve a design using these settings.",
                   );
                 });
               }}
             >
               <div className="runtime-grid">
                 <label className="field">
-                  프로젝트
+                  Projects
                   <select
                     value={projectId}
                     onChange={(e) => {
@@ -633,13 +637,13 @@ export default function RuntimeSettings({
                   </select>
                 </label>
                 <label className="field">
-                  모델 연결
+                  Model connection
                   <select
                     value={connectionId}
                     onChange={(e) => setConnectionId(e.target.value)}
                     required
                   >
-                    <option value="">연결 선택</option>
+                    <option value="">Choose connection</option>
                     {connections.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} · {c.model}
@@ -648,7 +652,7 @@ export default function RuntimeSettings({
                   </select>
                 </label>
                 <label className="field">
-                  저장소 폴더
+                  Repository folder
                   <input value={path} readOnly required />
                   <button
                     type="button"
@@ -676,11 +680,11 @@ export default function RuntimeSettings({
                       })
                     }
                   >
-                    폴더 선택
+                    Choose folder
                   </button>
                 </label>
                 <label className="field">
-                  기준 브랜치
+                  Base branch
                   <input
                     value={branch}
                     onChange={(e) => setBranch(e.target.value)}
@@ -688,14 +692,14 @@ export default function RuntimeSettings({
                   />
                 </label>
                 <label className="field">
-                  프로젝트 런타임
+                  Project runtime
                   <select
                     value={runtime}
                     onChange={(e) =>
                       setRuntime(e.target.value as ProjectRuntime)
                     }
                   >
-                    <option value="node">Node.js / 웹</option>
+                    <option value="node">Node.js / Web</option>
                     <option value="java-gradle">
                       Java · Gradle / Spring Boot
                     </option>
@@ -703,12 +707,12 @@ export default function RuntimeSettings({
                 </label>
                 {remote && (
                   <label className="field">
-                    Git host 연결
+                    Git host connection
                     <select
                       value={gitConnectionId}
                       onChange={(e) => setGitConnectionId(e.target.value)}
                     >
-                      <option value="">일반 Git만 사용</option>
+                      <option value="">Generic Git only</option>
                       {gitConnections
                         .filter(
                           (c) =>
@@ -718,14 +722,16 @@ export default function RuntimeSettings({
                         .map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name} ·{" "}
-                            {c.testStatus === "passed" ? "검사됨" : "검사 필요"}
+                            {c.testStatus === "passed"
+                              ? "Verified"
+                              : "Needs verification"}
                           </option>
                         ))}
                     </select>
                   </label>
                 )}
                 <label className="field">
-                  실행당 추정 예산 (USD)
+                  Estimated budget per run (USD)
                   <input
                     type="number"
                     min="0.1"
@@ -737,7 +743,7 @@ export default function RuntimeSettings({
                   />
                 </label>
                 <label className="field">
-                  시간 한도 (분)
+                  Time limit (minutes)
                   <input
                     type="number"
                     min="1"
@@ -753,10 +759,10 @@ export default function RuntimeSettings({
                   checked={web}
                   onChange={(e) => setWeb(e.target.checked)}
                 />
-                웹 변경 · e2e 검사 필수
+                Web changes · Require e2e checks
               </label>
               <label className="field">
-                고정 검사 명령 (argv 배열 · 셸 해석 없음)
+                Fixed check commands (argv arrays · no shell expansion)
                 <textarea
                   rows={10}
                   value={checks}
@@ -775,38 +781,38 @@ export default function RuntimeSettings({
                 }}
               >
                 {runtime === "java-gradle"
-                  ? "Gradle 기본 검사 적용"
-                  : "Node 기본 검사 적용"}
+                  ? "Use Gradle checks"
+                  : "Use Node checks"}
               </button>
               <p className="muted">
                 {runtime === "java-gradle"
-                  ? "Java 21·Gradle 8 실행 환경에서 classes와 test를 고정 검사합니다. Spring Boot 통합 검사는 프로젝트의 test task에 포함하세요."
-                  : "필수 typecheck·test와 선택한 e2e 명령이 통과해야 합니다."}{" "}
-                별도 AI 리뷰는 자동 적용됩니다. gateway의 실제 청구액은 추정
-                예산과 다를 수 있습니다.
+                  ? "Java 21 and Gradle 8 run classes and test as fixed checks. Include Spring Boot integration checks in the project's test task."
+                  : "Required typecheck, test and selected e2e commands must pass."}{" "}
+                Independent AI review is included. Gateway billing may differ
+                from the estimated budget.
               </p>
               <button
                 className="primary"
                 disabled={busy || !project || !path || !connectionId}
               >
-                실행 프로필 저장
+                Save execution profile
               </button>
             </form>
           </section>
           <section className="runtime-card">
-            <h2>이 맥의 준비 상태</h2>
+            <h2>Local environment</h2>
             <button
               disabled={busy}
               onClick={() =>
                 void act(async () => {
                   const d = await desktop.diagnostics();
                   setDiagnostic(
-                    `Docker ${d.docker ? "준비됨" : "확인 필요"} · 실행 이미지 ${d.image ? "준비됨" : "pnpm runner:image 필요"}\n${d.message}`,
+                    `Docker ${d.docker ? "Ready" : "Needs attention"} · Runner image ${d.image ? "Ready" : "Run pnpm runner:image"}\n${d.message}`,
                   );
                 })
               }
             >
-              환경 검사
+              Check environment
             </button>
             <p className="preserve">{diagnostic}</p>
           </section>

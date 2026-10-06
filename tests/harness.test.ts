@@ -153,7 +153,7 @@ test("agent revisions invalidate only referenced contracts and immutable executi
         expectedRevision: 1,
         agent: { ...agents[0], revision: 2 },
       }),
-    /최신/,
+    /latest/,
   );
 });
 test("planning does not need human approval but does not approve a design or permit implementation", () => {
@@ -180,7 +180,7 @@ test("planning does not need human approval but does not approve a design or per
         featureId: f.id,
         expectedRevision: 0,
       }),
-    /진행/,
+    /active/,
   );
 });
 test("referenced definition changes stop queued work and invalidate owner approval", () => {

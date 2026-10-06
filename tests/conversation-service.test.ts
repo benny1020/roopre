@@ -159,7 +159,7 @@ test("service persists 30 turns, sends lexical raw source and preserves answer o
       requestId: randomUUID(),
       message: "삭제된 정의에 보내기",
     }),
-    /삭제된 에이전트/,
+    /Deleted agents/,
   );
   await store.mutate((workspace) => {
     workspace.agents = [
@@ -182,7 +182,7 @@ test("service persists 30 turns, sends lexical raw source and preserves answer o
       requestId: randomUUID(),
       message: "보관된 정의에 보내기",
     }),
-    /보관된 에이전트/,
+    /Archived agents/,
   );
 });
 

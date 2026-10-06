@@ -11,13 +11,13 @@ export default class ErrorBoundary extends Component<
     if (!this.state.failed) return this.props.children;
     return (
       <main className="content-page" role="alert">
-        <h1>화면을 다시 불러와 주세요</h1>
+        <h1>Reload the workspace</h1>
         <p>
-          화면 표시 중 문제가 발생했습니다. 저장된 설계와 실행 기록은
-          유지됩니다. 저장하지 않은 입력은 복구되지 않을 수 있습니다.
+          The workspace could not render. Saved designs and run history are
+          preserved; unsaved input may not be recoverable.
         </p>
         <button className="primary" onClick={() => window.location.reload()}>
-          화면 다시 불러오기
+          Reload workspace
         </button>
       </main>
     );

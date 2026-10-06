@@ -64,7 +64,7 @@ async function snapshot(store: Store) {
       turns.length > 10000 ||
       tombstones.length > 10000
     )
-      throw Error("자동 이전 기록 수 한도를 넘었습니다.");
+      throw Error("Automatic migration record limit exceeded.");
     await client.query("COMMIT");
     return { state, events, commands, threads, turns, tombstones };
   } catch (e) {
@@ -80,7 +80,7 @@ export async function transferWorkspace(
   backupDirectory: string,
 ) {
   if (source.key !== target.key)
-    throw Error("이전할 워크스페이스 ID가 다릅니다.");
+    throw Error("Source and target workspace IDs do not match.");
   const bundle = await snapshot(source);
   if (
     bundle.state.runs.some(
@@ -89,16 +89,16 @@ export async function transferWorkspace(
         r.runtime?.terminationConfirmed === false,
     )
   )
-    throw Error("실행을 종료하고 종료 확인 후 이전하세요.");
+    throw Error("End active runs and confirm termination before migrating.");
   if (bundle.turns.some((t: any) => t.status === "pending"))
-    throw Error("진행 중인 상담이 있습니다. 종료된 뒤 다시 시도하세요.");
+    throw Error("A consultation is active. Try again after it finishes.");
   const bytes = JSON.stringify({
     version: 1,
     workspaceId: source.key,
     ...bundle,
   });
   if (Buffer.byteLength(bytes) > 50_000_000)
-    throw Error("워크스페이스가 자동 이전 크기 한도를 넘었습니다.");
+    throw Error("Workspace exceeds the automatic migration size limit.");
   await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
   const digest = hash(bundle);
   const backup = join(backupDirectory, `workspace-${digest}.json`);
@@ -119,7 +119,7 @@ export async function transferWorkspace(
       state.agents?.length
     )
       throw Error(
-        "대상 데이터베이스에 기존 작업이 있습니다. 덮어쓰지 않습니다.",
+        "The target database contains work. It will not be overwritten.",
       );
     const count = (
       await client.query(
@@ -127,7 +127,7 @@ export async function transferWorkspace(
         [target.key],
       )
     ).rows[0].count;
-    if (count) throw Error("대상 데이터베이스에 기존 이벤트가 있습니다.");
+    if (count) throw Error("The target database contains events.");
     const commandCount = (
       await client.query(
         "SELECT count(*)::int AS count FROM commands WHERE workspace_id=$1",
@@ -135,7 +135,7 @@ export async function transferWorkspace(
       )
     ).rows[0].count;
     if (commandCount)
-      throw Error("대상 데이터베이스에 기존 명령 기록이 있습니다.");
+      throw Error("The target database contains command history.");
     const conversationCount = (
       await client.query(
         "SELECT count(*)::int AS count FROM conversation_threads WHERE workspace_id=$1",
@@ -143,7 +143,7 @@ export async function transferWorkspace(
       )
     ).rows[0].count;
     if (conversationCount)
-      throw Error("대상 데이터베이스에 기존 대화가 있습니다.");
+      throw Error("The target database contains conversations.");
     const tombstoneCount = (
       await client.query(
         "SELECT count(*)::int AS count FROM conversation_tombstones WHERE workspace_id=$1",
@@ -151,7 +151,9 @@ export async function transferWorkspace(
       )
     ).rows[0].count;
     if (tombstoneCount)
-      throw Error("대상 데이터베이스에 기존 대화 삭제 기록이 있습니다.");
+      throw Error(
+        "The target database contains conversation deletion records.",
+      );
     await client.query("UPDATE workspaces SET state=$2 WHERE id=$1", [
       target.key,
       JSON.stringify(bundle.state),
@@ -248,8 +250,12 @@ export async function transferWorkspace(
     client.release();
   }
   if (hash(await snapshot(target)) !== digest)
-    throw Error("복원 검증이 일치하지 않습니다. 원본 환경을 유지합니다.");
+    throw Error(
+      "Restore verification failed. The source environment is preserved.",
+    );
   if (hash(await snapshot(source)) !== digest)
-    throw Error("이전 중 원본이 변경됐습니다. 원본 환경을 유지합니다.");
+    throw Error(
+      "The source changed during migration. The source environment is preserved.",
+    );
   return { backup, hash: digest };
 }

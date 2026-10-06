@@ -90,13 +90,13 @@ test("selected queued and termination-pending runs retain the system owner", () 
   run.status = "queued";
   assert.equal(
     describePortfolioRun(run, snapshot.features[0], snapshot)[3],
-    "시스템",
+    "System",
   );
   run.status = "failed";
   run.runtime!.terminationConfirmed = false;
   assert.equal(
     describePortfolioRun(run, snapshot.features[0], snapshot)[3],
-    "시스템",
+    "System",
   );
 });
 

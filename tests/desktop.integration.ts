@@ -30,19 +30,19 @@ test(
       application = await launch();
       let page = await application.firstWindow();
       await page
-        .getByRole("heading", { name: "AI 연결", exact: true })
+        .getByRole("heading", { name: "AI connections", exact: true })
         .waitFor();
       await page
-        .getByLabel("연결 이름", { exact: true })
+        .getByLabel("Connection name", { exact: true })
         .fill("My saved provider");
-      await page.getByLabel("시작 화면 테마").selectOption("dark");
+      await page.getByLabel("Setup appearance").selectOption("dark");
       await page.waitForFunction(
         () =>
           (globalThis as any).document.documentElement.dataset.theme === "dark",
       );
-      await page.getByRole("button", { name: "다음", exact: true }).click();
+      await page.getByRole("button", { name: "Next", exact: true }).click();
       await page
-        .getByRole("heading", { name: "환경 준비", exact: true })
+        .getByRole("heading", { name: "Environment setup", exact: true })
         .waitFor();
       await page.waitForFunction(
         async () => !(await (globalThis as any).roopre.bootstrap()).busy,
@@ -91,29 +91,29 @@ test(
         "Window geometry survives an actual app restart",
       );
       await page
-        .getByRole("heading", { name: "환경 준비", exact: true })
+        .getByRole("heading", { name: "Environment setup", exact: true })
         .waitFor();
       await page.waitForFunction(
         async () => !(await (globalThis as any).roopre.bootstrap()).busy,
       );
-      await page.getByRole("button", { name: "뒤로", exact: true }).click();
+      await page.getByRole("button", { name: "Back", exact: true }).click();
       await page
-        .getByRole("heading", { name: "AI 연결", exact: true })
+        .getByRole("heading", { name: "AI connections", exact: true })
         .waitFor();
       assert.equal(
-        await page.getByLabel("연결 이름", { exact: true }).inputValue(),
+        await page.getByLabel("Connection name", { exact: true }).inputValue(),
         "My saved provider",
       );
       assert.equal(
         await page.getByLabel("API key", { exact: true }).inputValue(),
         "",
       );
-      await page.getByLabel("시작 화면 테마").selectOption("light");
+      await page.getByLabel("Setup appearance").selectOption("light");
       await page.setViewportSize({ width: 1024, height: 700 });
       await page.screenshot({ path: "artifacts/onboarding-light.png" });
       assert.equal(
         await page
-          .getByRole("button", { name: "나중에 · 앱 열기" })
+          .getByRole("button", { name: "Skip for now · Open app" })
           .isEnabled(),
         false,
       );

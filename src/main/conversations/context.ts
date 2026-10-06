@@ -43,7 +43,7 @@ export function buildConversationContext(
   let used = size(input.required) + size(input.question);
   if (used > limit)
     throw Error(
-      "필수 상담 맥락이 입력 한도를 넘었습니다. 범위를 줄이거나 기억을 정리하세요.",
+      "Required context exceeds the input limit. Reduce the scope or remove unused memories.",
     );
   const excluded: string[] = [];
   let summary = input.summary;

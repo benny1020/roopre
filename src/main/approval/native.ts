@@ -9,7 +9,7 @@ export async function authenticateOwner(helper: string, reason: string) {
     if (r.stdout.trim() !== "authenticated") throw Error();
   } catch {
     throw new Error(
-      "본인 확인이 취소됐거나 사용할 수 없습니다. macOS 로그인 암호/Touch ID 설정을 확인하세요.",
+      "Authentication was cancelled or unavailable. Check your macOS password or Touch ID settings.",
     );
   }
 }

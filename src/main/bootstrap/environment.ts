@@ -26,7 +26,7 @@ export class Bootstrap {
     progress: { version: 1, step: "connection", dismissed: false },
   };
   private busy = false;
-  private stage = "시작 준비";
+  private stage = "Preparing setup";
   private error = "";
   private controller?: AbortController;
   private chain = Promise.resolve();
@@ -48,7 +48,7 @@ export class Bootstrap {
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT")
         throw Error(
-          "시작 설정을 읽지 못했습니다. 기존 파일을 보존하고 복구하세요.",
+          "Setup settings could not be read. Preserve the original file and recover it.",
         );
     }
   }
@@ -96,17 +96,17 @@ export class Bootstrap {
       if (!this.state.database) {
         try {
           await this.connect(legacyUrl);
-          this.stage = "기존 환경 연결됨";
+          this.stage = "Existing environment connected";
         } catch {
-          this.stage = "환경 준비 필요";
+          this.stage = "Environment setup required";
         }
       } else {
         // Existing managed data is started only on the explicit Prepare action.
         try {
           await this.connect(await this.databaseUrl());
-          this.stage = "로컬 환경 연결됨";
+          this.stage = "Local environment connected";
         } catch {
-          this.stage = "저장된 환경을 다시 준비하세요";
+          this.stage = "Prepare the saved environment again";
         }
       }
     } finally {
@@ -131,8 +131,8 @@ export class Bootstrap {
     this.work = this.prepareWork(this.controller.signal)
       .catch(() => {
         this.error = this.controller?.signal.aborted
-          ? "환경 준비를 중단했습니다. 데이터는 보존되며 다시 준비할 수 있습니다."
-          : `${this.stage} 단계에 실패했습니다. Git·Docker 실행 상태와 네트워크/디스크 공간을 확인하고 다시 시도하세요.`;
+          ? "Setup stopped. Data is preserved and setup can be resumed."
+          : `${this.stage} failed. Check Git, Docker, network connectivity and available disk space, then try again.`;
       })
       .finally(() => {
         this.busy = false;
@@ -145,11 +145,12 @@ export class Bootstrap {
       backupDirectory: string,
     ) => Promise<() => Promise<void>>,
   ) {
-    if (this.busy) throw Error("진행 중인 환경 준비를 먼저 마치세요.");
-    if (this.state.database) throw Error("이미 전용 환경을 사용 중입니다.");
+    if (this.busy) throw Error("Finish the active setup first.");
+    if (this.state.database)
+      throw Error("A dedicated environment is already in use.");
     this.busy = true;
     this.error = "";
-    this.stage = "기존 데이터 백업·이전";
+    this.stage = "Backing up and migrating data";
     this.controller = new AbortController();
     const controller = this.controller;
     this.work = (async () => {
@@ -178,11 +179,12 @@ export class Bootstrap {
         throw e;
       }
       await activate!();
-      this.stage = "백업·복원 검증 후 전용 환경으로 전환했습니다";
+      this.stage =
+        "Switched to the dedicated environment after backup and restore verification";
     })()
       .catch(() => {
         this.error =
-          "데이터 이전을 완료하지 못했습니다. 원본 DB와 백업/후보 DB를 보존했습니다. 기존 환경을 유지하거나 앱을 다시 열어 연결 상태를 확인하세요.";
+          "Migration could not finish. The source database, backup and candidate database are preserved. Keep the existing environment or reopen the app to check connectivity.";
       })
       .finally(() => {
         this.busy = false;
@@ -228,7 +230,7 @@ export class Bootstrap {
     return `postgres://roopre:${encodeURIComponent(key)}@127.0.0.1:${ports[0].HostPort}/roopre`;
   }
   private async prepareWork(signal: AbortSignal) {
-    this.stage = "필수 도구 확인";
+    this.stage = "Checking required tools";
     if (
       (await this.run("git", ["--version"], { signal, timeout: 6000 })).code !==
       0
@@ -236,7 +238,7 @@ export class Bootstrap {
       throw Error("Git required");
     await this.docker(["info", "--format", "{{.ServerVersion}}"], signal, 6000);
     if (this.state.database || !this.isConnected()) {
-      this.stage = "개인 데이터베이스 준비";
+      this.stage = "Preparing local database";
       if (!this.state.database) {
         this.state.database = {
           id: randomUUID(),
@@ -288,7 +290,13 @@ export class Bootstrap {
             ["volume", "create", "--label", n.label, n.volume],
             signal,
           );
-        await this.docker(["pull", "postgres:18-alpine"], signal, 600000);
+        const cachedDatabaseImage = await this.run(
+          "docker",
+          ["image", "inspect", "postgres:18-alpine"],
+          { signal, timeout: 10000 },
+        );
+        if (cachedDatabaseImage.code !== 0)
+          await this.docker(["pull", "postgres:18-alpine"], signal, 600000);
         const env = join(this.root, `database-${randomUUID()}.env`);
         try {
           await writeFile(
@@ -342,7 +350,7 @@ export class Bootstrap {
       signal.throwIfAborted();
       await this.connect(await this.databaseUrl());
     }
-    this.stage = "격리 실행 이미지 준비";
+    this.stage = "Preparing isolated runner image";
     const image = await this.run(
       "docker",
       ["image", "inspect", "roopre-runner:0.3"],
@@ -371,6 +379,6 @@ export class Bootstrap {
       );
     }
     signal.throwIfAborted();
-    this.stage = "환경 준비 완료";
+    this.stage = "Environment ready";
   }
 }

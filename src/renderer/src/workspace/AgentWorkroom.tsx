@@ -3,12 +3,12 @@ import { stageNames, stages } from "../../../shared/harness";
 
 const status = (agent: AgentCard) =>
   agent.status === "running"
-    ? "작업 중"
+    ? "Working"
     : agent.status === "stopping"
-      ? "중단 요청 처리 중"
+      ? "Stopping"
       : agent.status === "residual"
-        ? "종료된 run의 잔여 기록"
-        : "마지막 기록: 실행 중 · 현재 확인 불가";
+        ? "Residual records from a finished run"
+        : "Last known: running · current state unavailable";
 
 function DeskAvatar({ status }: { status: AgentCard["status"] }) {
   return (
@@ -46,13 +46,13 @@ export default function AgentWorkroom({
   onSelect: (ref: PortfolioRef) => void;
 }) {
   return (
-    <section className="agent-workroom" aria-label="에이전트 작업실">
+    <section className="agent-workroom" aria-label="Agent workspace">
       <header className="agent-workroom-heading">
         <div>
-          <h2>에이전트 작업실</h2>
-          <p>실행 인스턴스가 있는 작업석만 표시합니다.</p>
+          <h2>Agent workspace</h2>
+          <p>Only seats with execution records are shown.</p>
         </div>
-        <small>현재 기록 {agents.length}</small>
+        <small>Current record {agents.length}</small>
       </header>
       <div className="agent-workroom-floor">
         {stages.map((stage) => {
@@ -64,7 +64,7 @@ export default function AgentWorkroom({
             >
               <header>
                 <h3>{stageNames[stage]}</h3>
-                <small>실행 {seats.length}</small>
+                <small>Run {seats.length}</small>
               </header>
               {seats.length ? (
                 <div className="agent-workroom-seats">
@@ -95,14 +95,14 @@ export default function AgentWorkroom({
                           {agent.projectName} / {agent.featureTitle}
                         </span>
                         <code>
-                          {agent.ref.runId} · 시도 {agent.ref.attempt}
+                          {agent.ref.runId} · Attempt {agent.ref.attempt}
                         </code>
                       </button>
                     );
                   })}
                 </div>
               ) : (
-                <p className="agent-workroom-empty">현재 실행 기록 없음</p>
+                <p className="agent-workroom-empty">No current run</p>
               )}
             </section>
           );

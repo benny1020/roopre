@@ -48,106 +48,113 @@ test(
       application = await launch();
       let page = await application.firstWindow();
       await page
-        .getByRole("button", { name: "나중에 · 앱 열기", exact: true })
+        .getByRole("button", { name: "Skip for now · Open app", exact: true })
         .click();
       await page
-        .getByRole("button", { name: "프로젝트 만들기", exact: true })
+        .getByRole("button", { name: "Create project", exact: true })
         .click();
       await page
-        .getByLabel("프로젝트 이름", { exact: true })
+        .getByLabel("Project name", { exact: true })
         .fill("다른 프로젝트");
       await page
-        .getByLabel("설명", { exact: true })
+        .getByLabel("Description", { exact: true })
         .fill("실제 Electron/IPC/DB로 루프리의 개발 동선을 확인한다.");
       await page
-        .getByRole("dialog", { name: "새 프로젝트" })
-        .getByRole("button", { name: "프로젝트 만들기", exact: true })
+        .getByRole("dialog", { name: "New project" })
+        .getByRole("button", { name: "Create project", exact: true })
         .click();
       await page
-        .getByRole("button", { name: "프로젝트 추가", exact: true })
+        .getByRole("button", { name: "Add project", exact: true })
         .click();
       await page
-        .getByLabel("프로젝트 이름", { exact: true })
+        .getByLabel("Project name", { exact: true })
         .fill("roopre 사용성 개선");
       await page
-        .getByLabel("설명", { exact: true })
+        .getByLabel("Description", { exact: true })
         .fill("두 번째 프로젝트의 설정 문맥을 확인한다.");
       await page
-        .getByRole("dialog", { name: "새 프로젝트" })
-        .getByRole("button", { name: "프로젝트 만들기", exact: true })
+        .getByRole("dialog", { name: "New project" })
+        .getByRole("button", { name: "Create project", exact: true })
         .click();
-      await page.getByRole("button", { name: "새 기능", exact: true }).click();
       await page
-        .getByLabel("기능 이름", { exact: true })
+        .getByRole("button", { name: "New feature", exact: true })
+        .click();
+      await page
+        .getByLabel("Feature name", { exact: true })
         .fill("단계에서 바로 에이전트 추가");
       await page
-        .getByLabel("목표와 완료 기준", { exact: true })
+        .getByLabel("Goal and acceptance criteria", { exact: true })
         .fill(
           "AC01 단계의 추가 버튼으로 역할을 추가한다.\nAC02 입력과 배치를 재시작 후 복원한다.\nAC03 사람의 승인 없이 구현하지 않는다.",
         );
       await page
-        .getByRole("button", { name: "기능 만들기", exact: true })
+        .getByRole("button", { name: "Create feature", exact: true })
         .click();
-      await page.getByRole("tab", { name: "개발·검증", exact: true }).click();
+      await page
+        .getByRole("tab", { name: "Build & verify", exact: true })
+        .click();
       await expect(
-        page.getByRole("button", { name: "개발 시작", exact: true }),
+        page.getByRole("button", { name: "Start implementation", exact: true }),
       ).toBeDisabled();
       const taskState = await page.evaluate(() =>
         (globalThis as any).roopre.snapshot(),
       );
       const taskProjectId = taskState.features[0].projectId;
       await page
-        .getByRole("button", { name: "실행 프로필 설정", exact: true })
+        .getByRole("button", {
+          name: "Configure execution profile",
+          exact: true,
+        })
         .click();
       await expect(
-        page.getByRole("combobox", { name: "프로젝트", exact: true }),
+        page.getByRole("combobox", { name: "Projects", exact: true }),
       ).toHaveValue(taskProjectId);
       await page
-        .getByRole("button", { name: "작업으로 돌아가기", exact: true })
+        .getByRole("button", { name: "Back to work", exact: true })
         .click();
       await page
-        .getByRole("button", { name: "설계 작성·검토로 이동", exact: true })
+        .getByRole("button", { name: "Open design review", exact: true })
         .click();
-      await expect(page.getByRole("tab", { name: /계획/ })).toHaveAttribute(
+      await expect(page.getByRole("tab", { name: /Plan/ })).toHaveAttribute(
         "aria-selected",
         "true",
       );
-      await page.getByRole("button", { name: "설정", exact: true }).click();
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
       await page
-        .getByRole("button", { name: "에이전트 · 개발 흐름", exact: true })
+        .getByRole("button", { name: "Agents & workflow", exact: true })
         .click();
       await page
-        .getByRole("button", { name: "기본 흐름 적용", exact: true })
+        .getByRole("button", { name: "Use default workflow", exact: true })
         .click();
       await expect(
-        page.getByText("기본 흐름을 적용했습니다.", { exact: true }),
+        page.getByText("Default workflow applied.", { exact: true }),
       ).toBeVisible();
       await page
-        .getByRole("button", { name: "검증에 에이전트 추가", exact: true })
+        .getByRole("button", { name: "Add agent to Verification", exact: true })
         .click();
       await page
-        .getByRole("button", { name: "새 역할 만들기 · Markdown", exact: true })
+        .getByRole("button", { name: "Create role · Markdown", exact: true })
         .click();
-      const dialog = page.getByRole("dialog", { name: "에이전트 편집" });
+      const dialog = page.getByRole("dialog", { name: "Edit agent" });
       await dialog
-        .getByLabel("에이전트 이름", { exact: true })
+        .getByLabel("Agent name", { exact: true })
         .fill("루프리 사용성 검증자");
       await dialog
-        .getByLabel("Markdown 지침", { exact: true })
+        .getByLabel("Markdown instructions", { exact: true })
         .fill(
           "# 검증\n키보드 추가, 단계 선택, 저장·재시작 보존을 확인하고 실제 수행 근거만 기록한다.",
         );
       await dialog
-        .getByRole("button", { name: "에이전트 저장", exact: true })
+        .getByRole("button", { name: "Save agent", exact: true })
         .click();
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await page
-        .getByRole("button", { name: "개발 흐름 저장", exact: true })
+        .getByRole("button", { name: "Save workflow", exact: true })
         .click();
       await expect(
-        page.getByText("개발 흐름을 저장했습니다.", { exact: true }),
+        page.getByText("Workflow saved.", { exact: true }),
       ).toBeVisible();
-      await page.getByLabel("화면 테마").selectOption("dark");
+      await page.getByLabel("Appearance").selectOption("dark");
       await page.locator(".harness-panel").evaluate((el) => {
         el.scrollTop = 0;
       });
@@ -177,7 +184,7 @@ test(
       application = undefined;
       application = await launch();
       page = await application.firstWindow();
-      await expect(page.getByText("동기화됨", { exact: true })).toBeVisible();
+      await expect(page.getByText("Synced", { exact: true })).toBeVisible();
       const after = await page.evaluate(() =>
         (globalThis as any).roopre.snapshot(),
       );

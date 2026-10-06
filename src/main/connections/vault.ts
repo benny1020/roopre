@@ -18,7 +18,7 @@ export function validateEndpoint(value: string) {
   const u = new URL(value);
   if (u.protocol !== "https:" || u.username || u.password || u.search || u.hash)
     throw Error(
-      "endpoint는 인증 정보·query·fragment 없는 HTTPS 기본 주소여야 합니다.",
+      "Endpoint must be an HTTPS base URL without credentials, query parameters or fragments.",
     );
   return u.href.replace(/\/$/, "");
 }
@@ -70,7 +70,7 @@ export class ConnectionVault {
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT")
         throw Error(
-          "연결 저장소를 읽지 못했습니다. 원본 파일을 보존하고 복구하세요.",
+          "Connection store could not be read. Preserve the original file and recover it.",
         );
     }
   }
@@ -79,7 +79,7 @@ export class ConnectionVault {
   }
   get(id: string) {
     const r = this.records.find((r) => r.info.id === id);
-    if (!r) throw Error("AI 연결이 없습니다.");
+    if (!r) throw Error("No AI connection configured.");
     return {
       info: { ...r.info },
       key: this.cipher.decrypt(Buffer.from(r.sealed, "base64")),
@@ -110,8 +110,8 @@ export class ConnectionVault {
     const id = input.id ?? randomUUID();
     await this.change(() => {
       const old = this.records.find((r) => r.info.id === id);
-      if (input.id && !old) throw Error("연결을 찾을 수 없습니다.");
-      if (!old && !input.key) throw Error("API key를 입력하세요.");
+      if (input.id && !old) throw Error("Connection not found.");
+      if (!old && !input.key) throw Error("Enter an API key.");
       const sealed = input.key
         ? this.cipher.encrypt(input.key).toString("base64")
         : old!.sealed;
@@ -138,7 +138,7 @@ export class ConnectionVault {
   async test(id: string) {
     const { info, key } = this.get(id);
     let passed = false,
-      diagnostic = "연결 실패";
+      diagnostic = "Connection failed";
     try {
       const response = await fetch(modelUrl(info.endpoint), {
         method: "POST",
@@ -161,12 +161,13 @@ export class ConnectionVault {
         diagnostic =
           (
             {
-              401: "인증 실패: key와 인증 방식을 확인하세요.",
-              403: "권한 없음: 모델 접근 권한을 확인하세요.",
-              404: "API 경로 또는 모델을 확인하세요.",
-              429: "요청 한도 또는 잔액을 확인하세요.",
+              401: "Authentication failed. Check the key and authentication method.",
+              403: "Access denied. Check model permissions.",
+              404: "Check the API path and model.",
+              429: "Check request limits and account balance.",
             } as Record<number, string>
-          )[response.status] ?? `모델 요청 실패 (HTTP ${response.status})`;
+          )[response.status] ??
+          `Model request failed (HTTP ${response.status})`;
         await response.body?.cancel();
       } else {
         const reader = response.body!.getReader();
@@ -184,11 +185,12 @@ export class ConnectionVault {
         const data = JSON.parse(body + decoder.decode());
         passed = data.type === "message" && Array.isArray(data.content);
         diagnostic = passed
-          ? "인증·모델 응답 확인. 스트리밍·도구 실행은 실제 실행 시 추가 검증합니다."
-          : "Anthropic Messages 응답 규격이 아닙니다.";
+          ? "Authentication and model response verified. Streaming and tool execution are checked during a run."
+          : "Response is not Anthropic Messages-compatible.";
       }
     } catch {
-      diagnostic = "연결 실패: 주소·TLS·네트워크 또는 응답 규격을 확인하세요.";
+      diagnostic =
+        "Connection failed. Check the URL, TLS, network and response format.";
     }
     await this.change(() => {
       const current = this.records.find((r) => r.info.id === id);

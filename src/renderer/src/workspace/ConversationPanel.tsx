@@ -142,8 +142,8 @@ export default function ConversationPanel({
   const description = useMemo(
     () =>
       state.thread?.summary
-        ? `요약은 ${state.thread.summaryThrough || 0}번 turn까지 반영됨`
-        : "아직 자동 요약이 없습니다.",
+        ? `Summary covers ${state.thread.summaryThrough || 0} turns`
+        : "No automatic summary yet.",
     [state.thread],
   );
   const derivedMemories = state.thread
@@ -209,22 +209,22 @@ export default function ConversationPanel({
     }
   };
 
-  if (!api) return <p className="muted">대화 서비스를 준비하는 중입니다.</p>;
+  if (!api) return <p className="muted">Preparing conversation service.</p>;
 
   return (
-    <section className="conversation-panel" aria-label="에이전트 상담">
+    <section className="conversation-panel" aria-label="Consult agent">
       <p className="conversation-boundary">
-        {agentName}와의 읽기 전용 상담 · 실행 CLI, 승인, 코드 변경과 분리됩니다.
+        {agentName} · Read-only consultation, separate from execution, approvals
+        and code changes.
       </p>
       {archived ? (
         <p className="conversation-warning">
-          보관된 에이전트의 상담 기록입니다. 기존 기록은 읽을 수 있지만 새
-          질문은 보낼 수 없습니다.
+          This agent is archived. You can read its history but cannot send new
+          questions.
         </p>
       ) : !configured ? (
         <p className="conversation-warning">
-          이 에이전트의 연결이 설정되지 않았습니다. 런타임 설정에서 연결을
-          저장하고 검사하세요.
+          This agent has no connection. Save and test one in runtime settings.
         </p>
       ) : null}
       <div
@@ -242,11 +242,11 @@ export default function ConversationPanel({
             className="soft conversation-history"
             onClick={() => void loadOlder()}
           >
-            이전 대화 더 보기 <ChevronUp size={13} />
+            Load earlier messages <ChevronUp size={13} />
           </button>
         )}
         {!state.turns.length && !loading && (
-          <p className="muted">이 범위에 저장된 대화가 없습니다.</p>
+          <p className="muted">No saved conversation in this scope.</p>
         )}
         {state.turns.map((turn) => (
           <TurnCard
@@ -269,7 +269,7 @@ export default function ConversationPanel({
       {state.thread && (
         <details className="conversation-provenance">
           <summary>
-            요약·참조 기록 <ChevronDown size={13} />
+            Summary & references <ChevronDown size={13} />
           </summary>
           <p>{description}</p>
           {state.thread.summary && <p>{state.thread.summary}</p>}
@@ -292,24 +292,26 @@ export default function ConversationPanel({
                 )
             }
           >
-            요약 초기화 <RotateCcw size={13} />
+            Reset summary <RotateCcw size={13} />
           </button>
           <button className="soft" onClick={() => setDeleteOpen(true)}>
-            대화 삭제
+            Delete conversation
           </button>
           {deleteOpen && (
             <div
               className="conversation-delete"
               role="dialog"
-              aria-label="대화 삭제 확인"
+              aria-label="Delete this conversation?"
             >
               <p>
-                대화 원문과 요약을 삭제합니다. 외부 제공자에 이미 전달된 사본은
-                삭제되지 않습니다.
+                Deletes local messages and summaries. Copies already sent to the
+                provider are unaffected.
               </p>
               {!!derivedMemories.length && (
                 <fieldset>
-                  <legend>이 대화에서 파생된 기억도 사용 중지</legend>
+                  <legend>
+                    Also deactivate memories derived from this conversation
+                  </legend>
                   {derivedMemories.map((memory) => (
                     <label key={memory.id}>
                       <input
@@ -329,12 +331,12 @@ export default function ConversationPanel({
                 </fieldset>
               )}
               <p className="conversation-warning">
-                선택한 기억을 중지하면 이 프로젝트의 설계 승인을 다시 확인해야
-                합니다. 대기·실행 중인 작업이 있으면 삭제와 중지가 모두
-                거절됩니다.
+                Deactivating selected memories requires project designs to be
+                reviewed again. Deletion and deactivation are blocked during
+                queued or active runs.
               </p>
               <button className="soft" onClick={() => setDeleteOpen(false)}>
-                취소
+                Cancel
               </button>
               <button
                 onClick={() =>
@@ -355,7 +357,7 @@ export default function ConversationPanel({
                     )
                 }
               >
-                삭제 확인
+                Confirm deletion
               </button>
             </div>
           )}
@@ -374,17 +376,17 @@ export default function ConversationPanel({
         }}
       >
         <label>
-          <span className="sr-only">상담 메시지</span>
+          <span className="sr-only">Consultation message</span>
           <textarea
-            aria-label="상담 메시지"
+            aria-label="Consultation message"
             maxLength={8000}
-            placeholder="현재 기록을 바탕으로 질문하세요"
+            placeholder="Ask about the current work"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
           />
         </label>
         <button type="submit" disabled={!canSend}>
-          <Send size={14} /> {loading ? "요청 중" : "질문 보내기"}
+          <Send size={14} /> {loading ? "Sending" : "Send question"}
         </button>
       </form>
     </section>
@@ -404,11 +406,11 @@ function TurnCard({
 }) {
   const manifest = turn.contextManifest;
   const statusLabel = {
-    pending: "답변 준비 중",
-    completed: "답변 완료",
-    failed: "실패",
-    interrupted: "중단됨",
-    cancelled: "취소됨",
+    pending: "Generating response",
+    completed: "Response complete",
+    failed: "Failed",
+    interrupted: "Interrupted",
+    cancelled: "Cancelled",
   }[turn.status];
   return (
     <article className={`conversation-turn ${turn.status}`}>
@@ -417,18 +419,18 @@ function TurnCard({
       <small>
         {statusLabel}
         {turn.usage &&
-          ` · 입력 ${turn.usage.inputTokens ?? "미보고"} / 출력 ${turn.usage.outputTokens ?? "미보고"} tokens`}
+          ` · Input ${turn.usage.inputTokens ?? "Not reported"} / Output ${turn.usage.outputTokens ?? "Not reported"} tokens`}
       </small>
       <details>
-        <summary>참조한 맥락</summary>
+        <summary>Referenced context</summary>
         <p>
-          기억 {manifest.memories.length}개 · 최근 대화{" "}
-          {manifest.recentTurnIds.length}개 · 이전 검색{" "}
-          {manifest.searchTurnIds.length}개
+          Memory {manifest.memories.length} · Recent messages{" "}
+          {manifest.recentTurnIds.length} · Retrieved history{" "}
+          {manifest.searchTurnIds.length}
         </p>
         {!!manifest.memories.length && (
           <p>
-            기억:{" "}
+            Memory:{" "}
             {manifest.memories
               .map(
                 (memory) =>
@@ -439,54 +441,54 @@ function TurnCard({
         )}
         {!!manifest.recentTurnIds.length && (
           <p>
-            최근:{" "}
+            Recent:{" "}
             {manifest.recentTurnIds
-              .map((item) => `${item.ordinal}번 (${item.id})`)
+              .map((item) => `${item.ordinal}(${item.id})`)
               .join(", ")}
           </p>
         )}
         {!!manifest.searchTurnIds.length && (
           <p>
-            검색:{" "}
+            Retrieved:{" "}
             {manifest.searchTurnIds
-              .map((item) => `${item.ordinal}번 (${item.id})`)
+              .map((item) => `${item.ordinal}(${item.id})`)
               .join(", ")}
           </p>
         )}
         {(manifest.connectionId || manifest.connectionVersion) && (
           <p>
-            연결: {manifest.connectionId || "미기록"} · v
-            {manifest.connectionVersion || "미기록"} · 에이전트 r
+            Connection: {manifest.connectionId || "Not recorded"} · v
+            {manifest.connectionVersion || "Not recorded"} · Agent r
             {manifest.agentRevision}
           </p>
         )}
         {manifest.execution && (
           <p>
-            실행: {manifest.execution.runId} · 시도 {manifest.execution.attempt}{" "}
-            · {manifest.execution.executionId}
+            Run: {manifest.execution.runId} · Attempt{" "}
+            {manifest.execution.attempt} · {manifest.execution.executionId}
           </p>
         )}
         {!!manifest.excluded.length && (
-          <p>제외: {manifest.excluded.join(", ")}</p>
+          <p>Excluded: {manifest.excluded.join(", ")}</p>
         )}
       </details>
       {turn.error && <p className="conversation-error">{turn.error}</p>}
       {turn.warning && <p className="conversation-warning">{turn.warning}</p>}
       {turn.answer && turn.status === "completed" && (
         <button className="soft" onClick={onSave}>
-          기억으로 저장
+          Save as memory
         </button>
       )}
       {(turn.status === "failed" ||
         turn.status === "interrupted" ||
         turn.status === "cancelled") && (
         <button className="soft" onClick={onRetry}>
-          답변 재요청 <RotateCcw size={13} />
+          Regenerate response <RotateCcw size={13} />
         </button>
       )}
       {turn.status === "pending" && (
         <button className="soft" onClick={onCancel}>
-          요청 중단 <Square size={12} />
+          Stop response <Square size={12} />
         </button>
       )}
     </article>

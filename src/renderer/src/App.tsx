@@ -46,6 +46,9 @@ import {
   gate,
   latestDesign,
   sections,
+  sectionLabels,
+  designSectionKey,
+  designSectionLabel,
   type Snapshot,
   type Feature,
   type Command,
@@ -74,10 +77,10 @@ const saveLocal = (key: string, value: unknown) =>
 const ago = (date: string) => {
   const m = Math.max(0, Math.floor((Date.now() - Date.parse(date)) / 60000));
   return m < 1
-    ? "방금 전"
+    ? "Just now"
     : m < 60
-      ? `${m}분 전`
-      : `${Math.floor(m / 60)}시간 전`;
+      ? `${m} min ago`
+      : `${Math.floor(m / 60)} hr ago`;
 };
 type Send = (command: Command) => Promise<any>;
 type PortfolioState = NonNullable<WorkspaceLocation["portfolio"]>;
@@ -173,7 +176,9 @@ export default function App() {
       headers: { "x-devflow-actor": as },
     });
     if (!response.ok)
-      throw new Error("팀 상태를 불러올 수 없습니다. API 연결을 확인하세요.");
+      throw new Error(
+        "Unable to load the workspace. Check the API connection.",
+      );
     const data = await response.json();
     if (currentActor.current === as) {
       if (data.revision >= acceptedRevision.current) {
@@ -285,7 +290,7 @@ export default function App() {
   }, [notice]);
   const send: Send = async (command) => {
     if (!connected)
-      throw new Error("연결이 끊겼습니다. 동기화 후 다시 시도하세요.");
+      throw new Error("Connection lost. Wait for sync, then try again.");
     if (window.roopre) {
       const result = await window.roopre.command(command);
       await refresh();
@@ -470,11 +475,11 @@ export default function App() {
         <span className="app-wordmark">{APP_NAME}</span>
         <span className="titlebar-divider" />
         <span className="caption">Agentic Development Environment</span>
-        <nav className="workspace-history" aria-label="작업 이동 기록">
+        <nav className="workspace-history" aria-label="Navigation history">
           <button
             className="icon-button"
-            aria-label="이전 작업으로"
-            title="이전 작업으로 (⌘[ / Ctrl+[)"
+            aria-label="Go back"
+            title="Go back (⌘[ / Ctrl+[)"
             disabled={!navigation.canBack || modal !== null || search}
             onClick={() => navigation.move(-1)}
           >
@@ -482,8 +487,8 @@ export default function App() {
           </button>
           <button
             className="icon-button"
-            aria-label="다음 작업으로"
-            title="다음 작업으로 (⌘] / Ctrl+])"
+            aria-label="Go forward"
+            title="Go forward (⌘] / Ctrl+])"
             disabled={!navigation.canForward || modal !== null || search}
             onClick={() => navigation.move(1)}
           >
@@ -493,7 +498,7 @@ export default function App() {
         <div className="titlebar-right">
           <button
             className="icon-button notification-button"
-            aria-label="작업 알림"
+            aria-label="Notifications"
             onClick={() => setNotifications(!notifications)}
           >
             <Bell size={15} />
@@ -501,56 +506,60 @@ export default function App() {
           </button>
           <span className={`connection ${connected ? "" : "offline"}`}>
             <span className="dot" />
-            {connected ? "동기화됨" : "연결 확인 중"}
+            {connected ? "Synced" : "Connecting"}
           </span>
           <select
             className="theme-select"
-            aria-label="화면 테마"
+            aria-label="Appearance"
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
           >
-            <option value="system">시스템 설정</option>
-            <option value="light">라이트</option>
-            <option value="dark">다크</option>
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
           </select>
         </div>
       </header>
       <div className="shell">
         <aside className="sidebar">
           <div className="team">
-            <img className="team-mark" src={appIcon} alt="루프리" />
+            <img className="team-mark" src={appIcon} alt="Roopre" />
             <div>
               <strong>roopre</strong>
-              <small>개발 흐름</small>
+              <small>Development workspace</small>
             </div>
           </div>
-          <button className="search-button" onClick={() => setSearch(true)}>
-            <Search size={15} /> 명령 · 작업 검색 <kbd>⌘ K</kbd>
+          <button
+            className="search-button"
+            aria-label="Search commands and work"
+            onClick={() => setSearch(true)}
+          >
+            <Search size={15} /> Search <kbd>⌘ K</kbd>
           </button>
-          <nav aria-label="주요 화면">
+          <nav aria-label="Main navigation">
             <Nav
               active={scope === "inbox" && !selected}
               icon={<House size={17} />}
-              label="홈"
+              label="Home"
               count={inboxCount}
               onClick={() => navigate("inbox")}
             />
             <Nav
               active={scope === "all" && !selected}
               icon={<PanelLeft size={17} />}
-              label="작업"
+              label="Work"
               onClick={() => navigate("all")}
             />
             <Nav
               active={scope === "quality" && !selected}
               icon={<ShieldCheck size={17} />}
-              label="품질"
+              label="Quality"
               onClick={() => navigate("quality")}
             />
             <Nav
               active={scope === "queued" && !selected}
               icon={<Bot size={17} />}
-              label="에이전트"
+              label="Agents"
               count={
                 snapshot?.runs.filter((r) => activeStatuses.includes(r.status))
                   .length
@@ -559,18 +568,18 @@ export default function App() {
             />
           </nav>
           <div className="nav-section">
-            <span>프로젝트</span>
+            <span>Projects</span>
             {me?.role === "admin" && (
               <button
                 className="icon-button"
-                aria-label="프로젝트 추가"
+                aria-label="Add project"
                 onClick={() => setModal("project")}
               >
                 <Plus size={15} />
               </button>
             )}
           </div>
-          <nav aria-label="프로젝트">
+          <nav aria-label="Projects">
             {snapshot?.projects.map((p) => (
               <div key={p.id}>
                 <Nav
@@ -612,14 +621,14 @@ export default function App() {
             <Nav
               active={settingsScopes.includes(scope) && !selected}
               icon={<Settings2 size={17} />}
-              label="설정"
+              label="Settings"
               onClick={() => navigate("harness")}
             />
             {window.roopre?.onboarding && (
               <Nav
                 active={false}
                 icon={<CircleDot size={17} />}
-                label="시작 가이드"
+                label="Getting started"
                 onClick={() =>
                   window.dispatchEvent(new Event("roopre:onboarding"))
                 }
@@ -627,20 +636,20 @@ export default function App() {
             )}
             {window.roopre ? (
               <div className="profile">
-                <div className="avatar">나</div>
+                <div className="avatar">You</div>
                 <span>
-                  프로젝트 소유자
+                  Project owner
                   <br />
-                  <small>설계 검토 및 승인</small>
+                  <small>Design review and approval</small>
                 </span>
               </div>
             ) : (
               <div className="profile">
-                <div className="avatar">나</div>
+                <div className="avatar">You</div>
                 <span>
-                  로컬 미리보기
+                  Local preview
                   <br />
-                  <small>설계와 검토 상태를 확인합니다.</small>
+                  <small>Review plans and approval status.</small>
                 </span>
               </div>
             )}
@@ -648,16 +657,19 @@ export default function App() {
         </aside>
         <main className="workspace">
           {settingsScopes.includes(scope) && !feature && (
-            <nav className="settings-navigation" aria-label="설정 항목">
+            <nav
+              className="settings-navigation"
+              aria-label="Settings navigation"
+            >
               <span>
                 <Settings2 size={14} />
-                설정
+                Settings
               </span>
               {[
-                ["harness", "하네스 표준"],
-                ["agents", "에이전트 · 개발 흐름"],
-                ["runtime", "표준 · 연결 · 환경"],
-                ["policies", "지침 · 팀 설정"],
+                ["harness", "Harness standards"],
+                ["agents", "Agents & workflow"],
+                ["runtime", "Standards, connections & runtime"],
+                ["policies", "Instructions & team"],
               ].map(([id, label]) => (
                 <button
                   key={id}
@@ -670,14 +682,14 @@ export default function App() {
               {returnFeature && (
                 <button
                   className="settings-return"
-                  title={`저장한 설정만 적용됩니다. ${returnFeature.title} 작업으로 돌아가기`}
+                  title={`Only saved settings take effect. ${returnFeature.title} Back to work`}
                   onClick={() => {
                     setScope(returnFeature.projectId);
                     setSelected(returnFeature.id);
                     setSettingsContext(undefined);
                   }}
                 >
-                  <ArrowLeft size={13} /> 작업으로 돌아가기
+                  <ArrowLeft size={13} /> Back to work
                 </button>
               )}
             </nav>
@@ -685,14 +697,14 @@ export default function App() {
           {!connected && snapshot && (
             <div className="offline-banner">
               <WifiOff size={16} />
-              마지막 동기화 {lastSync ? ago(lastSync) : "미확인"} · 읽기와 초안
-              작성만 가능합니다.
+              Last synced {lastSync ? ago(lastSync) : "Unknown"} · Read-only;
+              drafts remain available.
             </div>
           )}
           {syncError && (
             <div className="error-banner" role="alert">
-              연결 복구 중 · {syncError} · 저장된 화면을 유지하며 자동으로 다시
-              연결합니다.
+              Reconnecting · {syncError} · Your workspace is preserved while we
+              reconnect.
             </div>
           )}
           {error && (
@@ -701,7 +713,7 @@ export default function App() {
               <span>{error}</span>
               <button
                 className="icon-button"
-                aria-label="오류 닫기"
+                aria-label="Dismiss error"
                 onClick={() => setError("")}
               >
                 <X size={15} />
@@ -711,8 +723,8 @@ export default function App() {
           {!snapshot ? (
             <div className="loading">
               <LoaderCircle size={24} className="spin" />
-              <h2>팀 작업을 불러오는 중</h2>
-              <p>로컬 API와 데이터베이스 연결을 확인하고 있습니다.</p>
+              <h2>Loading workspace</h2>
+              <p>Checking the local API and database connection.</p>
             </div>
           ) : feature ? (
             <FeatureView
@@ -829,11 +841,11 @@ export default function App() {
             <div className="content-page">
               <div className="page-heading">
                 <div>
-                  <div className="eyebrow">시작하기</div>
-                  <h1>내 프로젝트로 시작하세요</h1>
+                  <div className="eyebrow">Get started</div>
+                  <h1>Start with your project</h1>
                   <p>
-                    프로젝트를 만들고 저장소와 AI 연결을 설정한 뒤, 요구사항과
-                    설계부터 진행하세요.
+                    Connect a repository and model, then define your first
+                    feature.
                   </p>
                   <button
                     className="primary spaced"
@@ -841,7 +853,7 @@ export default function App() {
                     onClick={() => setModal("project")}
                   >
                     <Plus size={16} />
-                    프로젝트 만들기
+                    Create project
                   </button>
                 </div>
               </div>
@@ -865,6 +877,7 @@ export default function App() {
               }}
               onProject={(projectId) => navigate(projectId)}
               onPortfolio={() => navigate("portfolio")}
+              onAttention={() => navigate("blocked")}
               onQuality={() => navigate("quality")}
               onRuns={() => navigate("queued")}
               onCreate={() => setModal("feature")}
@@ -874,23 +887,23 @@ export default function App() {
               <div className="page-heading">
                 <div>
                   <div className="eyebrow">
-                    {project ? "프로젝트" : "워크스페이스"}
+                    {project ? "Projects" : "Workspace"}
                   </div>
                   <h1>
                     {project?.name ||
                       (
                         {
-                          all: "모든 작업",
-                          blocked: "확인 필요한 작업",
-                          queued: "실행 대기",
+                          all: "All work",
+                          blocked: "Needs attention",
+                          queued: "Queued",
                         } as Record<string, string>
                       )[scope]}
                   </h1>
                   <p>
                     {project?.description ||
                       (scope === "inbox"
-                        ? "설계 검토와 필요한 판단부터 확인하세요."
-                        : "여러 프로젝트의 기능과 다음 단계를 한곳에서 확인하세요.")}
+                        ? "Review decisions and blockers first."
+                        : "Follow features and next steps across projects.")}
                   </p>
                 </div>
                 <button
@@ -898,7 +911,8 @@ export default function App() {
                   onClick={() => setModal("feature")}
                   disabled={!connected}
                 >
-                  <Plus size={16} />새 기능
+                  <Plus size={16} />
+                  New feature
                 </button>
               </div>
               <div className="list-toolbar">
@@ -908,26 +922,27 @@ export default function App() {
                     onClick={() => setView("list")}
                   >
                     <FileText size={15} />
-                    기능 목록 <span>{visible.length}</span>
+                    List <span>{visible.length}</span>
                   </button>
                   <button
                     className={view === "board" ? "active" : ""}
                     onClick={() => setView("board")}
                   >
-                    단계 보드
+                    Board
                   </button>
                 </div>
                 <label className="inline-search">
                   <Search size={15} />
                   <input
-                    placeholder="기능 검색"
+                    aria-label="Search features"
+                    placeholder="Search features"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
                 </label>
               </div>
               {view === "board" ? (
-                <div className="phase-board" aria-label="개발 단계 보드">
+                <div className="phase-board" aria-label="Development board">
                   {phases.map((label, phase) => (
                     <section key={phase}>
                       <h3>
@@ -954,7 +969,7 @@ export default function App() {
                             </small>
                             <span>
                               {snapshot.gates[f.id].approved}/
-                              {snapshot.gates[f.id].required} 승인
+                              {snapshot.gates[f.id].required} approved
                             </span>
                           </button>
                         ))}
@@ -962,16 +977,12 @@ export default function App() {
                   ))}
                 </div>
               ) : (
-                <div
-                  className="feature-table"
-                  role="region"
-                  aria-label="기능 목록"
-                >
+                <div className="feature-table" role="region" aria-label="List">
                   <div className="table-head">
-                    <span>기능</span>
-                    <span>현재 단계</span>
-                    <span>다음 행동</span>
-                    <span>최근 변경</span>
+                    <span>Feature</span>
+                    <span>Stage</span>
+                    <span>Next action</span>
+                    <span>Updated</span>
                   </div>
                   {visible.map((f) => {
                     const g = snapshot.gates[f.id];
@@ -1000,10 +1011,10 @@ export default function App() {
                                 )?.name
                               }
                               <span className="meta-separator">/</span>
-                              {f.template === "bug" ? "버그 수정" : "신규 기능"}
+                              {f.template === "bug" ? "Bug fix" : "New feature"}
                               {g.blockers > 0 && (
                                 <span className="blocking-note">
-                                  차단 의견 {g.blockers}
+                                  Blocking comments {g.blockers}
                                 </span>
                               )}
                             </small>
@@ -1032,8 +1043,8 @@ export default function App() {
                   {!visible.length && (
                     <div className="empty">
                       <CheckCheck size={25} />
-                      <h3>지금 확인할 작업이 없습니다</h3>
-                      <p>새 기능을 등록하거나 다른 프로젝트를 선택하세요.</p>
+                      <h3>Nothing needs attention</h3>
+                      <p>Create a feature or select another project.</p>
                     </div>
                   )}
                 </div>
@@ -1041,9 +1052,10 @@ export default function App() {
               <div className="workspace-note">
                 <ShieldCheck size={17} />
                 <div>
-                  <strong>설계가 승인되면 개발을 시작합니다.</strong>
+                  <strong>Implementation starts after design approval.</strong>
                   <p>
-                    필수 검토자의 승인과 차단 의견 해결 상태를 함께 확인합니다.
+                    All required approvals and blocking comments must be
+                    resolved.
                   </p>
                 </div>
               </div>
@@ -1052,12 +1064,12 @@ export default function App() {
         </main>
       </div>
       {notifications && (
-        <aside className="notification-panel" aria-label="작업 알림 목록">
+        <aside className="notification-panel" aria-label="Notification list">
           <header>
-            <strong>작업 알림</strong>
+            <strong>Notifications</strong>
             <button
               className="icon-button"
-              aria-label="알림 닫기"
+              aria-label="Close notifications"
               onClick={() => setNotifications(false)}
             >
               <X size={16} />
@@ -1087,18 +1099,18 @@ export default function App() {
                 <MessageSquare size={15} />
                 <span>
                   {snapshot?.features.find((f) => f.id === e.featureId)
-                    ?.title || "팀 지침"}
+                    ?.title || "Team instructions"}
                   <small>
                     {
                       (
                         {
-                          publish_design: "새 설계 리뷰 요청",
-                          review: "검토 상태 변경",
-                          add_thread: "새 리뷰 의견",
-                          resolve_thread: "의견 해결 확인",
-                          queue_run: "실행 요청 저장",
-                          publish_policy: "지침 버전 변경",
-                          update_project_policy: "프로젝트 기준 변경",
+                          publish_design: "Design review requested",
+                          review: "Approval updated",
+                          add_thread: "New review comment",
+                          resolve_thread: "Comment resolved",
+                          queue_run: "Run queued",
+                          publish_policy: "Instructions updated",
+                          update_project_policy: "Project standards updated",
                         } as Record<string, string>
                       )[e.type]
                     }{" "}
@@ -1108,7 +1120,7 @@ export default function App() {
               </button>
             ))}
           {!events.length && (
-            <p>연결 이후의 검토 요청과 변경 알림을 표시합니다.</p>
+            <p>Review requests and changes appear here while connected.</p>
           )}
         </aside>
       )}
@@ -1240,7 +1252,9 @@ function FeatureView({
   const [checked, setChecked] = useState<(typeof sections)[number][]>(() =>
     readLocal(`checks:${actor}:${latest?.id}`, []),
   );
-  const [section, setSection] = useState<(typeof sections)[number]>("요구사항");
+  const [section, setSection] = useState<(typeof sections)[number]>(
+    sections[0],
+  );
   const [comment, setComment] = useState(
     readLocal(`comment:${actor}:${f.id}`, ""),
   );
@@ -1252,7 +1266,7 @@ function FeatureView({
   const documentRef = useRef<HTMLDivElement>(null);
   const oldLatest = useRef(latest?.id);
   useEffect(() => {
-    setSection("요구사항");
+    setSection(sections[0]);
   }, []);
   useEffect(() => {
     if (oldLatest.current !== latest?.id) {
@@ -1323,14 +1337,14 @@ function FeatureView({
       <div className="detail-heading">
         <button
           className="icon-button"
-          aria-label="기능 목록으로"
+          aria-label="Back to features"
           onClick={onBack}
         >
           <ArrowLeft size={18} />
         </button>
         <span>{snapshot.projects.find((p) => p.id === f.projectId)?.name}</span>
         <ChevronRight size={13} />
-        <span>{f.template === "bug" ? "버그 수정" : "신규 기능"}</span>
+        <span>{f.template === "bug" ? "Bug fix" : "New feature"}</span>
         <div className="detail-heading-end">
           <span className={`work-state ${state.tone}`}>
             <i />
@@ -1355,10 +1369,10 @@ function FeatureView({
         >
           <span className="actor-label">
             {state.actor === "HUMAN"
-              ? "내가 할 일"
+              ? "Your action"
               : state.actor === "AGENT"
-                ? "에이전트 작업"
-                : "시스템 확인"}
+                ? "Agent activity"
+                : "System checks"}
           </span>
           <span>{state.next}</span>
           <ArrowRight size={13} />
@@ -1366,7 +1380,7 @@ function FeatureView({
       </div>
       <Tabs
         className="detail-tabs"
-        label="기능 정보"
+        label="Feature details"
         value={tab}
         onChange={(next) => {
           setTab(next as typeof tab);
@@ -1377,16 +1391,16 @@ function FeatureView({
             id: "design",
             label: (
               <>
-                계획{" "}
+                Plan{" "}
                 {g.blockers > 0 && (
                   <span className="tab-counter">{g.blockers}</span>
                 )}
               </>
             ),
           },
-          { id: "requirements", label: "요구사항 편집" },
-          { id: "execution", label: "개발·검증" },
-          { id: "policy", label: "규칙" },
+          { id: "requirements", label: "Edit requirements" },
+          { id: "execution", label: "Build & verify" },
+          { id: "policy", label: "Rules" },
         ]}
       />
       {tab === "design" ? (
@@ -1396,22 +1410,22 @@ function FeatureView({
             { "--review-width": `${reviewWidth}px` } as React.CSSProperties
           }
         >
-          <section className="design-panel" aria-label="설계 문서">
+          <section className="design-panel" aria-label="Design document">
             <div className="document-toolbar">
               <div>
                 <FileText size={16} />
                 {edit ? (
-                  <strong>설계 초안</strong>
+                  <strong>Design draft</strong>
                 ) : (
                   <select
-                    aria-label="설계 버전"
+                    aria-label="Design version"
                     value={d?.id || ""}
                     onChange={(e) => setVersion(e.target.value)}
                   >
                     {f.designs.map((d) => (
                       <option key={d.id} value={d.id}>
-                        설계 v{d.number}
-                        {d.id === latest?.id ? " · 최신" : ""}
+                        Design v{d.number}
+                        {d.id === latest?.id ? "· Latest" : ""}
                       </option>
                     ))}
                   </select>
@@ -1426,7 +1440,7 @@ function FeatureView({
                     className={compare ? "soft active" : "soft"}
                     onClick={() => setCompare(!compare)}
                   >
-                    이전 버전과 비교
+                    Compare versions
                   </button>
                 )}
                 {editable && (
@@ -1442,21 +1456,23 @@ function FeatureView({
                       setEdit(!edit);
                     }}
                   >
-                    {edit && latest ? "게시본 보기" : "설계 편집"}
+                    {edit && latest ? "View published" : "Edit design"}
                   </button>
                 )}
               </div>
             </div>
             {!isLatest && !edit && (
               <div className="document-info">
-                이전 버전입니다. 승인과 의견은 최신 설계에서 작성하세요.
+                This is an older version. Add approvals and comments to the
+                latest design.
               </div>
             )}
             {edit && draft.revision !== f.draft.revision && (
               <div className="conflict" role="alert">
-                서버에 새로운 초안이 있습니다. 아래 내 초안은 보존되어 있습니다.
+                A newer draft is available. Your local edits are preserved
+                below.
                 <details>
-                  <summary>서버 최신 초안 확인</summary>
+                  <summary>View server draft</summary>
                   <pre>{f.draft.body}</pre>
                 </details>
                 <button
@@ -1464,7 +1480,7 @@ function FeatureView({
                     updateDraft({ ...draft, revision: f.draft.revision })
                   }
                 >
-                  내용을 비교했고 현재 초안을 기준으로 다시 저장
+                  Keep my draft and save again
                 </button>
               </div>
             )}
@@ -1478,9 +1494,9 @@ function FeatureView({
               {edit ? (
                 <div className="editor">
                   <label>
-                    기능 목표와 완료 기준
+                    Goal and acceptance criteria
                     <textarea
-                      aria-label="요구사항 초안"
+                      aria-label="Requirements draft"
                       value={draft.requirements}
                       onChange={(e) =>
                         updateDraft({ ...draft, requirements: e.target.value })
@@ -1488,10 +1504,10 @@ function FeatureView({
                     />
                   </label>
                   <label>
-                    설계 문서
+                    Design document
                     <textarea
                       className="design-editor"
-                      aria-label="설계 초안"
+                      aria-label="Design draft"
                       value={draft.body}
                       onChange={(e) =>
                         updateDraft({ ...draft, body: e.target.value })
@@ -1516,32 +1532,27 @@ function FeatureView({
                   }}
                 />
               ) : (
-                <div className="empty">
-                  설계를 작성해 개발자 리뷰를 요청하세요.
-                </div>
+                <div className="empty">Write a design and request review.</div>
               )}
             </div>
             {edit && editable && (
               <footer className="document-footer">
-                <span className="muted">초안은 이 기기에 보존됩니다.</span>
+                <span className="muted">Drafts are saved on this device.</span>
                 <button
                   className="secondary"
                   disabled={busy || !connected}
-                  onClick={() => operation(save, "설계 초안을 저장했습니다.")}
+                  onClick={() => operation(save, "Design draft saved.")}
                 >
-                  초안 저장
+                  Save draft
                 </button>
                 <button
                   className="primary"
                   disabled={busy || !connected}
                   onClick={() =>
-                    operation(
-                      publish,
-                      "새 설계를 게시하고 리뷰를 요청했습니다.",
-                    )
+                    operation(publish, "Design published and review requested.")
                   }
                 >
-                  리뷰 요청
+                  Request review
                 </button>
               </footer>
             )}
@@ -1551,15 +1562,15 @@ function FeatureView({
             onChange={setReviewWidth}
             min={280}
             max={400}
-            label="리뷰 패널 너비"
+            label="Review panel width"
           />
-          <aside className="review-panel" aria-label="개발자 리뷰">
+          <aside className="review-panel" aria-label="Design review">
             <div className="review-panel-title">
               <strong>
-                <span className="actor-label">HUMAN</span> 개발자 리뷰
+                <span className="actor-label">HUMAN</span> Design review
               </strong>
               <span>
-                {g.approved}/{g.required} 승인
+                {g.approved}/{g.required} approved
               </span>
             </div>
             <div className="reviewers">
@@ -1581,9 +1592,9 @@ function FeatureView({
                       {decision?.decision === "approve" ? (
                         <Check size={15} />
                       ) : decision?.decision === "request_changes" ? (
-                        "수정 요청"
+                        "Changes requested"
                       ) : (
-                        "대기"
+                        "Pending"
                       )}
                     </span>
                   </div>
@@ -1596,18 +1607,18 @@ function FeatureView({
               )}
               <div className="thread-heading">
                 <strong>
-                  리뷰 의견{" "}
+                  Review comments{" "}
                   <span>
                     {f.threads.filter((t) => t.status !== "resolved").length}
                   </span>
                 </strong>
                 <select
-                  aria-label="리뷰 의견 필터"
+                  aria-label="Filter review comments"
                   value={threadFilter}
                   onChange={(e) => setThreadFilter(e.target.value)}
                 >
-                  <option value="open">미해결</option>
-                  <option value="all">전체</option>
+                  <option value="open">Open</option>
+                  <option value="all">All</option>
                 </select>
               </div>
               {threadItems.map((t) => (
@@ -1625,23 +1636,25 @@ function FeatureView({
               {!threadItems.length && (
                 <p className="quiet-empty">
                   {f.threads.length
-                    ? "미해결 의견이 없습니다."
-                    : "아직 리뷰 의견이 없습니다."}
+                    ? "No open comments."
+                    : "No review comments yet."}
                 </p>
               )}
               {isLatest && d && !edit && (
                 <div className="comment-form">
                   <label>
-                    검토 위치
+                    Review section
                     <select
-                      aria-label="검토 위치"
+                      aria-label="Review section"
                       value={section}
                       onChange={(e) =>
                         setSection(e.target.value as (typeof sections)[number])
                       }
                     >
                       {sections.map((s) => (
-                        <option key={s}>{s}</option>
+                        <option key={s} value={s}>
+                          {sectionLabels[s]}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -1650,7 +1663,7 @@ function FeatureView({
                       {quote}
                       <button
                         className="icon-button"
-                        aria-label="인용 해제"
+                        aria-label="Clear quote"
                         onClick={() => setQuote("")}
                       >
                         <X size={12} />
@@ -1659,8 +1672,8 @@ function FeatureView({
                   )}
                   <textarea
                     id="review-comment"
-                    aria-label="리뷰 의견"
-                    placeholder="확인할 점이나 수정 의견을 남기세요."
+                    aria-label="Review comments"
+                    placeholder="Leave a question or suggest a change."
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     onKeyDown={(e) => {
@@ -1681,7 +1694,7 @@ function FeatureView({
                           });
                           setComment("");
                           setQuote("");
-                        }, "리뷰 의견을 남겼습니다.");
+                        }, "Review comment added.");
                     }}
                   />
                   <div>
@@ -1691,7 +1704,7 @@ function FeatureView({
                         checked={blocking}
                         onChange={(e) => setBlocking(e.target.checked)}
                       />
-                      해결 전 구현 차단
+                      Block implementation until resolved
                     </label>
                     <button
                       className="secondary"
@@ -1709,10 +1722,10 @@ function FeatureView({
                           });
                           setComment("");
                           setQuote("");
-                        }, "리뷰 의견을 남겼습니다.")
+                        }, "Review comment added.")
                       }
                     >
-                      의견 남기기
+                      Add comment
                     </button>
                   </div>
                 </div>
@@ -1720,7 +1733,7 @@ function FeatureView({
               {reviewer && isLatest && d && !edit && !simpleLocalApproval && (
                 <div className="review-checklist">
                   <h4>
-                    설계 검토 체크리스트 <span>{checked.length}/7</span>
+                    Design review checklist <span>{checked.length}/7</span>
                   </h4>
                   {sections.map((s) => (
                     <label className="checkbox" key={s}>
@@ -1735,7 +1748,7 @@ function FeatureView({
                           saveLocal(`checks:${actor}:${d.id}`, next);
                         }}
                       />
-                      {s}
+                      {sectionLabels[s]}
                     </label>
                   ))}
                 </div>
@@ -1745,7 +1758,7 @@ function FeatureView({
               {g.blockers > 0 && (
                 <p>
                   <AlertCircle size={14} />
-                  차단 의견 {g.blockers}건 해결 확인 필요
+                  {g.blockers} blocking comments need resolution
                 </p>
               )}
               {reviewer && isLatest && d && !edit ? (
@@ -1763,11 +1776,11 @@ function FeatureView({
                             decision: "request_changes",
                             checked: simpleLocalApproval ? [] : checked,
                           }),
-                        "수정 요청을 보냈습니다.",
+                        "Changes requested.",
                       )
                     }
                   >
-                    수정 요청
+                    Request changes
                   </button>
                   {myDecision === "approve" ? (
                     <button
@@ -1783,11 +1796,11 @@ function FeatureView({
                               decision: "withdraw",
                               checked: simpleLocalApproval ? [] : checked,
                             }),
-                          "승인을 철회했습니다.",
+                          "Approval withdrawn.",
                         )
                       }
                     >
-                      승인 철회
+                      Withdraw approval
                     </button>
                   ) : (
                     <button
@@ -1812,20 +1825,20 @@ function FeatureView({
                                 ? { confirmationBinding }
                                 : {}),
                             }),
-                          `설계 v${d.number}을 승인했습니다.`,
+                          `Design v${d.number} approved.`,
                         )
                       }
                     >
                       <ShieldCheck size={15} />
-                      설계 v{d.number} 승인
+                      Approve design v{d.number}
                     </button>
                   )}
                 </div>
               ) : (
                 <p className="muted">
                   {editable
-                    ? "개발자 검토자의 승인을 기다립니다."
-                    : "최신 게시본에서 검토할 수 있습니다."}
+                    ? "Waiting for required design approvals."
+                    : "Review the latest published version."}
                 </p>
               )}
             </footer>
@@ -1833,11 +1846,11 @@ function FeatureView({
         </div>
       ) : tab === "requirements" ? (
         <div className="content-page">
-          <h2>기능 목표와 완료 기준</h2>
+          <h2>Goal and acceptance criteria</h2>
           <p className="preserve">{d?.requirements || f.draft.requirements}</p>
-          <h3>선행 기능</h3>
+          <h3>Dependencies</h3>
           <p className="muted">
-            선행 기능이 통합되기 전에는 구현을 시작하지 않습니다.
+            Implementation waits until dependencies are integrated.
           </p>
           {snapshot.features
             .filter((x) => x.id !== f.id)
@@ -1857,7 +1870,7 @@ function FeatureView({
                             ? [...f.dependencies, x.id]
                             : f.dependencies.filter((id) => id !== x.id),
                         }),
-                      "의존 관계를 저장했습니다.",
+                      "Dependencies saved.",
                     )
                   }
                 />
@@ -1870,11 +1883,11 @@ function FeatureView({
         </div>
       ) : tab === "policy" ? (
         <div className="content-page">
-          <h2>이 기능에 적용되는 지침</h2>
+          <h2>Effective instructions</h2>
           <p className="muted">
             {run
-              ? "마지막 실행 요청에 저장된 지침 스냅샷입니다."
-              : "실행 요청 전 적용 미리보기입니다. 게시된 설계와 팀 지침을 조합합니다."}
+              ? "Instructions captured for the latest run."
+              : "Preview before execution: published design and team instructions."}
           </p>
           {run ? (
             <pre className="policy-text">{run.effectivePolicy}</pre>
@@ -1882,27 +1895,30 @@ function FeatureView({
             <>
               <InstructionContext snapshot={snapshot} feature={f} />
               {[
-                ["전역 지침", snapshot.policies.at(-1)!.global],
+                ["Global instructions", snapshot.policies.at(-1)!.global],
                 [
-                  "프로젝트",
+                  "Projects",
                   snapshot.projects
                     .find((p) => p.id === f.projectId)!
                     .requiredChecks.join(" · "),
                 ],
                 [
-                  "프로젝트 지침",
+                  "Project instructions",
                   snapshot.projects.find((p) => p.id === f.projectId)!
-                    .instructions || "추가 지침 없음",
+                    .instructions || "No additional instructions",
                 ],
-                ["설계 단계", snapshot.policies.at(-1)!.design],
-                ["구현 단계", snapshot.policies.at(-1)!.implementation],
-                ["리뷰 역할", snapshot.policies.at(-1)!.reviewer],
-                ["이번 기능", d?.requirements || f.draft.requirements],
+                ["Planning stage", snapshot.policies.at(-1)!.design],
+                [
+                  "Implementation stage",
+                  snapshot.policies.at(-1)!.implementation,
+                ],
+                ["Reviewer role", snapshot.policies.at(-1)!.reviewer],
+                ["This feature", d?.requirements || f.draft.requirements],
               ].map(([title, body]) => (
                 <section className="policy-section" key={title}>
                   <h3>
-                    {title}
-                    <small>팀 v{snapshot.policies.at(-1)!.version}</small>
+                    {designSectionLabel(title)}
+                    <small>Team v{snapshot.policies.at(-1)!.version}</small>
                   </h3>
                   <p>{body}</p>
                 </section>
@@ -1925,10 +1941,10 @@ function FeatureView({
         <div className="content-page">
           <div className="execution-heading">
             <div>
-              <h2>개발 실행과 검증 결과</h2>
+              <h2>Execution and verification</h2>
               <p className="muted">
-                M1은 실행 요청과 승인 상태를 저장합니다. 실제 Claude Code·테스트
-                실행은 아직 연결되지 않았습니다.
+                This workspace records run requests and approvals. Connect a
+                runner to execute agents and tests.
               </p>
             </div>
             <Terminal size={28} />
@@ -1938,22 +1954,20 @@ function FeatureView({
             <div>
               <strong>
                 {run?.status === "blocked"
-                  ? "실행 요청 차단됨"
+                  ? "Run blocked"
                   : run?.status === "queued"
-                    ? "실행 요청 저장됨"
-                    : "실행기 미연결"}
+                    ? "Run queued"
+                    : "Runner disconnected"}
               </strong>
-              <p>
-                {run?.reason || "승인 후 실행 대기열에 등록할 수 있습니다."}
-              </p>
+              <p>{run?.reason || "Queue a run after design approval."}</p>
             </div>
           </div>
-          <h3>구현 시작 조건</h3>
+          <h3>Implementation gate</h3>
           <ul className="gate-list">
             {g.eligible ? (
               <li className="ok">
                 <Check size={16} />
-                최신 설계의 필수 승인이 모두 완료됐습니다.
+                All required approvals are complete for the latest design.
               </li>
             ) : (
               g.reasons.map((reason) => (
@@ -1973,11 +1987,11 @@ function FeatureView({
                   onClick={() =>
                     operation(
                       () => send({ type: "cancel_run", runId: run.id }),
-                      "실행 대기를 취소했습니다.",
+                      "Queued run cancelled.",
                     )
                   }
                 >
-                  대기 취소
+                  Cancel queued run
                 </button>
               ) : (
                 <button
@@ -1991,23 +2005,23 @@ function FeatureView({
                           featureId: f.id,
                           designId: latest!.id,
                         }),
-                      "실행 대기열에 등록했습니다. 실행기는 아직 연결되지 않았습니다.",
+                      "Run queued. Connect the runner to execute it.",
                     )
                   }
                 >
                   <Play size={15} />
-                  실행 대기열에 등록
+                  Queue implementation
                 </button>
               )}
             </div>
           )}
           <div className="result-placeholder">
             <FileText size={24} />
-            <h3>아직 검증 결과가 없습니다</h3>
-            <p>실제로 수행한 검사만 이곳에 표시됩니다.</p>
+            <h3>No verification results yet</h3>
+            <p>Only checks that actually ran appear here.</p>
           </div>
           <button className="soft" onClick={() => setLog(!log)}>
-            {log ? "실행 기록 접기" : "실행 요청 기록 보기"}
+            {log ? "Hide run history" : "Show run history"}
             <ChevronDown size={14} />
           </button>
           {log && (
@@ -2015,7 +2029,7 @@ function FeatureView({
               {snapshot.runs
                 .filter((r) => r.featureId === f.id)
                 .map((r) => `${r.at}\n${r.id} · ${r.status}\n${r.reason}`)
-                .join("\n\n") || "실행 요청 없음"}
+                .join("\n\n") || "No runs"}
             </pre>
           )}
         </div>
@@ -2027,21 +2041,21 @@ function FeatureView({
 function designSection(body: string, title: (typeof sections)[number]) {
   const block = body
     .split(/^## /m)
-    .find((candidate) => candidate.startsWith(`${title}\n`));
+    .find((candidate) => designSectionKey(candidate.split("\n")[0]) === title);
   return block?.split("\n").slice(1).join("\n").trim() || "";
 }
 
 function DesignReviewReport({ design }: { design: Design }) {
   const report = [
-    ["요구사항", design.requirements],
-    ["예외 상황", designSection(design.body, "예외 상황")],
-    ["변경 영향", designSection(design.body, "변경 영향")],
-    ["검증 계획", designSection(design.body, "검증 계획")],
+    ["Requirements", design.requirements],
+    ["Failure cases", designSection(design.body, sections[3])],
+    ["Change impact", designSection(design.body, sections[4])],
+    ["Verification plan", designSection(design.body, sections[5])],
   ] as const;
   return (
-    <section className="design-review-report" aria-label="설계 검토 보고서">
-      <h4>설계 검토 보고서</h4>
-      <p className="muted">게시된 설계 원문에서 확인할 내용입니다.</p>
+    <section className="design-review-report" aria-label="Design review brief">
+      <h4>Design review brief</h4>
+      <p className="muted">Review these points in the published design.</p>
       {report.map(([title, body]) =>
         body ? (
           <section key={title}>
@@ -2103,8 +2117,8 @@ function Document({
     <article className="design-document">
       {previous !== undefined && (
         <div className="diff-legend">
-          <span>추가·변경</span>
-          <span>이전 내용</span>
+          <span>Added or changed</span>
+          <span>Previous</span>
         </div>
       )}
       {blocks.map((block, index) => {
@@ -2120,16 +2134,14 @@ function Document({
             <div className="document-section-title">
               <h2>
                 <span>{String(index + 1).padStart(2, "0")}</span>
-                {title}
+                {designSectionLabel(title)}
               </h2>
               <button
                 className="icon-button"
-                aria-label={`${title}에 의견 남기기`}
+                aria-label={`Add a comment on ${designSectionLabel(title)}`}
                 onClick={() =>
                   onComment(
-                    sections.includes(title as any)
-                      ? (title as (typeof sections)[number])
-                      : "요구사항",
+                    designSectionKey(title) ?? sections[0],
                     window.getSelection()?.toString() || content.slice(0, 300),
                   )
                 }
@@ -2193,18 +2205,19 @@ function ThreadCard({
         </strong>
         <small>
           {t.status === "resolved"
-            ? "해결 확인"
+            ? "Confirm resolution"
             : t.status === "addressed"
-              ? "해결 확인 요청"
+              ? "Resolution requested"
               : t.blocking
-                ? "차단"
-                : "참고"}
+                ? "Blocking"
+                : "Note"}
         </small>
       </div>
       <div className="thread-anchor">
         <MessageSquare size={12} />
-        {t.section} · v{f.designs.find((d) => d.id === t.designId)?.number}
-        {t.designId !== latestDesign(f)?.id && " · 이전 버전 의견"}
+        {designSectionLabel(t.section)} · v
+        {f.designs.find((d) => d.id === t.designId)?.number}
+        {t.designId !== latestDesign(f)?.id && "· Previous version"}
       </div>
       {t.quote && <blockquote>{t.quote}</blockquote>}
       <p>{t.body}</p>
@@ -2222,7 +2235,7 @@ function ThreadCard({
       ))}
       <div className="thread-actions">
         <button className="soft" onClick={() => setShowReply(!showReply)}>
-          답글 {t.replies.length || ""}
+          replies {t.replies.length || ""}
         </button>
         {t.status !== "resolved" &&
           (canResolve ? (
@@ -2237,12 +2250,12 @@ function ThreadCard({
                       featureId: f.id,
                       threadId: t.id,
                     }),
-                  "의견 해결을 확인했습니다.",
+                  "Comment resolved.",
                 )
               }
             >
               <Check size={13} />
-              해결 확인
+              Confirm resolution
             </button>
           ) : actor === f.authorId && t.status === "open" ? (
             <button
@@ -2256,18 +2269,18 @@ function ThreadCard({
                       featureId: f.id,
                       threadId: t.id,
                     }),
-                  "검토자에게 해결 확인을 요청했습니다.",
+                  "Resolution requested from the reviewer.",
                 )
               }
             >
-              수정 완료 알림
+              Mark addressed
             </button>
           ) : null)}
       </div>
       {showReply && (
         <div className="reply-form">
           <textarea
-            aria-label="리뷰 답글"
+            aria-label="Review reply"
             value={reply}
             onChange={(e) => {
               setReply(e.target.value);
@@ -2287,10 +2300,10 @@ function ThreadCard({
                 });
                 setReply("");
                 saveLocal(`reply:${actor}:${t.id}`, "");
-              }, "답글을 저장했습니다.")
+              }, "Reply saved.")
             }
           >
-            답글 게시
+            Post reply
           </button>
         </div>
       )}
@@ -2353,28 +2366,28 @@ function PolicyView({
     <div className="policy-page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">팀의 공통 기준</div>
-          <h1>지침 · 팀 설정</h1>
-          <p>필수 기준을 일관되게 적용하고 변경된 버전을 기록합니다.</p>
+          <div className="eyebrow">Shared team standards</div>
+          <h1>Instructions & team</h1>
+          <p>Keep required checks consistent and record each revision.</p>
         </div>
-        <span className="version-badge">현재 v{p.version}</span>
+        <span className="version-badge">Current v{p.version}</span>
       </div>
       <div className="policy-content">
         <section>
-          <h2>팀·단계·역할 지침</h2>
+          <h2>Team, stage & role instructions</h2>
           <p className="muted">
-            새 버전을 게시하면 기존 설계는 재리뷰가 필요합니다. 필수 검사는
-            삭제할 수 없습니다.
+            Publishing a version requires existing designs to be reviewed again.
+            Required checks cannot be removed.
           </p>
           {(["global", "design", "implementation", "reviewer"] as const).map(
             (field, i) => (
               <label className="field" key={field}>
                 {
                   [
-                    "전역 지침",
-                    "설계 단계 지침",
-                    "구현 단계 지침",
-                    "리뷰 역할 지침",
+                    "Global instructions",
+                    "Planning instructions",
+                    "Implementation instructions",
+                    "Reviewer instructions",
                   ][i]
                 }
                 <textarea
@@ -2388,7 +2401,7 @@ function PolicyView({
             ),
           )}
           <label className="field">
-            팀 필수 검사
+            Team required checks
             <input
               readOnly={!admin}
               value={draft.requiredChecks.join(", ")}
@@ -2418,26 +2431,28 @@ function PolicyView({
                       reviewer: draft.reviewer,
                       requiredChecks: draft.requiredChecks.filter(Boolean),
                     }),
-                  "팀 지침의 새 버전을 게시했습니다.",
+                  "New instruction version published.",
                 )
               }
             >
-              새 지침 버전 게시
+              Publish instructions
             </button>
           ) : (
-            <p className="document-info">관리자만 지침을 변경할 수 있습니다.</p>
+            <p className="document-info">
+              Only administrators can update team instructions.
+            </p>
           )}
         </section>
         <section>
-          <h2>프로젝트별 기준</h2>
+          <h2>Project standards</h2>
           {!project && (
             <p className="muted">
-              프로젝트를 만든 뒤 프로젝트별 지침을 설정하세요. 전역 지침은 지금
-              작성할 수 있습니다.
+              Create a project to set its instructions. Global instructions are
+              available now.
             </p>
           )}
           <select
-            aria-label="설정할 프로젝트"
+            aria-label="Project to configure"
             disabled={!project}
             value={projectId}
             onChange={(e) => {
@@ -2452,7 +2467,7 @@ function PolicyView({
             ))}
           </select>
           <label className="field">
-            필수 검사
+            Required checks
             <input
               value={checks}
               readOnly={!admin || !project}
@@ -2460,15 +2475,15 @@ function PolicyView({
             />
           </label>
           <label className="field">
-            프로젝트 지침
+            Project instructions
             <textarea
               readOnly={!admin || !project}
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              placeholder="프로젝트 구조, 명령, 환경, 도메인 규칙"
+              placeholder="Repository structure, commands, environment and domain rules"
             />
           </label>
-          <h4>필수 설계 검토자</h4>
+          <h4>Required design reviewers</h4>
           {snapshot.people
             .filter((p) => p.role !== "agent")
             .map((person) => (
@@ -2505,14 +2520,14 @@ function PolicyView({
                       reviewerIds: reviewers,
                       instructions,
                     }),
-                  "프로젝트 기준을 저장했습니다. 기존 설계는 재리뷰가 필요합니다.",
+                  "Project standards saved. Existing designs require another review.",
                 )
               }
             >
-              프로젝트 기준 저장
+              Save project standards
             </button>
           )}
-          <h3 className="spaced">변경 이력</h3>
+          <h3 className="spaced">Version history</h3>
           {[...snapshot.policies].reverse().map((v) => (
             <div className="history-row" key={v.version}>
               <span>v{v.version}</span>
@@ -2525,9 +2540,9 @@ function PolicyView({
               </span>
               <small>{new Date(v.at).toLocaleString("ko-KR")}</small>
               <details>
-                <summary>내용 보기</summary>
+                <summary>View details</summary>
                 <p>{v.global}</p>
-                <p>필수 검사: {v.requiredChecks.join(", ")}</p>
+                <p>Required checks: {v.requiredChecks.join(", ")}</p>
               </details>
             </div>
           ))}
@@ -2560,7 +2575,7 @@ function CreateDialog({
   const [error, setError] = useState("");
   return (
     <Dialog
-      label={kind === "feature" ? "새 기능" : "새 프로젝트"}
+      label={kind === "feature" ? "New feature" : "New project"}
       onClose={onClose}
       className="create-dialog-container"
     >
@@ -2596,11 +2611,11 @@ function CreateDialog({
         }}
       >
         <div className="dialog-heading">
-          <h2>{kind === "feature" ? "새 기능 시작" : "새 프로젝트"}</h2>
+          <h2>{kind === "feature" ? "Start a feature" : "New project"}</h2>
           <button
             type="button"
             className="icon-button"
-            aria-label="닫기"
+            aria-label="Close"
             onClick={onClose}
           >
             <X size={19} />
@@ -2608,13 +2623,13 @@ function CreateDialog({
         </div>
         <p className="muted">
           {kind === "feature"
-            ? "목표를 정리하고 팀 표준에 따라 설계부터 시작합니다."
-            : "프로젝트별 기능과 검토 기준을 함께 관리합니다."}
+            ? "Define the goal, then plan using your team's standards."
+            : "Manage features and review criteria by project."}
         </p>
         {kind === "feature" && (
           <div className="form-pair">
             <label className="field">
-              프로젝트
+              Projects
               <select
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
@@ -2627,40 +2642,40 @@ function CreateDialog({
               </select>
             </label>
             <label className="field">
-              개발 흐름
+              Development workspace
               <select
                 value={template}
                 onChange={(e) =>
                   setTemplate(e.target.value as "feature" | "bug")
                 }
               >
-                <option value="feature">신규 기능</option>
-                <option value="bug">버그 수정</option>
+                <option value="feature">New feature</option>
+                <option value="bug">Bug fix</option>
               </select>
             </label>
           </div>
         )}
         <label className="field">
-          {kind === "feature" ? "기능 이름" : "프로젝트 이름"}
+          {kind === "feature" ? "Feature name" : "Project name"}
           <input
             autoFocus
             required
             maxLength={kind === "feature" ? 160 : 80}
             placeholder={
               kind === "feature"
-                ? "예: 주문 취소 시 환불 처리"
-                : "예: Commerce API"
+                ? "e.g. Refund cancelled orders"
+                : "e.g. Commerce API"
             }
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
         </label>
         <label className="field">
-          {kind === "feature" ? "목표와 완료 기준" : "설명"}
+          {kind === "feature" ? "Goal and acceptance criteria" : "Description"}
           <textarea
             required
             value={description}
-            placeholder="어떤 문제를 해결하고, 무엇을 확인하면 완료인가요?"
+            placeholder="What problem does this solve, and how will you verify completion?"
             onChange={(e) => setDescription(e.target.value)}
           />
         </label>
@@ -2671,17 +2686,17 @@ function CreateDialog({
         )}
         <footer>
           <button type="button" className="secondary" onClick={onClose}>
-            취소
+            Cancel
           </button>
           <button
             className="primary"
             disabled={busy || !title.trim() || !description.trim()}
           >
             {busy
-              ? "저장 중…"
+              ? "Saving…"
               : kind === "feature"
-                ? "기능 만들기"
-                : "프로젝트 만들기"}
+                ? "Create feature"
+                : "Create project"}
           </button>
         </footer>
       </form>

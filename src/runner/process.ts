@@ -84,7 +84,7 @@ export async function command(
       if (!settled) {
         settled = true;
         cleanup();
-        reject(Error(`${file} 실행 파일을 찾거나 시작할 수 없습니다.`));
+        reject(Error(`${file} Could not find or start the executable.`));
       }
     });
     child.on("close", (code) => {
@@ -123,10 +123,12 @@ export async function git(cwd: string, ...args: string[]) {
     },
   });
   if (r.code !== 0)
-    throw Error(`Git ${args[0]} 실패. 저장소·브랜치·권한을 확인하세요.`);
+    throw Error(
+      `Git ${args[0]} failed. Check repository, branch and permissions.`,
+    );
   if (r.outputTruncated)
     throw Error(
-      "Git 출력이 검토 한도를 넘었습니다. 일부 파일만 검사하지 않도록 실행을 중지합니다. 작업 범위를 줄이세요.",
+      "Git output exceeds the review limit. Execution stopped to avoid a partial review. Reduce the scope.",
     );
   // Preserve leading/trailing whitespace in NUL-delimited filenames.
   return args.includes("-z") ? r.output : r.output.trim();

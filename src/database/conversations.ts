@@ -197,11 +197,11 @@ export async function createPending(
     );
     if (deleted.rows[0])
       throw Error(
-        "삭제된 대화의 요청은 다시 사용할 수 없습니다. 새 요청으로 다시 시도하세요.",
+        "This request belongs to a deleted conversation. Start a new request.",
       );
     if (existing.rows[0]) {
       if (existing.rows[0].input_digest !== inputDigest)
-        throw Error("이미 사용된 요청 ID입니다.");
+        throw Error("This request ID has already been used.");
       const tr = thread(existing.rows[0]);
       const row = (
         await client.query(
@@ -232,7 +232,7 @@ export async function createPending(
             Number(found.rows[0].summary_revision) !==
               expectedContext.summaryRevision)))
     )
-      throw Error("상담 맥락이 변경되었습니다. 다시 시도하세요.");
+      throw Error("Consultation context changed. Try again.");
     if (!found.rows[0]) {
       const id = randomUUID();
       await client.query(
@@ -245,13 +245,14 @@ export async function createPending(
       );
     }
     const tr = thread(found.rows[0]);
-    if (tr.archived) throw Error("보관된 대화에는 새 질문을 보낼 수 없습니다.");
+    if (tr.archived)
+      throw Error("Archived conversations cannot receive new questions.");
     const threadPending = await client.query(
       "SELECT 1 FROM conversation_turns WHERE thread_id=$1 AND status='pending'",
       [tr.id],
     );
     if (threadPending.rows[0])
-      throw Error("같은 대화에서 진행 중인 상담이 있습니다.");
+      throw Error("A response is already in progress in this conversation.");
     if (retryOf) {
       const prior = (
         await client.query(
@@ -264,7 +265,7 @@ export async function createPending(
         !["failed", "interrupted", "cancelled"].includes(prior.status)
       )
         throw Error(
-          "재요청은 같은 대화의 실패·중단·취소된 질문만 대상으로 합니다.",
+          "Only failed, interrupted or cancelled questions in the same conversation can be retried.",
         );
     }
     const activeCount = Number(
@@ -276,7 +277,7 @@ export async function createPending(
       ).rows[0].n,
     );
     if (activeCount >= 2)
-      throw Error("동시에 상담할 수 있는 요청은 두 개까지입니다.");
+      throw Error("Up to two consultation requests can run at once.");
     // Reserve the input plus the largest accepted provider body, a bounded
     // summary, manifest/usage metadata, and a small row-format margin.
     const reserve = bytes(input) + 128 * 1024 + 16 * 1024 + 16 * 1024;
@@ -301,7 +302,7 @@ export async function createPending(
       workspaceUsed + reserve > 100 * 1024 * 1024
     )
       throw Error(
-        "대화 저장 공간 한도를 넘었습니다. 기존 대화를 정리한 뒤 다시 시도하세요.",
+        "Conversation storage limit reached. Delete unused conversations and try again.",
       );
     const ordinal = Number(
       (
@@ -481,7 +482,7 @@ export async function cancelConversationTurn(
       return false;
     }
     const r = await client.query(
-      "UPDATE conversation_turns SET status='cancelled',error='사용자가 요청을 취소했습니다.',updated_at=now() WHERE id=$1 AND thread_id=$2 AND status='pending' RETURNING *",
+      "UPDATE conversation_turns SET status='cancelled',error='Request cancelled by the user.',updated_at=now() WHERE id=$1 AND thread_id=$2 AND status='pending' RETURNING *",
       [turnId, threadId],
     );
     if (r.rows[0])
@@ -507,8 +508,7 @@ export async function resetConversationSummary(
     "UPDATE conversation_threads SET summary=NULL,summary_through=NULL,summary_sources='[]',summary_revision=summary_revision+1,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2 RETURNING *",
     [id, expected],
   );
-  if (!r.rows[0])
-    throw Error("대화가 변경되었습니다. 새로고침 후 다시 시도하세요.");
+  if (!r.rows[0]) throw Error("Conversation changed. Refresh and try again.");
   return thread(r.rows[0]);
 }
 export async function interruptPendingConversations(
@@ -522,7 +522,7 @@ export async function interruptPendingConversations(
       workspaceId,
     ]);
     await client.query(
-      "UPDATE conversation_turns c SET status='interrupted',error='앱이 종료되어 답변을 중단했습니다.',updated_at=now() FROM conversation_threads t WHERE c.thread_id=t.id AND t.workspace_id=$1 AND c.status='pending'",
+      "UPDATE conversation_turns c SET status='interrupted',error='Response interrupted when the app closed.',updated_at=now() FROM conversation_threads t WHERE c.thread_id=t.id AND t.workspace_id=$1 AND c.status='pending'",
       [workspaceId],
     );
     await client.query(

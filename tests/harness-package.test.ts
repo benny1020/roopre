@@ -212,21 +212,21 @@ test("invalid connection mapping, stale state and same-version content changes c
   const { w, p, pack, input } = fixture();
   const before = canonical(w);
   pack.agents[0].connection = "designer-model";
-  assert.throws(() => applyPackage(w, input()), /연결/);
+  assert.throws(() => applyPackage(w, input()), /connection/);
   assert.equal(canonical(w), before);
   pack.agents[0].connection = "constructor";
-  assert.throws(() => applyPackage(w, input()), /연결/);
+  assert.throws(() => applyPackage(w, input()), /connection/);
   assert.equal(canonical(w), before);
   pack.agents[0].connection = "project";
   assert.throws(
     () => applyPackage(w, { ...input(), expectedRevision: 999 }),
-    /변경/,
+    /changed|changes/,
   );
   assert.equal(canonical(w), before);
   apply(w, "owner", input());
   const applied = canonical(w);
   pack.instructions += "changed";
-  assert.throws(() => applyPackage(w, input()), /버전/);
+  assert.throws(() => applyPackage(w, input()), /version/);
   assert.equal(canonical(w), applied);
   const agent = w.agents!.find(
     (a) => a.id === Object.values(p.harness!.agents)[0],
@@ -238,7 +238,7 @@ test("invalid connection mapping, stale state and same-version content changes c
         expectedRevision: agent.revision,
         agent: { ...agent, revision: agent.revision + 1 },
       }),
-    /표준/,
+    /standard/,
   );
 });
 test("active/unconfirmed work blocks package replacement and exported data excludes machine credentials", () => {
@@ -263,7 +263,7 @@ test("active/unconfirmed work blocks package replacement and exported data exclu
     effectivePolicy: "",
   });
   const before = canonical(w);
-  assert.throws(() => applyPackage(w, input()), /종료/);
+  assert.throws(() => applyPackage(w, input()), /End|terminate|termination/);
   assert.equal(canonical(w), before);
   const output = exportProject(w, p, {
     id: "company.test",
@@ -401,7 +401,10 @@ test("real Git objects import a pinned package and reject symbolic Markdown entr
       "Invalid symlink",
     );
     const invalid = (await git("rev-parse", "HEAD")).trim();
-    await assert.rejects(() => readPackageGitTree(git, invalid), /일반 하네스/);
+    await assert.rejects(
+      () => readPackageGitTree(git, invalid),
+      /regular harness/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -413,7 +416,7 @@ test("expired candidates can be revalidated from the unchanged canonical definit
   const library = new HarnessLibrary();
   const first = library.add(defaultPackage(), { kind: "folder" });
   now += 31 * 60000;
-  assert.throws(() => library.get(first.token), /만료/);
+  assert.throws(() => library.get(first.token), /expired/);
   const renewed = library.add(first.package, { kind: "editor" });
   assert.equal(library.get(renewed.token).digest, first.digest);
   assert.notEqual(renewed.token, first.token);

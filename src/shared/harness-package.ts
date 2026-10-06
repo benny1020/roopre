@@ -22,7 +22,7 @@ const directory = z
             x !== ".." &&
             x.toLowerCase() !== ".git",
         ),
-    "저장소 기준 상대 디렉토리와 끝의 /를 사용하세요.",
+    "Use a repository-relative directory ending in /.",
   );
 export const packageAgentSchema = z
   .object({
@@ -71,7 +71,7 @@ export const packageProfileSchema = z
       .max(20)
       .refine(
         (a) => a.length === 0 || a.length >= 2,
-        "검사 명령은 0개 또는 2개 이상이어야 합니다.",
+        "Configure either zero or at least two check commands.",
       ),
     requiredChecks: z
       .array(z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/))
@@ -109,25 +109,25 @@ export const harnessPackageSchema = z
       !unique(p.agents.map((a) => a.id)) ||
       !unique(p.profiles.map((x) => x.id))
     )
-      fail("ID가 중복됐습니다.");
+      fail("Duplicate IDs.");
     for (const f of p.profiles) {
       if (
         !unique(f.assignments.map((a) => a.id)) ||
         !unique(f.scopes.map((s) => s.id)) ||
         !unique(f.checks.map((c) => c.name))
       )
-        fail("프로필 안의 ID가 중복됐습니다.");
+        fail("Duplicate IDs within the profile.");
       for (const stage of ["implementation", "review"])
         if (!f.assignments.some((a) => a.stage === stage && a.required))
-          fail("필수 구현자·리뷰어가 필요합니다.");
+          fail("Required implementer and reviewer roles are missing.");
       for (const a of f.assignments) {
         const agent = p.agents.find((d) => d.id === a.agentId);
-        if (!agent) fail(`없는 에이전트: ${a.agentId}`);
+        if (!agent) fail(`Missing agent: ${a.agentId}`);
         else if (
           (a.stage === "implementation") !==
           (agent.capability === "implementation")
         )
-          fail(`단계/권한 불일치: ${agent.id}`);
+          fail(`Stage and permission mismatch: ${agent.id}`);
       }
       if (
         f.checks.length &&
@@ -135,7 +135,7 @@ export const harnessPackageSchema = z
           (name) => name !== "review" && !f.checks.some((c) => c.name === name),
         )
       )
-        fail("필수 검사 명령이 누락됐습니다.");
+        fail("Required check commands are missing.");
     }
   });
 export type HarnessPackage = z.infer<typeof harnessPackageSchema>;
@@ -196,7 +196,7 @@ export function packageInstructions(h?: HarnessInstallation, scopeId?: string) {
   if (!h) return "";
   const profile = profileOf(h);
   const scope = profile.scopes.find((s) => s.id === scopeId);
-  return `# 공유 표준 ${h.package.id}@${h.package.version}\n${h.package.instructions}${scope ? `\n\n# 기능 범위 ${scope.name}\n대상 디렉토리: ${scope.paths.join(", ")}\n${scope.instructions}` : ""}`;
+  return `# Shared standard ${h.package.id}@${h.package.version}\n${h.package.instructions}${scope ? `\n\n# Feature scope ${scope.name}\nTarget directory: ${scope.paths.join(", ")}\n${scope.instructions}` : ""}`;
 }
 export const packageManifestSchema = z
   .object({
@@ -331,16 +331,16 @@ export function projectPackageChanges(p: import("./contracts.ts").Project) {
   const f = profileOf(p.harness);
   const changes: string[] = [];
   if ((p.instructions ?? "") !== f.instructions)
-    changes.push("프로젝트 지침 보완");
+    changes.push("Additional project instructions");
   if (
     f.checks.length &&
     canonical(p.executionProfile?.checks ?? []) !== canonical(f.checks)
   )
-    changes.push("검사 명령 변경");
+    changes.push("Check command changes");
   if (!f.checks.length && p.executionProfile?.checks.length)
-    changes.push("로컬 검사 명령 연결");
+    changes.push("Local check command mapping");
   if (p.requiredChecks.some((name) => !f.requiredChecks.includes(name)))
-    changes.push("추가 필수 검사");
+    changes.push("Additional required checks");
   return changes;
 }
 
@@ -353,6 +353,6 @@ export function packageLimitIssues(
   return execution.budgetUsd > limits.budgetUsd ||
     execution.timeoutMinutes > limits.timeoutMinutes ||
     execution.repairLimit > limits.repairLimit
-    ? ["공유 표준의 예산·시간·수정 횟수 상한을 넘었습니다."]
+    ? ["Shared budget, time or repair limits exceeded."]
     : [];
 }

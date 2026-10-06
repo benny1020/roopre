@@ -20,9 +20,9 @@ export function applyPackage(
   c: Extract<Command, { type: "apply_harness_package" }>,
 ) {
   if (w.revision !== c.expectedRevision)
-    throw Error("미리보기 이후 상태가 변경됐습니다. 다시 비교하세요.");
+    throw Error("State changed since preview. Compare again.");
   const p = w.projects.find((p) => p.id === c.projectId);
-  if (!p) throw Error("프로젝트가 없습니다.");
+  if (!p) throw Error("Project not found.");
   if (
     w.runs.some(
       (r) =>
@@ -31,10 +31,10 @@ export function applyPackage(
           r.runtime?.terminationConfirmed === false),
     )
   )
-    throw Error("프로젝트 실행을 종료하고 종료 확인 후 적용하세요.");
+    throw Error("End project runs and confirm termination before applying.");
   const pack = harnessPackageSchema.parse(c.package);
   const profile = pack.profiles.find((f) => f.id === c.profileId);
-  if (!profile) throw Error("표준 프로젝트 프로필이 없습니다.");
+  if (!profile) throw Error("Standard project profile not found.");
   const digest = packageDigest(pack);
   const existing = p.harness;
   if (
@@ -45,13 +45,15 @@ export function applyPackage(
         target.harness.digest !== digest,
     )
   )
-    throw Error("같은 표준 버전의 내용이 다릅니다. 버전을 올려 주세요.");
+    throw Error(
+      "This standard version has different content. Increment the version.",
+    );
   const used = pack.agents.filter((a) =>
     profile.assignments.some((x) => x.agentId === a.id),
   );
   for (const a of used)
     if (a.connection !== "project" && !Object.hasOwn(c.bindings, a.connection))
-      throw Error(`연결을 매핑하세요: ${a.connection}`);
+      throw Error(`Map these connections: ${a.connection}`);
   const ids = Object.fromEntries(
     used.map((a) => [a.id, stableId(p.id, pack.id, "agent", a.id)]),
   );
@@ -162,7 +164,7 @@ export function exportProject(
   p: Project,
   identity: { id: string; version: string; name: string },
 ): HarnessPackage {
-  if (!p.workflow) throw Error("개발 흐름을 먼저 구성하세요.");
+  if (!p.workflow) throw Error("Configure the workflow first.");
   const definitions = latestAgents(w);
   const reverse = new Map(
     Object.entries(p.harness?.agents ?? {}).map(([key, value]) => [value, key]),
@@ -180,8 +182,7 @@ export function exportProject(
   const connections = new Map<string, string>();
   const agents = ids.map((id) => {
     const a = definitions.find((d) => d.id === id);
-    if (!a || a.archived)
-      throw Error("사용할 수 없는 에이전트가 배치됐습니다.");
+    if (!a || a.archived) throw Error("An assigned agent is unavailable.");
     let connection = "project";
     if (a.connectionId) {
       if (!connections.has(a.connectionId)) {
@@ -239,7 +240,7 @@ export function exportProject(
     ...identity,
     instructions:
       p.harness?.package.instructions ??
-      `# 전역\n${policy.global}\n\n# 설계\n${policy.design}\n\n# 구현\n${policy.implementation}\n\n# 리뷰\n${policy.reviewer}`,
+      `# Global\n${policy.global}\n\n# Planning\n${policy.design}\n\n# Implementation\n${policy.implementation}\n\n# Review\n${policy.reviewer}`,
     agents,
     profiles: [profile],
   });

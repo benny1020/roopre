@@ -58,7 +58,7 @@ export class GitHostVault {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         throw Error(
-          "Git host 연결 저장소를 읽지 못했습니다. 원본을 보존하고 복구하세요.",
+          "Git host connection store could not be read. Preserve the original file and recover it.",
         );
     }
   }
@@ -67,7 +67,7 @@ export class GitHostVault {
   }
   get(id: string) {
     const record = this.records.find((r) => r.info.id === id);
-    if (!record) throw Error("Git host 연결이 없습니다.");
+    if (!record) throw Error("No Git host connection configured.");
     return {
       info: { ...record.info },
       token: this.cipher.decrypt(Buffer.from(record.sealed, "base64")),
@@ -98,8 +98,8 @@ export class GitHostVault {
     const id = input.id ?? randomUUID();
     await this.change(() => {
       const old = this.records.find((r) => r.info.id === id);
-      if (input.id && !old) throw Error("Git host 연결을 찾을 수 없습니다.");
-      if (!old && !input.token) throw Error("access token을 입력하세요.");
+      if (input.id && !old) throw Error("Git host connection not found.");
+      if (!old && !input.token) throw Error("Enter an access token.");
       const info: GitHostConnectionInfo = {
         id,
         name: input.name,
@@ -129,7 +129,7 @@ export class GitHostVault {
   async test(id: string) {
     const { info, token } = this.get(id);
     let passed = false;
-    let diagnostic = "연결 실패";
+    let diagnostic = "Connection failed";
     try {
       const url =
         info.kind === "github"
@@ -148,15 +148,15 @@ export class GitHostVault {
       });
       passed = response.ok;
       diagnostic = passed
-        ? "인증과 사용자 조회를 확인했습니다."
+        ? "Authentication and user lookup verified."
         : ({
-            401: "인증 실패: token을 확인하세요.",
-            403: "권한 없음: token scope 또는 인스턴스 정책을 확인하세요.",
-            404: "API endpoint를 확인하세요.",
-          }[response.status] ?? `연결 실패 (HTTP ${response.status})`);
+            401: "Authentication failed. Check the token.",
+            403: "Access denied. Check token scopes and instance policies.",
+            404: "Check the API endpoint.",
+          }[response.status] ?? `Connection failed (HTTP ${response.status})`);
       await response.body?.cancel();
     } catch {
-      diagnostic = "연결 실패: 주소·TLS·네트워크를 확인하세요.";
+      diagnostic = "Connection failed. Check the URL, TLS and network.";
     }
     await this.change(() => {
       const current = this.records.find((r) => r.info.id === id);

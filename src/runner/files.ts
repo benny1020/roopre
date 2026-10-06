@@ -14,7 +14,7 @@ export async function readWorkspaceFile(
   const base = await realpath(root);
   const target = resolve(base, relativePath);
   if (!target.startsWith(base + sep) || (await realpath(target)) !== target)
-    throw Error("일반 파일 경로만 읽을 수 있습니다.");
+    throw Error("Only regular file paths can be read.");
   const file = await open(
     target,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
@@ -22,7 +22,7 @@ export async function readWorkspaceFile(
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.size > limit)
-      throw Error("일반 파일이 아니거나 파일 크기 한도를 넘었습니다.");
+      throw Error("Not a regular file, or file size limit exceeded.");
     const chunks: Buffer[] = [];
     let total = 0;
     while (true) {
@@ -31,7 +31,7 @@ export async function readWorkspaceFile(
       const { bytesRead } = await file.read(chunk);
       if (!bytesRead) break;
       total += bytesRead;
-      if (total > limit) throw Error("파일 크기 한도를 넘었습니다.");
+      if (total > limit) throw Error("File size limit exceeded.");
       chunks.push(chunk.subarray(0, bytesRead));
     }
     return Buffer.concat(chunks, total);

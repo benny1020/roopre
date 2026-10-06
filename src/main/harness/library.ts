@@ -14,7 +14,7 @@ export class HarnessLibrary {
   >();
   add(input: unknown, source: PackageSource): PackageCandidate {
     if (JSON.stringify(input).length > 4_000_000)
-      throw Error("하네스가 너무 큽니다.");
+      throw Error("Harness is too large.");
     const pack = harnessPackageSchema.parse(input);
     for (const [id, c] of this.candidates)
       if (Date.now() - c.created > 30 * 60000) this.candidates.delete(id);
@@ -35,7 +35,7 @@ export class HarnessLibrary {
   get(token: string) {
     const entry = this.candidates.get(token);
     if (!entry || Date.now() - entry.created > 30 * 60000)
-      throw Error("미리보기가 만료됐습니다. 다시 검증하세요.");
+      throw Error("Preview expired. Validate again.");
     return structuredClone(entry.value);
   }
 }

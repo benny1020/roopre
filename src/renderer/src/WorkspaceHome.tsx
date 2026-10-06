@@ -11,14 +11,19 @@ import {
 } from "lucide-react";
 import type { Feature, Snapshot } from "../../shared/contracts";
 import { activeStatuses } from "../../shared/runtime";
-import { runNames, workState, type WorkState } from "./workspace/presentation";
+import {
+  runNames,
+  workState,
+  countLabel,
+  type WorkState,
+} from "./workspace/presentation";
 
 type Destination = "design" | "execution";
 
 const actorName: Record<WorkState["actor"], string> = {
-  HUMAN: "내가 할 일",
-  AGENT: "에이전트 작업",
-  SYSTEM: "시스템 확인",
+  HUMAN: "Your action",
+  AGENT: "Agent activity",
+  SYSTEM: "System checks",
 };
 
 const macroStage = (phase: number) => (phase <= 1 ? 0 : phase === 2 ? 1 : 2);
@@ -26,12 +31,15 @@ const macroStage = (phase: number) => (phase <= 1 ? 0 : phase === 2 ? 1 : 2);
 function FlowRail({ state }: { state: WorkState }) {
   const current = macroStage(state.phase);
   const steps = [
-    ["계획", "요구사항·설계"],
-    ["개발", "구현·수정"],
-    ["검토", "검증·결과"],
+    ["Plan", "Requirements & design"],
+    ["Build", "Implementation & fixes"],
+    ["Review", "Checks & results"],
   ];
   return (
-    <div className="flow-rail" aria-label={`현재 ${steps[current][0]} 단계`}>
+    <div
+      className="flow-rail"
+      aria-label={`Current ${steps[current][0]} Stage`}
+    >
       {steps.map(([title, detail], index) => (
         <div
           key={title}
@@ -90,6 +98,7 @@ export default function WorkspaceHome({
   onOpen,
   onProject,
   onPortfolio,
+  onAttention,
   onQuality,
   onRuns,
   onCreate,
@@ -99,6 +108,7 @@ export default function WorkspaceHome({
   onOpen: (featureId: string, destination: Destination) => void;
   onProject: (projectId: string) => void;
   onPortfolio: () => void;
+  onAttention: () => void;
   onQuality: () => void;
   onRuns: () => void;
   onCreate: () => void;
@@ -126,15 +136,17 @@ export default function WorkspaceHome({
     <div className="workspace-home">
       <header className="home-heading">
         <div>
-          <span className="eyebrow">오늘</span>
-          <h1>개발 흐름</h1>
+          <span className="eyebrow">Today</span>
+          <h1>Development workspace</h1>
           <p>
-            {snapshot.projects.length}개 프로젝트 · 내 결정 {attention.length}개
-            · 에이전트 작업 {activeRuns.length}개
+            {countLabel(snapshot.projects.length, "project")} ·{" "}
+            {attention.length} need attention ·{" "}
+            {countLabel(activeRuns.length, "active run")}
           </p>
         </div>
         <button className="primary" disabled={!connected} onClick={onCreate}>
-          <Plus size={16} />새 기능
+          <Plus size={16} />
+          New feature
         </button>
       </header>
 
@@ -146,11 +158,18 @@ export default function WorkspaceHome({
                 <CircleAlert size={15} />
               </span>
               <div>
-                <h2 id="home-decisions">지금 볼 것</h2>
-                <p>결정하거나 복구해야 다음 단계로 갑니다.</p>
+                <h2 id="home-decisions">Needs your attention</h2>
+                <p>Resolve a decision or blocker to move work forward.</p>
               </div>
             </div>
-            <span className="section-count">{attention.length}</span>
+            <button
+              className="text-action"
+              onClick={onAttention}
+              disabled={!attention.length}
+            >
+              View all <span className="section-count">{attention.length}</span>
+              <ArrowRight size={14} />
+            </button>
           </header>
           <div className="home-section-body">
             {attention.slice(0, 5).map(({ feature }) => (
@@ -165,8 +184,10 @@ export default function WorkspaceHome({
               <div className="home-clear-state">
                 <CheckCircle2 size={18} />
                 <span>
-                  <strong>지금 막힌 작업이 없습니다.</strong>
-                  <small>에이전트 작업과 프로젝트 흐름을 확인하세요.</small>
+                  <strong>Nothing is blocked right now.</strong>
+                  <small>
+                    Follow agent activity and project progress below.
+                  </small>
                 </span>
               </div>
             )}
@@ -180,12 +201,12 @@ export default function WorkspaceHome({
                 <Bot size={15} />
               </span>
               <div>
-                <h2 id="home-agents">에이전트 작업</h2>
-                <p>현재 실행 중인 작업만 보여 줍니다.</p>
+                <h2 id="home-agents">Agent activity</h2>
+                <p>Live work across your projects.</p>
               </div>
             </div>
             <button className="text-action" onClick={onRuns}>
-              전체 실행 <ArrowRight size={14} />
+              All runs <ArrowRight size={14} />
             </button>
           </header>
           <div className="home-section-body">
@@ -220,8 +241,8 @@ export default function WorkspaceHome({
               <div className="home-clear-state quiet">
                 <Activity size={18} />
                 <span>
-                  <strong>실행 중인 에이전트가 없습니다.</strong>
-                  <small>승인된 작업에서 개발을 시작할 수 있습니다.</small>
+                  <strong>No agents running.</strong>
+                  <small>Start implementation from an approved feature.</small>
                 </span>
               </div>
             )}
@@ -236,16 +257,16 @@ export default function WorkspaceHome({
               <Radar size={15} />
             </span>
             <div>
-              <h2 id="home-projects">프로젝트 흐름</h2>
-              <p>계획부터 검토까지 모든 기능의 위치를 한 줄로 봅니다.</p>
+              <h2 id="home-projects">Project flow</h2>
+              <p>Follow every feature from planning to review.</p>
             </div>
           </div>
           <div className="home-header-actions">
             <button className="text-action" onClick={onQuality}>
-              품질 근거 <ShieldCheck size={14} />
+              Quality evidence <ShieldCheck size={14} />
             </button>
             <button className="text-action" onClick={onPortfolio}>
-              전체 관제 <ArrowRight size={14} />
+              Workspace overview <ArrowRight size={14} />
             </button>
           </div>
         </header>
@@ -272,7 +293,7 @@ export default function WorkspaceHome({
                     <strong id={`home-project-${project.id}`}>
                       {project.name}
                     </strong>
-                    <small>{features.length}개 작업</small>
+                    <small>{countLabel(features.length, "feature")}</small>
                   </span>
                   <ArrowRight size={14} />
                 </button>
@@ -300,9 +321,7 @@ export default function WorkspaceHome({
                     );
                   })}
                   {!features.length && (
-                    <p className="project-empty">
-                      아직 등록된 기능이 없습니다.
-                    </p>
+                    <p className="project-empty">No features yet.</p>
                   )}
                 </div>
               </section>

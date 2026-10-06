@@ -432,7 +432,7 @@ USER pwuser
       });
       await assert.rejects(
         runner.retry(unchangedRetry.entityId),
-        /현재 설계를 다시 승인하세요/,
+        /Approve the current design again/,
       );
       await store.mutate((w) => {
         const run = w.runs.find((item) => item.id === unchangedRetry.entityId)!;

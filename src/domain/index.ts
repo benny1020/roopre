@@ -24,6 +24,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { canonicalSourceRef } from "../shared/memory.ts";
 import {
   sections,
+  sectionLabels,
+  hasDesignSections,
+  hasDesignPlaceholders,
+  designPrompts,
   gate,
   latestDesign,
   type Workspace,
@@ -52,30 +56,35 @@ function requireThat(
 const now = () => new Date().toISOString();
 const uid = (prefix: string) => `${prefix}-${randomUUID().slice(0, 12)}`;
 export const draftTemplate = (title: string) =>
-  `## 요구사항\n${title}\n\n## 구조\n기존 구성 요소와 변경 책임을 작성하세요.\n\n## API·데이터\n입력·출력 계약과 데이터 변경을 작성하세요.\n\n## 예외 상황\n실패·중복 요청·권한 처리를 작성하세요.\n\n## 변경 영향\n관련 기능과 의존성을 작성하세요.\n\n## 검증 계획\n수용 기준별 검증 방법을 작성하세요.\n\n## 적용·복구\n적용 순서와 필요한 복구 방법을 작성하세요.`;
+  sections
+    .map(
+      (key, index) =>
+        `## ${sectionLabels[key]}\n${index === 0 ? title : designPrompts[index - 1]}`,
+    )
+    .join("\n\n");
 
 function person(w: Workspace, actorId: string): Person {
   const p = w.people.find((p) => p.id === actorId && p.teamId === w.teamId);
-  requireThat(p, "forbidden", "이 팀에 접근할 수 없습니다.", 403);
+  requireThat(p, "forbidden", "You do not have access to this workspace.", 403);
   return p;
 }
 function reviewers(w: Workspace, ids: string[]) {
   requireThat(
     new Set(ids).size === ids.length,
     "reviewers_duplicate",
-    "검토자가 중복됐습니다.",
+    "Duplicate reviewers.",
   );
   for (const id of ids)
     requireThat(
       person(w, id).role !== "agent",
       "human_required",
-      "필수 검토자는 개발자여야 합니다.",
+      "Required reviewers must be developers.",
     );
 }
 export function effectivePolicy(w: Workspace, f: Feature) {
   const p = w.policies.at(-1)!;
   const project = w.projects.find((p) => p.id === f.projectId)!;
-  return `${packageInstructions(project.harness, f.harnessScope)}\n\n전역 v${p.version}\n${p.global}\n\n프로젝트: ${project.name}\n${project.instructions || "추가 지침 없음"}\n필수 검사: ${[...new Set([...p.requiredChecks, ...project.requiredChecks])].join(", ")}\n\n설계 단계\n${p.design}\n\n구현 단계\n${p.implementation}\n\n리뷰 역할\n${p.reviewer}\n\n이번 기능\n${latestDesign(f)?.requirements || f.draft.requirements}`;
+  return `${packageInstructions(project.harness, f.harnessScope)}\n\nGlobal v${p.version}\n${p.global}\n\nProject: ${project.name}\n${project.instructions || "No additional instructions"}\nRequired checks: ${[...new Set([...p.requiredChecks, ...project.requiredChecks])].join(", ")}\n\nPlanning stage\n${p.design}\n\nImplementation stage\n${p.implementation}\n\nReviewer role\n${p.reviewer}\n\nThis feature\n${latestDesign(f)?.requirements || f.draft.requirements}`;
 }
 
 export function apply(
@@ -91,20 +100,20 @@ export function apply(
   requireThat(
     actor.role !== "agent",
     "human_required",
-    "에이전트는 사람의 승인·정책·실행 제어를 수행할 수 없습니다.",
+    "Agents cannot approve designs, change policies or control execution on behalf of humans.",
     403,
   );
   const stamp = now();
   let f: Feature | undefined;
   if ("featureId" in c) {
     f = w.features.find((f) => f.id === c.featureId);
-    requireThat(f, "not_found", "기능을 찾을 수 없습니다.", 404);
+    requireThat(f, "not_found", "Feature not found.", 404);
   }
   const canEdit = () =>
     requireThat(
       f && (actor.id === f.authorId || actor.role === "admin"),
       "forbidden",
-      "담당 개발자만 설계를 수정할 수 있습니다.",
+      "Only the assigned developer can edit the design.",
       403,
     );
   let entityId: string | undefined;
@@ -113,7 +122,7 @@ export function apply(
       requireThat(
         actor.role === "admin",
         "forbidden",
-        "관리자만 표준을 적용할 수 있습니다.",
+        "Only administrators can apply standards.",
         403,
       );
       applyPackage(w, c);
@@ -123,16 +132,16 @@ export function apply(
       requireThat(
         actor.role === "admin",
         "forbidden",
-        "관리자만 사용자 확인 작업 기억을 저장할 수 있습니다.",
+        "Only administrators can save user-confirmed work memory.",
         403,
       );
       requireThat(
         w.revision === c.expectedRevision,
         "revision_conflict",
-        "상태가 변경됐습니다. 최신 기억을 확인하세요.",
+        "State changed. Check the latest memory.",
       );
       const project = w.projects.find((item) => item.id === c.projectId);
-      requireThat(project, "not_found", "프로젝트가 없습니다.", 404);
+      requireThat(project, "not_found", "Project not found.", 404);
       assertMemoryMutationAllowed(w, project.id);
       const existing = (project.memories ?? []).find(
         (item) => item.id === c.memory.id,
@@ -141,7 +150,7 @@ export function apply(
         (!existing && c.memory.revision === 1) ||
           (!!existing && c.memory.revision === existing.revision + 1),
         "revision_conflict",
-        "기억이 변경됐습니다. 최신 버전을 확인하세요.",
+        "Memory changed. Check the latest version.",
       );
       requireThat(
         !existing ||
@@ -150,7 +159,7 @@ export function apply(
             existing.sourceRefs.map(canonicalSourceRef).sort().join("\n") ===
               c.memory.sourceRefs.map(canonicalSourceRef).sort().join("\n")),
         "memory_scope_immutable",
-        "기억의 범위와 출처는 변경할 수 없습니다.",
+        "Memory scope and source cannot be changed.",
       );
       const memory = {
         ...c.memory,
@@ -174,21 +183,21 @@ export function apply(
       requireThat(
         actor.role === "admin",
         "forbidden",
-        "관리자만 작업 기억을 중지할 수 있습니다.",
+        "Only administrators can deactivate work memory.",
         403,
       );
       requireThat(
         w.revision === c.expectedRevision,
         "revision_conflict",
-        "상태가 변경됐습니다. 최신 기억을 확인하세요.",
+        "State changed. Check the latest memory.",
       );
       const project = w.projects.find((item) => item.id === c.projectId);
-      requireThat(project, "not_found", "프로젝트가 없습니다.", 404);
+      requireThat(project, "not_found", "Project not found.", 404);
       assertMemoryMutationAllowed(w, project.id);
       const memory = (project.memories ?? []).find(
         (item) => item.id === c.memoryId,
       );
-      requireThat(memory, "not_found", "작업 기억이 없습니다.", 404);
+      requireThat(memory, "not_found", "Memory not found.", 404);
       memory.active = false;
       memory.revision++;
       memory.updatedAt = stamp;
@@ -204,7 +213,7 @@ export function apply(
       requireThat(
         w.revision === c.expectedRevision,
         "revision_conflict",
-        "상태가 변경됐습니다. 다시 확인하세요.",
+        "State changed. Review again.",
       );
       const p = w.projects.find((p) => p.id === f!.projectId)!;
       requireThat(
@@ -212,7 +221,7 @@ export function apply(
           (p.harness &&
             profileOf(p.harness).scopes.some((s) => s.id === c.scopeId)),
         "invalid_scope",
-        "기능 범위가 없습니다.",
+        "Feature scope not found.",
       );
       requireThat(
         !w.runs.some(
@@ -222,7 +231,7 @@ export function apply(
               r.runtime?.terminationConfirmed === false),
         ),
         "active_run",
-        "기능 실행을 먼저 종료하세요.",
+        "End this feature's run first.",
       );
       f!.harnessScope = c.scopeId;
       if (latestDesign(f!)) latestDesign(f!)!.decisions = [];
@@ -232,7 +241,7 @@ export function apply(
       requireThat(
         actor.role === "admin",
         "forbidden",
-        "관리자만 에이전트를 수정할 수 있습니다.",
+        "Only administrators can edit agents.",
         403,
       );
       requireThat(
@@ -240,25 +249,25 @@ export function apply(
           Object.values(p.harness?.agents ?? {}).includes(c.agent.id),
         ),
         "standard_managed",
-        "공유 표준 에이전트는 하네스 설정에서 새 버전으로 수정하세요.",
+        "Edit shared agents by creating a new harness standard version.",
       );
       const old = latestAgents(w).find((a) => a.id === c.agent.id);
       requireThat(
         (old?.revision ?? 0) === c.expectedRevision &&
           c.agent.revision === c.expectedRevision + 1,
         "revision_conflict",
-        "에이전트가 변경됐습니다. 최신 버전을 다시 여세요.",
+        "Agent changed. Reopen the latest version.",
       );
       requireThat(
         !c.agent.projectId ||
           w.projects.some((p) => p.id === c.agent.projectId),
         "not_found",
-        "프로젝트가 없습니다.",
+        "Project not found.",
       );
       requireThat(
         !c.agent.connectionId || c.agent.connectionVersion,
         "connection_required",
-        "연결 버전을 확인하세요.",
+        "Check the connection version.",
       );
       w.agents ??= [];
       w.agents.push(structuredClone(c.agent));
@@ -273,7 +282,7 @@ export function apply(
             w.features.find((f) => f.id === r.featureId)?.projectId === p.id,
         )) {
           r.status = "blocked";
-          r.reason = "사용 중인 에이전트가 변경됐습니다. 설계를 재승인하세요.";
+          r.reason = "An assigned agent changed. Approve the design again.";
         }
       }
       entityId = c.agent.id;
@@ -283,21 +292,21 @@ export function apply(
       requireThat(
         actor.role === "admin",
         "forbidden",
-        "관리자만 개발 흐름을 수정할 수 있습니다.",
+        "Only administrators can edit workflows.",
         403,
       );
       const p = w.projects.find((p) => p.id === c.projectId);
-      requireThat(p, "not_found", "프로젝트가 없습니다.");
+      requireThat(p, "not_found", "Project not found.");
       requireThat(
         (p.workflow?.revision ?? 0) === c.expectedRevision &&
           c.workflow.revision === c.expectedRevision + 1,
         "revision_conflict",
-        "개발 흐름이 변경됐습니다. 최신 버전을 다시 여세요.",
+        "Workflow changed. Reopen the latest version.",
       );
       requireThat(
         !p.harness,
         "standard_managed",
-        "공유 개발 흐름은 하네스 설정에서 새 버전으로 수정하세요.",
+        "Edit shared workflows by creating a new harness standard version.",
       );
       const issues = workflowIssues(w, p, c.workflow);
       requireThat(!issues.length, "invalid_workflow", issues.join(" "));
@@ -310,7 +319,7 @@ export function apply(
           w.features.find((f) => f.id === r.featureId)?.projectId === p.id,
       )) {
         r.status = "blocked";
-        r.reason = "개발 흐름이 변경됐습니다. 설계를 재승인하세요.";
+        r.reason = "Workflow changed. Approve the design again.";
       }
       break;
     }
@@ -319,18 +328,18 @@ export function apply(
       requireThat(
         w.mode === "local-owner",
         "desktop_required",
-        "맥 앱에서 실행하세요.",
+        "Use the macOS app for this action.",
       );
       requireThat(
         f!.draft.revision === c.expectedRevision,
         "revision_conflict",
-        "초안이 변경됐습니다.",
+        "Draft changed.",
       );
       const p = w.projects.find((p) => p.id === f!.projectId)!;
       requireThat(
         p.executionProfile,
         "profile_required",
-        "프로젝트 실행 프로필을 먼저 설정하세요.",
+        "Configure the project execution profile first.",
       );
       const harness = resolveHarness(w, p, f!.harnessScope, f!.id);
       requireThat(
@@ -338,7 +347,7 @@ export function apply(
           (a) => a.stage === "requirements" || a.stage === "design",
         ),
         "planning_required",
-        "요구사항 또는 설계 에이전트를 배치하세요.",
+        "Assign a requirements or design agent.",
       );
       requireThat(
         !w.runs.some(
@@ -348,7 +357,7 @@ export function apply(
               r.runtime?.terminationConfirmed === false),
         ),
         "duplicate_run",
-        "진행 중인 실행을 먼저 종료하세요.",
+        "End the active run first.",
       );
       entityId = uid("run");
       w.runs.push({
@@ -356,7 +365,7 @@ export function apply(
         featureId: f!.id,
         designId: `draft-${f!.draft.revision}`,
         status: "queued",
-        reason: "읽기 전용 요구사항·설계 준비",
+        reason: "Read-only requirements and design planning",
         at: stamp,
         actorId,
         policyVersion: w.policies.at(-1)!.version,
@@ -382,11 +391,11 @@ export function apply(
       requireThat(
         w.mode === "local-owner" && actor.role === "admin",
         "forbidden",
-        "맥 앱 소유자만 실행 환경을 설정할 수 있습니다.",
+        "Only the local app owner can configure execution settings.",
         403,
       );
       const p = w.projects.find((p) => p.id === c.projectId);
-      requireThat(p, "not_found", "프로젝트가 없습니다.", 404);
+      requireThat(p, "not_found", "Project not found.", 404);
       requireThat(
         !w.runs.some(
           (r) =>
@@ -394,7 +403,7 @@ export function apply(
             w.features.find((f) => f.id === r.featureId)?.projectId === p.id,
         ),
         "active_run",
-        "실행을 먼저 취소하세요.",
+        "Cancel the run first.",
       );
       const issues = [
         ...packageLimitIssues(p, c.profile),
@@ -413,13 +422,13 @@ export function apply(
       requireThat(
         w.mode === "local-owner" && actor.role === "admin",
         "forbidden",
-        "맥 앱 소유자만 동시 실행 정책을 설정할 수 있습니다.",
+        "Only the local app owner can set execution capacity.",
         403,
       );
       requireThat(
         w.revision === c.expectedRevision,
         "revision_conflict",
-        "실행 정책이 변경됐습니다. 최신 상태를 확인하세요.",
+        "Execution policy changed. Check the latest state.",
       );
       w.executionCapacity = executionCapacityOf(c.capacity);
       break;
@@ -428,7 +437,7 @@ export function apply(
       requireThat(
         actor.role === "admin",
         "forbidden",
-        "관리자만 프로젝트를 만들 수 있습니다.",
+        "Only administrators can create projects.",
         403,
       );
       reviewers(w, w.mode === "local-owner" ? [actorId] : c.reviewerIds);
@@ -448,7 +457,7 @@ export function apply(
       requireThat(
         w.projects.some((p) => p.id === c.projectId),
         "not_found",
-        "프로젝트를 찾을 수 없습니다.",
+        "Project not found.",
         404,
       );
       f = {
@@ -477,7 +486,7 @@ export function apply(
       requireThat(
         f!.draft.revision === c.expectedRevision,
         "revision_conflict",
-        "다른 변경이 먼저 저장됐습니다. 내 초안을 보존하고 최신 버전을 확인하세요.",
+        "Another change was saved first. Your draft is preserved; inspect the latest version.",
       );
       f!.draft = {
         revision: c.expectedRevision + 1,
@@ -491,7 +500,7 @@ export function apply(
       requireThat(
         f!.draft.revision === c.expectedRevision,
         "revision_conflict",
-        "초안이 변경됐습니다. 최신 초안을 확인하세요.",
+        "Draft changed. Inspect the latest draft.",
       );
       const p = w.projects.find((p) => p.id === f!.projectId)!;
       const independentReviewers = p.reviewerIds.filter(
@@ -500,17 +509,17 @@ export function apply(
       requireThat(
         independentReviewers.length > 0,
         "independent_reviewer_required",
-        "작성자 이외의 개발자를 필수 검토자로 지정하세요.",
+        "Assign a required reviewer other than the author.",
       );
       requireThat(
-        sections.every((s) => f!.draft.body.includes(`## ${s}\n`)),
+        hasDesignSections(f!.draft.body),
         "missing_sections",
-        "설계의 필수 검토 항목 7개를 모두 포함하세요.",
+        "Include all seven required design sections.",
       );
       requireThat(
-        !f!.draft.body.includes("작성하세요."),
+        !hasDesignPlaceholders(f!.draft.body),
         "incomplete_design",
-        "안내 문구를 실제 설계로 채운 뒤 리뷰를 요청하세요.",
+        "Replace template guidance with the actual design before requesting review.",
       );
       if (w.mode === "local-owner") {
         const issues = executionProfileIssues(p.executionProfile, [
@@ -521,12 +530,12 @@ export function apply(
         requireThat(
           p.executionProfile,
           "profile_required",
-          "저장소와 실행 프로필을 먼저 연결하세요.",
+          "Connect a repository and execution profile first.",
         );
         requireThat(
           /AC[- ]?\d+/i.test(f!.draft.requirements),
           "acceptance_required",
-          "요구사항에 AC01 등 식별 가능한 완료 기준을 포함하세요.",
+          "Include identifiable acceptance criteria such as AC01 in the requirements.",
         );
       }
       entityId = uid("design");
@@ -551,13 +560,13 @@ export function apply(
       requireThat(
         f!.designs.some((d) => d.id === c.designId),
         "not_found",
-        "설계 버전을 찾을 수 없습니다.",
+        "Design version not found.",
         404,
       );
       requireThat(
         c.designId === latestDesign(f!)!.id,
         "stale_design",
-        "이전 버전에는 새 의견을 추가할 수 없습니다. 최신 설계에서 검토하세요.",
+        "New comments cannot be added to an older version. Review the latest design.",
       );
       entityId = uid("thread");
       f!.threads.push({
@@ -579,7 +588,7 @@ export function apply(
     case "address_thread":
     case "resolve_thread": {
       const thread = f!.threads.find((t) => t.id === c.threadId);
-      requireThat(thread, "not_found", "리뷰 의견을 찾을 수 없습니다.", 404);
+      requireThat(thread, "not_found", "Review comment not found.", 404);
       if (c.type === "reply_thread")
         thread.replies.push({ actorId: actor.id, body: c.body, at: stamp });
       if (c.type === "address_thread") {
@@ -587,7 +596,7 @@ export function apply(
         requireThat(
           thread.status !== "resolved",
           "already_resolved",
-          "이미 해결 확인된 의견입니다.",
+          "This comment is already resolved.",
         );
         thread.status = "addressed";
       }
@@ -596,7 +605,7 @@ export function apply(
           (w.mode === "local-owner" || actor.id !== f!.authorId) &&
             latestDesign(f!)?.reviewers.includes(actor.id),
           "reviewer_required",
-          "작성자 이외의 필수 검토자만 해결을 확인할 수 있습니다.",
+          "Only a required reviewer other than the author can confirm resolution.",
           403,
         );
         thread.status = "resolved";
@@ -609,13 +618,13 @@ export function apply(
       requireThat(
         d && d.id === c.designId,
         "stale_design",
-        "설계가 변경됐습니다. 최신 버전을 다시 검토하세요.",
+        "Design changed. Review the latest version again.",
       );
       requireThat(
         (w.mode === "local-owner" || actor.id !== f!.authorId) &&
           d.reviewers.includes(actor.id),
         "reviewer_required",
-        "이 설계의 필수 검토자만 승인·수정 요청할 수 있습니다.",
+        "Only required reviewers can approve or request changes.",
         403,
       );
       if (c.decision === "approve") {
@@ -630,30 +639,30 @@ export function apply(
             proof?.authentication === "app-confirmation" &&
               proof.binding === approvalBinding(w, f!),
             "confirmation_required",
-            "설계 보고서를 읽고 앱에서 승인을 확인하세요.",
+            "Read the design brief and confirm approval in the app.",
             403,
           );
           requireThat(
             d.policyBinding === policyBinding(w, f!),
             "profile_changed",
-            "실행 계약이 변경됐습니다. 새 설계를 게시하세요.",
+            "Execution contract changed. Publish a new design.",
           );
         }
         requireThat(
           d.policyVersion === w.policies.at(-1)!.version,
           "policy_changed",
-          "지침이 변경되어 새 설계 게시가 필요합니다.",
+          "Instructions changed. Publish a new design.",
         );
         if (w.mode !== "local-owner")
           requireThat(
             sections.every((s) => c.checked.includes(s)),
             "checklist_incomplete",
-            "검토 항목 7개를 모두 확인하세요.",
+            "Confirm all seven review criteria.",
           );
         requireThat(
           !f!.threads.some((t) => t.blocking && t.status !== "resolved"),
           "unresolved_threads",
-          "차단 의견의 해결 확인이 필요합니다.",
+          "Blocking comments need confirmed resolution.",
         );
       }
       d.decisions = d.decisions.filter((x) => x.actorId !== actor.id);
@@ -674,7 +683,7 @@ export function apply(
       requireThat(
         d && d.id === c.designId,
         "stale_design",
-        "실행 대상 설계가 최신 버전이 아닙니다.",
+        "The selected design is not the latest version.",
       );
       if (w.mode === "local-owner")
         requireThat(
@@ -686,7 +695,7 @@ export function apply(
               x.binding === approvalBinding(w, f!),
           ),
           "stale_approval",
-          "승인 계약이 일치하지 않습니다.",
+          "Approval contract does not match.",
         );
       const g = gate(w, f!, approvalBinding(w, f!));
       requireThat(g.eligible, "design_gate", g.reasons.join(" "));
@@ -698,7 +707,7 @@ export function apply(
               r.runtime?.terminationConfirmed === false),
         ),
         "duplicate_run",
-        "이미 실행 대기 중인 기능입니다.",
+        "This feature is already queued.",
       );
       entityId = uid("run");
       w.runs.push({
@@ -734,10 +743,10 @@ export function apply(
             : undefined,
         reason:
           w.mode === "local-owner"
-            ? "실행 환경 확인 대기"
+            ? "Waiting for environment checks"
             : f!.dependencies.length
-              ? "선행 기능 통합 대기 · M2 실행기 미연결"
-              : "M2 실행기 미연결 · 실행 요청이 저장됐습니다.",
+              ? "Waiting for dependency integration · Runner disconnected"
+              : "Runner disconnected · Run request saved.",
         policyVersion: w.policies.at(-1)!.version,
         effectivePolicy: effectivePolicy(w, f!),
         actorId,
@@ -747,12 +756,12 @@ export function apply(
     }
     case "cancel_run": {
       const run = w.runs.find((r) => r.id === c.runId);
-      requireThat(run, "not_found", "실행을 찾을 수 없습니다.", 404);
+      requireThat(run, "not_found", "Run not found.", 404);
       f = w.features.find((f) => f.id === run.featureId)!;
       canEdit();
       if (run.runtime) run.runtime.cancelRequested = true;
       run.status = "cancelled";
-      run.reason = "개발자가 대기를 취소했습니다.";
+      run.reason = "Queued run cancelled by the developer.";
       break;
     }
     case "set_dependencies": {
@@ -760,12 +769,12 @@ export function apply(
       requireThat(
         !c.dependencyIds.includes(f!.id),
         "dependency_cycle",
-        "자기 자신에게 의존할 수 없습니다.",
+        "A feature cannot depend on itself.",
       );
       requireThat(
         c.dependencyIds.every((id) => w.features.some((x) => x.id === id)),
         "not_found",
-        "선행 기능을 찾을 수 없습니다.",
+        "Dependency not found.",
         404,
       );
       const reaches = (
@@ -783,7 +792,7 @@ export function apply(
       requireThat(
         c.dependencyIds.every((id) => !reaches(id, f!.id)),
         "dependency_cycle",
-        "순환 의존성을 만들 수 없습니다.",
+        "Circular dependencies are not allowed.",
       );
       f!.dependencies = [...new Set(c.dependencyIds)];
       if (latestDesign(f!)) latestDesign(f!)!.decisions = [];
@@ -793,19 +802,19 @@ export function apply(
       requireThat(
         actor.role === "admin",
         "forbidden",
-        "관리자만 팀 지침을 게시할 수 있습니다.",
+        "Only administrators can publish team instructions.",
         403,
       );
       const last = w.policies.at(-1)!;
       requireThat(
         last.version === c.expectedVersion,
         "revision_conflict",
-        "다른 관리자가 지침을 변경했습니다.",
+        "Another administrator changed the instructions.",
       );
       requireThat(
         last.requiredChecks.every((x) => c.requiredChecks.includes(x)),
         "policy_weakening",
-        "현재 필수 검사를 삭제할 수 없습니다.",
+        "Existing required checks cannot be removed.",
       );
       w.policies.push({
         version: last.version + 1,
@@ -823,24 +832,24 @@ export function apply(
       requireThat(
         actor.role === "admin",
         "forbidden",
-        "관리자만 프로젝트 지침을 변경할 수 있습니다.",
+        "Only administrators can change project instructions.",
         403,
       );
       const project = w.projects.find((p) => p.id === c.projectId);
-      requireThat(project, "not_found", "프로젝트를 찾을 수 없습니다.", 404);
+      requireThat(project, "not_found", "Project not found.", 404);
       reviewers(w, c.reviewerIds);
       if (w.mode === "local-owner")
         requireThat(
           c.reviewerIds.length === 1 && c.reviewerIds[0] === project.ownerId,
           "owner_required",
-          "로컬 파일럿의 필수 승인자는 본인입니다.",
+          "The local workspace requires your own approval.",
         );
       requireThat(
         [...project.requiredChecks, ...w.policies.at(-1)!.requiredChecks].every(
           (check) => c.requiredChecks.includes(check),
         ),
         "policy_weakening",
-        "팀·프로젝트 필수 검사를 삭제할 수 없습니다.",
+        "Team and project required checks cannot be removed.",
       );
       if (c.instructions !== undefined) project.instructions = c.instructions;
       project.requiredChecks = [...new Set(c.requiredChecks)];
@@ -871,7 +880,7 @@ export function apply(
       ) {
         run.status = "blocked";
         run.reason =
-          "초안 또는 지침이 변경됐습니다. 최신 초안에서 새로 요청하세요.";
+          "Draft or instructions changed. Request planning again from the latest draft.";
       }
       continue;
     }
@@ -883,7 +892,7 @@ export function apply(
     ) {
       run.status = "blocked";
       run.reason =
-        "설계·승인·지침이 변경되어 실행 요청이 차단됐습니다. 취소 후 재승인된 버전으로 요청하세요.";
+        "Design, approvals or instructions changed. Cancel this run and request it again from an approved version.";
     }
   }
   w.revision++;

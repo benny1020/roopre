@@ -33,7 +33,7 @@ export default function ExecutionSetup({
       .catch(() => {
         if (live)
           setError(
-            "연결 목록을 확인하지 못했습니다. 다시 확인하거나 연결 설정을 여세요.",
+            "Unable to load connections. Retry or open connection settings.",
           );
       });
     return () => {
@@ -53,70 +53,72 @@ export default function ExecutionSetup({
   const gate = snapshot.gates[feature.id];
   const rows = [
     {
-      name: "프로젝트 AI 연결",
+      name: "Project AI connection",
       done: connectionCurrent && connection?.testStatus === "passed",
       detail:
         error ||
         (connections === undefined
-          ? "저장된 연결 확인 중…"
+          ? "Checking saved connections…"
           : !connections.length
-            ? "API key와 endpoint를 앱에 등록하세요."
+            ? "Add an API key and endpoint in the app."
             : !profile
-              ? `연결 ${connections.length}개 등록됨 · 실행 프로필에서 사용할 연결을 선택하세요.`
+              ? `Connection ${connections.length} registered · Choose a connection in the execution profile.`
               : !connection
-                ? "프로젝트에 지정된 연결이 없습니다. 연결을 등록하고 실행 프로필을 다시 저장하세요."
+                ? "No connection assigned to this project. Register one and save the execution profile again."
                 : !connectionCurrent
-                  ? "연결 버전이 바뀌었습니다. 실행 프로필을 다시 저장하세요."
-                  : `${connection.name} · ${connection.model} · ${connection.testStatus === "passed" ? "마지막 연결 검사 통과" : connection.testStatus === "failed" ? "마지막 연결 검사 실패 · 설정에서 재확인하세요" : "연결 검사 전"}`),
+                  ? "Connection version changed. Save the execution profile again."
+                  : `${connection.name} · ${connection.model} · ${connection.testStatus === "passed" ? "Last connection test passed" : connection.testStatus === "failed" ? "Last test failed · Check connection settings" : "Not tested"}`),
       action:
         connection && !connectionCurrent
-          ? "연결 버전 갱신"
+          ? "Refresh connection version"
           : connection && connection.testStatus !== "passed"
-            ? "AI 연결 검사"
-            : "AI 연결 설정",
+            ? "Test AI connection"
+            : "AI connections",
       run: () =>
         onSetup(connection && !connectionCurrent ? "profile" : "connection"),
     },
     {
-      name: "저장소와 고정 검사",
+      name: "Repository & fixed checks",
       done: profileProblems.length === 0,
       detail:
         profileProblems.join(" ") ||
-        `${profile!.baseBranch} · 검사 ${profile!.checks.length}개 · ${profile!.repositoryPath}`,
-      action: "실행 프로필 설정",
+        `${profile!.baseBranch} · Checks ${profile!.checks.length} · ${profile!.repositoryPath}`,
+      action: "Configure execution profile",
       run: () => onSetup("profile"),
     },
     {
-      name: "에이전트 흐름",
+      name: "Agent workflow",
       done: !!project.workflow && !flowProblems.length,
       detail:
         flowProblems.join(" ") ||
         (project.workflow
-          ? `저장된 흐름 v${project.workflow.revision} · 역할 ${project.workflow.assignments.length}개`
-          : "흐름을 설정하면 요구사항·설계부터 에이전트로 준비할 수 있습니다. 미설정 시 기존 기본 구현·리뷰 흐름을 사용합니다."),
-      action: project.harness ? "공유 표준 설정" : "개발 흐름 설정",
+          ? `Saved workflow v${project.workflow.revision} · Roles ${project.workflow.assignments.length}`
+          : "Configure planning agents to prepare requirements and designs. Without a workflow, the default implementation and review roles are used."),
+      action: project.harness
+        ? "Configure shared standard"
+        : "Configure workflow",
       run: () => onSetup(project.harness ? "harness" : "agents"),
     },
     {
-      name: "설계 검토와 승인",
+      name: "Design review & approval",
       done: gate.eligible,
       detail: gate.eligible
-        ? "현재 설계 승인 조건을 충족했습니다. 실행 시작 시 다시 검사합니다."
+        ? "The current approval gate is satisfied. It is checked again at execution."
         : gate.reasons.join(" "),
-      action: "설계 작성·검토로 이동",
+      action: "Open design review",
       run: onDesign,
     },
   ];
   return (
-    <section className="execution-setup" aria-label="실행 준비">
+    <section className="execution-setup" aria-label="Execution readiness">
       <header>
         <div>
-          <h2>첫 실행을 준비하세요</h2>
-          <p>{project.name}의 설정을 확인하고 설계 검토를 진행하세요.</p>
+          <h2>Prepare your first run</h2>
+          <p>Check settings for {project.name}, then review the design.</p>
         </div>
         <button
           className="icon-button"
-          aria-label="AI 연결 상태 다시 확인"
+          aria-label="Recheck AI connections"
           onClick={() => setRefresh((n) => n + 1)}
         >
           <RefreshCw size={15} />
@@ -128,7 +130,7 @@ export default function ExecutionSetup({
             <span
               role="img"
               className={`setup-indicator ${row.done ? "is-configured" : ""}`}
-              aria-label={row.done ? "설정됨" : "확인 필요"}
+              aria-label={row.done ? "Configured" : "Needs attention"}
             >
               {row.done ? (
                 <Check size={15} aria-hidden="true" />
@@ -145,8 +147,9 @@ export default function ExecutionSetup({
         ))}
       </ol>
       <p className="setup-footnote">
-        저장된 설정을 안내합니다. 실제 모델 응답·Docker 환경·승인 유효성은 실행
-        시 다시 확인하며, 이 화면에서 자동으로 승인하거나 실행하지 않습니다.
+        These are saved settings. Model availability, Docker readiness and
+        approvals are rechecked at execution. This screen does not approve or
+        start work.
       </p>
     </section>
   );
