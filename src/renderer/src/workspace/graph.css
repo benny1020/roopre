@@ -70,8 +70,8 @@
   display: flex;
   gap: 8px;
   align-items: center;
-  padding: 10px;
-  height: 58px;
+  padding: 8px;
+  height: 64px;
   border: 1px solid var(--line);
   background: var(--bg);
   border-radius: 5px;
@@ -89,6 +89,12 @@
   white-space: nowrap;
 }
 .flow-agent-node strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 14px;
   font-size: 12px;
   font-weight: 600;
 }

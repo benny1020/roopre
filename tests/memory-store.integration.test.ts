@@ -559,10 +559,15 @@ test("Store.deleteConversation atomically deactivates selected derived memory", 
     );
     assert.deepEqual(await store.read("owner"), before);
     await store.mutate((state) => {
-      state.runs = [];
+      state.runs[0].status = "ready_for_merge";
     });
     await store.deleteConversation(pending.thread.id, ["derived"]);
     const after = await store.read("owner");
+    assert.equal(
+      after.runs[0].status,
+      "blocked",
+      "completed results must lose publishing eligibility when derived memory is deactivated",
+    );
     assert.equal(
       await conversations.getConversationThread(store.pool, pending.thread.id),
       undefined,

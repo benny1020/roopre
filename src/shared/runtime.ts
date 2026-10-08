@@ -159,7 +159,12 @@ export type RuntimeDetails = {
   events: { at: string; message: string }[];
   evidence: Evidence[];
   review?: string;
+  handoff?: { attemptId: string; binding: string; startedAt: string };
   delivery?: {
+    status?: "unverified" | "verified";
+    diagnostic?: string;
+    createIntent?: string;
+    pushIntent?: string;
     provider: "github" | "gitlab" | "generic";
     branch: string;
     headSha: string;

@@ -766,9 +766,17 @@ export default function RunPanel({
                         )}
                         {current.status === "ready_for_merge" &&
                           current.runtime?.profile.gitHost &&
-                          !current.runtime.delivery && (
+                          (!current.runtime.delivery ||
+                            current.runtime.delivery.status ===
+                              "unverified") && (
                             <button
-                              disabled={!connected || busy || !window.roopre}
+                              disabled={
+                                !connected ||
+                                busy ||
+                                !window.roopre ||
+                                !gate?.eligible ||
+                                !!current.runtime.handoff
+                              }
                               onClick={() =>
                                 void act(() =>
                                   window.roopre!.deliverRun({
@@ -779,9 +787,37 @@ export default function RunPanel({
                                 )
                               }
                             >
-                              Publish branch · Create draft PR/MR
+                              {current.runtime.delivery
+                                ? "Resume publishing"
+                                : "Publish branch · Create draft PR/MR"}
                             </button>
                           )}
+                        {current.runtime?.delivery && (
+                          <>
+                            <button
+                              disabled={
+                                !connected ||
+                                busy ||
+                                !window.roopre?.inspectRunDelivery ||
+                                !!current.runtime.handoff
+                              }
+                              onClick={() =>
+                                void act(() =>
+                                  window.roopre!.inspectRunDelivery(current.id),
+                                )
+                              }
+                            >
+                              Reconcile remote evidence
+                            </button>
+                            {current.runtime.delivery.status ===
+                              "unverified" && (
+                              <p role="status">
+                                {current.runtime.delivery.diagnostic ??
+                                  "Remote publishing has not been verified."}
+                              </p>
+                            )}
+                          </>
+                        )}
                         <p>
                           {current.runtime?.delivery?.url ? (
                             <a
@@ -789,7 +825,9 @@ export default function RunPanel({
                               target="_blank"
                               rel="noreferrer"
                             >
-                              Open draft PR/MR
+                              {current.runtime.delivery.status === "unverified"
+                                ? "Inspect remote PR/MR"
+                                : "Open draft PR/MR"}
                             </a>
                           ) : current.status === "ready_for_merge" ? (
                             "Review the evidence, then publish or use your existing merge process. Merging is a separate action."

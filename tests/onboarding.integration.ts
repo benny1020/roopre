@@ -78,6 +78,32 @@ test(
         false,
         "native safeStorage never persists the fixture plaintext",
       );
+      await page.waitForFunction(
+        async () =>
+          (await (globalThis as any).roopre.bootstrap()).progress.draft
+            ?.endpoint === "https://invalid.example",
+      );
+      await expect
+        .poll(
+          async () => {
+            const saved = await readFile(
+              join(root, "roopre/private/onboarding.json"),
+              "utf8",
+            )
+              .then(JSON.parse)
+              .catch(() => undefined);
+            return saved?.progress.draft?.endpoint;
+          },
+          { message: "endpoint must reach durable setup storage" },
+        )
+        .toBe("https://invalid.example");
+      await application.close();
+      application = await launch();
+      page = await application.firstWindow();
+      await expect(page.getByLabel("Endpoint", { exact: true })).toHaveValue(
+        "https://invalid.example",
+      );
+      await expect(page.getByLabel("API key", { exact: true })).toHaveValue("");
       await page.getByRole("button", { name: "Next", exact: true }).click();
       await page.waitForFunction(
         async () => !(await (globalThis as any).roopre.bootstrap()).busy,
@@ -162,7 +188,7 @@ test(
       await expect(page.getByText("Default workflow applied.")).toBeVisible();
       await page
         .getByRole("textbox", {
-          name: "Implementation instructions",
+          name: "Implementation Stage instructions",
           exact: true,
         })
         .fill("검사 기준을 유지하고 작은 변경으로 구현한다.");

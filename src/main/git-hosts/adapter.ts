@@ -4,6 +4,7 @@ import {
   type GitHostConnectionInfo,
   type GitRemote,
 } from "../../shared/git-host.ts";
+import { setTimeout as pause } from "node:timers/promises";
 
 export type ChangeSnapshot = {
   id: string;
@@ -12,6 +13,9 @@ export type ChangeSnapshot = {
   draft: boolean;
   headSha: string;
   baseSha: string;
+  headRef: string;
+  baseRef: string;
+  sameRepository: boolean;
   mergeable?: boolean;
 };
 export type DraftChangeInput = {
@@ -83,12 +87,13 @@ export class GitHostAdapter {
         : `/projects/${encodeURIComponent(slug(remote))}`;
     const result = await this.json(path);
     return {
+      id: String(result.id),
       name: result.full_name ?? result.path_with_namespace,
       url: result.html_url ?? result.web_url,
     };
   }
   async createDraftChange(input: DraftChangeInput): Promise<ChangeSnapshot> {
-    await this.getRepository(input.remote);
+    const repository = await this.getRepository(input.remote);
     const result =
       this.info.kind === "github"
         ? await this.json(`/repos/${slug(input.remote)}/pulls`, {
@@ -106,11 +111,12 @@ export class GitHostAdapter {
             {
               method: "POST",
               body: JSON.stringify({
-                title: input.title,
+                title: /^draft:/i.test(input.title)
+                  ? input.title
+                  : `Draft: ${input.title}`,
                 description: input.body,
                 source_branch: input.head,
                 target_branch: input.base,
-                draft: true,
               }),
             },
           );
@@ -118,23 +124,46 @@ export class GitHostAdapter {
       ? {
           id: String(result.number),
           url: result.html_url,
-          state: result.merged_at ? "merged" : result.state,
+          state: result.merged_at
+            ? "merged"
+            : result.state === "opened"
+              ? "open"
+              : result.state,
           draft: !!result.draft,
           headSha: result.head.sha,
           baseSha: result.base.sha,
+          headRef: result.head.ref,
+          baseRef: result.base.ref,
+          sameRepository:
+            result.head.repo?.full_name === slug(input.remote) &&
+            result.base.repo?.full_name === slug(input.remote),
           mergeable: result.mergeable ?? undefined,
         }
       : {
           id: String(result.iid),
           url: result.web_url,
-          state: result.merged_at ? "merged" : result.state,
-          draft: result.draft || /^draft:/i.test(result.title),
-          headSha: result.sha,
-          baseSha: result.diff_refs?.base_sha ?? "",
+          state: result.merged_at
+            ? "merged"
+            : result.state === "opened"
+              ? "open"
+              : result.state,
+          draft:
+            typeof result.draft === "boolean"
+              ? result.draft
+              : result.work_in_progress === true,
+          headSha: result.sha ?? "",
+          // start_sha is the target tip used by this diff; base_sha is its merge-base.
+          baseSha: result.diff_refs?.start_sha ?? "",
+          headRef: result.source_branch,
+          baseRef: result.target_branch,
+          sameRepository:
+            String(result.source_project_id) === repository.id &&
+            String(result.target_project_id) === repository.id,
           mergeable: result.merge_status === "can_be_merged",
         };
   }
   async snapshotChange(remote: GitRemote, id: string): Promise<ChangeSnapshot> {
+    const repository = await this.getRepository(remote);
     const result =
       this.info.kind === "github"
         ? await this.json(
@@ -147,20 +176,106 @@ export class GitHostAdapter {
       ? {
           id: String(result.number),
           url: result.html_url,
-          state: result.merged_at ? "merged" : result.state,
+          state: result.merged_at
+            ? "merged"
+            : result.state === "opened"
+              ? "open"
+              : result.state,
           draft: !!result.draft,
           headSha: result.head.sha,
           baseSha: result.base.sha,
+          headRef: result.head.ref,
+          baseRef: result.base.ref,
+          sameRepository:
+            result.head.repo?.full_name === slug(remote) &&
+            result.base.repo?.full_name === slug(remote),
           mergeable: result.mergeable ?? undefined,
         }
       : {
           id: String(result.iid),
           url: result.web_url,
-          state: result.merged_at ? "merged" : result.state,
-          draft: result.draft || /^draft:/i.test(result.title),
-          headSha: result.sha,
-          baseSha: result.diff_refs?.base_sha ?? "",
+          state: result.merged_at
+            ? "merged"
+            : result.state === "opened"
+              ? "open"
+              : result.state,
+          draft:
+            typeof result.draft === "boolean"
+              ? result.draft
+              : result.work_in_progress === true,
+          headSha: result.sha ?? "",
+          baseSha: result.diff_refs?.start_sha ?? "",
+          headRef: result.source_branch,
+          baseRef: result.target_branch,
+          sameRepository:
+            String(result.source_project_id) === repository.id &&
+            String(result.target_project_id) === repository.id,
           mergeable: result.merge_status === "can_be_merged",
         };
+  }
+
+  /** Find the same run after an interrupted POST; never infer a failed POST from an empty list. */
+  async findChange(
+    input: DraftChangeInput,
+    marker: string,
+  ): Promise<ChangeSnapshot | undefined> {
+    await this.getRepository(input.remote);
+    const params = new URLSearchParams(
+      this.info.kind === "github"
+        ? {
+            state: "all",
+            head: `${input.remote.namespace}:${input.head}`,
+            base: input.base,
+            per_page: "100",
+          }
+        : {
+            scope: "all",
+            source_branch: input.head,
+            target_branch: input.base,
+            per_page: "100",
+          },
+    );
+    const results = await this.json(
+      this.info.kind === "github"
+        ? `/repos/${slug(input.remote)}/pulls?${params}`
+        : `/projects/${encodeURIComponent(slug(input.remote))}/merge_requests?${params}`,
+    );
+    if (!Array.isArray(results) || results.length >= 100)
+      throw Error(
+        "Remote change lookup is incomplete. Inspect the remote branch manually.",
+      );
+    if (!results.length) return undefined;
+    if (
+      results.length !== 1 ||
+      !(results[0].body ?? results[0].description ?? "").includes(marker)
+    )
+      throw Error(
+        "This branch already has an unrelated or duplicate change. Inspect it on the Git host.",
+      );
+    const result = results[0];
+    if (
+      this.info.kind === "gitlab" &&
+      result.source_project_id !== result.target_project_id
+    )
+      throw Error(
+        "Cross-project merge requests cannot reuse this run's branch.",
+      );
+    return this.snapshotChange(
+      input.remote,
+      String(result.number ?? result.iid),
+    );
+  }
+
+  /** New GitLab MRs populate diff_refs asynchronously. Bound waiting and preserve identity at the caller. */
+  async waitForRefs(
+    remote: GitRemote,
+    initial: ChangeSnapshot,
+  ): Promise<ChangeSnapshot> {
+    let change = initial;
+    for (let i = 0; i < 5 && (!change.headSha || !change.baseSha); i++) {
+      await pause(400);
+      change = await this.snapshotChange(remote, initial.id);
+    }
+    return change;
   }
 }

@@ -870,6 +870,13 @@ export function apply(
     }
   }
   if (f) f.updatedAt = stamp;
+  reconcileRunContracts(w);
+  w.revision++;
+  return { featureId: f?.id, entityId };
+}
+
+/** Reconcile every persisted run when approval inputs change, including storage-only mutations. */
+export function reconcileRunContracts(w: Workspace) {
   for (const run of w.runs.filter((r) => r.status !== "cancelled")) {
     const feature = w.features.find((f) => f.id === run.featureId)!;
     if (run.runtime?.kind === "planning") {
@@ -888,13 +895,12 @@ export function apply(
       !latestDesign(feature) ||
       !gate(w, feature, approvalBinding(w, feature)).eligible ||
       run.designId !== latestDesign(feature)?.id ||
-      run.policyVersion !== w.policies.at(-1)!.version
+      run.policyVersion !== w.policies.at(-1)!.version ||
+      (run.runtime && run.runtime.binding !== approvalBinding(w, feature))
     ) {
       run.status = "blocked";
       run.reason =
         "Design, approvals or instructions changed. Cancel this run and request it again from an approved version.";
     }
   }
-  w.revision++;
-  return { featureId: f?.id, entityId };
 }

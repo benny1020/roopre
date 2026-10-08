@@ -1,3 +1,18 @@
+# Readiness hardening — 2026-10-08
+
+[Hardening contract](design/READINESS-HARDENING.md) addresses the readiness review's required-check bypass, completed-run approval invalidation, GitLab draft/target/async handling, remote publishing races and recovery, profile round-trip, custom endpoint resume and retry capacity. Existing test/config immutability and human design approval remain in force. Node workspace/local-dependency preparation is explicitly unsupported and refused before model spend. Graph agent names now wrap across two lines.
+
+- `pnpm check`: documentation integrity, formatting, types, Electron build and **160 unit/API/PostgreSQL tests passed**.
+- `pnpm test:web`: **52 passed**, including profile limits/Git binding round-trip, blocked-run read-only remote reconciliation and accessibility checks. Meaningful UI screenshots were visually inspected.
+- `pnpm test:runner`: **6 passed** with real Docker/PostgreSQL. The new pnpm fixture rejects an agent-created `scriptShell` bypass before any fixed check runs. The Java fixture compiles a multi-module Spring Boot 3.5/JUnit project, fails its actual assertion, repairs the implementation, passes the same fixed test and independent read-only fixture review, preserves source HEAD and cleans its containers/volumes. Each container receives a private disk cache; a **600 MiB** prepared cache exercises the previous `/tmp` capacity failure.
+- Native desktop, onboarding, conversation and self-use tests: **4 passed**, run sequentially against the built Electron app. Custom endpoint persistence/restart, secret-free drafts, real IPC/storage, local task creation, settings, workflow and approval gating are covered. Directory picking and provider responses use fixtures.
+- `pnpm test:resilience`: **1 passed**, including cancellation, connection loss, process exit/restart and isolated scheduling.
+- `pnpm check:mac`: temporary app packaging, resources, security fuses and code-signing integrity passed. No ZIP was generated; Developer ID signing/notarization are not established by this check.
+
+No real paid-model run or disposable enterprise GitLab end-to-end run was performed. Provider quality, corporate network/SSO/CA, private Maven credentials, Testcontainers and clean-Mac distribution still need deployment acceptance. Tests are regression evidence, not a guarantee of identical output quality across developers or unrestricted release readiness.
+
+---
+
 # English workspace and practical workflow polish — 2026-10-07
 
 [English workspace design](design/ENGLISH-WORKSPACE.md) records this change. Product-owned UI, new agent defaults, generated designs and runtime messages now use English. User-authored content, installed standards and existing approval records remain unchanged. The bundled standard is version 1.1.0; legacy and English design headings share the existing review section keys.

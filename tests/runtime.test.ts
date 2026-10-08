@@ -1066,3 +1066,46 @@ test("slow orphan cleanup does not block cancellation and shutdown waits for cle
     await runner.stop();
   }
 });
+
+test("retry preserves approved per-stage capacity even when workspace defaults changed", async () => {
+  for (const maxAgentsPerStage of [1, 2]) {
+    const { w, f, review } = fixture();
+    apply(w, "jun", review, {
+      authentication: "app-confirmation",
+      binding: approvalBinding(w, f),
+    });
+    apply(w, "jun", {
+      type: "queue_run",
+      featureId: f.id,
+      designId: review.designId,
+    });
+    const old = w.runs[0];
+    old.status = "failed";
+    old.runtime!.terminationConfirmed = true;
+    old.runtime!.capacity = {
+      maxConcurrentRuns: 2,
+      maxConcurrentRunsPerProject: 1,
+      maxAgentsPerStage,
+    };
+    w.executionCapacity = {
+      maxConcurrentRuns: 6,
+      maxConcurrentRunsPerProject: 4,
+      maxAgentsPerStage: 4,
+    };
+    const store = {
+      read: async () => structuredClone(w),
+      mutate: async (fn: (state: Workspace) => void) => fn(w),
+    } as unknown as Store;
+    const manager = new RunnerManager(
+      store,
+      {} as ConnectionVault,
+      "/fixture",
+      "/fixture",
+    );
+    const retry = await manager.retry(old.id);
+    assert.deepEqual(
+      w.runs.find((r) => r.id === retry.entityId)!.runtime!.capacity,
+      old.runtime!.capacity,
+    );
+  }
+});

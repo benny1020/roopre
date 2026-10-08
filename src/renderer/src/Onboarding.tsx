@@ -85,7 +85,9 @@ function Onboarding({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [key, setKey] = useState("");
-  const [endpoint, setEndpoint] = useState("https://api.anthropic.com");
+  const [endpoint, setEndpoint] = useState(
+    initial?.endpoint ?? "https://api.anthropic.com",
+  );
   const [model, setModel] = useState(initial?.model ?? "claude-sonnet-4-6");
   const [connectionName, setConnectionName] = useState(
     initial?.connectionName ?? "Claude Code",
@@ -148,6 +150,21 @@ function Onboarding({
   const draft = {
     connectionId,
     connectionName,
+    // Persist only valid, credential-free endpoints; never persist API keys.
+    endpoint: (() => {
+      try {
+        const u = new URL(endpoint);
+        return u.protocol === "https:" &&
+          !u.username &&
+          !u.password &&
+          !u.search &&
+          !u.hash
+          ? endpoint
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    })(),
     model,
     auth,
     projectId,
@@ -649,7 +666,13 @@ function Onboarding({
                           id = result.entityId!;
                           setProjectId(id);
                         }
+                        const existingProject = snapshot?.projects.find(
+                          (p) => p.id === id,
+                        );
+                        const existingProfile =
+                          existingProject?.executionProfile;
                         await api.configureProject(id, {
+                          ...existingProfile,
                           repositoryPath: path,
                           baseBranch: branch,
                           baseCommit: "0".repeat(40),
@@ -657,17 +680,22 @@ function Onboarding({
                           connectionVersion: 1,
                           image: runnerImageForRuntime(runtime),
                           checks: parsed,
-                          webRequired: runtime === "node",
+                          webRequired:
+                            existingProfile?.webRequired ?? runtime === "node",
                           budgetUsd: Number(budget),
-                          timeoutMinutes: 60,
-                          repairLimit: 1,
+                          timeoutMinutes: existingProfile?.timeoutMinutes ?? 60,
+                          repairLimit: existingProfile?.repairLimit ?? 1,
                           runtime,
                         });
                         await api.command({
                           type: "update_project_policy",
                           projectId: id,
                           instructions: projectInstructions,
-                          requiredChecks: ["typecheck", "test", "review"],
+                          requiredChecks: existingProject?.requiredChecks ?? [
+                            "typecheck",
+                            "test",
+                            "review",
+                          ],
                           reviewerIds: ["owner"],
                         });
                         setNotice("Project and execution settings saved.");

@@ -85,6 +85,7 @@ export async function transferWorkspace(
   if (
     bundle.state.runs.some(
       (r: any) =>
+        !!r.runtime?.handoff ||
         activeStatuses.includes(r.status) ||
         r.runtime?.terminationConfirmed === false,
     )

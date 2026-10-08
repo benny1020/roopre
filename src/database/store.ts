@@ -1,6 +1,7 @@
 import pg from "pg";
+import { assertHandoffContractsUnchanged } from "../domain/handoff.ts";
 import { createHash } from "node:crypto";
-import { apply, DomainError } from "../domain/index.ts";
+import { apply, DomainError, reconcileRunContracts } from "../domain/index.ts";
 import { emptyWorkspace } from "./initial.ts";
 import { initConversationTables } from "./conversations.ts";
 import { canonicalSourceRef } from "../shared/memory.ts";
@@ -158,7 +159,9 @@ export class Store {
       }
       if (command.type === "save_memory")
         await this.validateMemorySources(client, state, command);
+      const before = structuredClone(state);
       const result = apply(state, actorId, command, proof);
+      assertHandoffContractsUnchanged(before, state);
       await client.query("UPDATE workspaces SET state=$2 WHERE id=$1", [
         this.key,
         JSON.stringify(state),
@@ -321,7 +324,9 @@ export class Store {
           [this.key],
         )
       ).rows[0].state as Workspace;
+      const before = structuredClone(state);
       fn(state);
+      assertHandoffContractsUnchanged(before, state);
       state.revision++;
       await client.query("UPDATE workspaces SET state=$2 WHERE id=$1", [
         this.key,
@@ -398,6 +403,7 @@ export class Store {
           const latest = feature.designs.at(-1);
           if (latest) latest.decisions = [];
         }
+      if (eligible.length) reconcileRunContracts(state);
       await client.query(
         "INSERT INTO conversation_tombstones(thread_id,workspace_id,project_id,agent_definition_id,feature_key,epoch,request_digests) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(thread_id) DO UPDATE SET epoch=EXCLUDED.epoch,request_digests=EXCLUDED.request_digests,deleted_at=now()",
         [

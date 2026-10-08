@@ -84,6 +84,9 @@ export interface DesktopAPI {
     title: string;
     body: string;
   }) => Promise<{ url?: string; branch: string }>;
+  inspectRunDelivery: (
+    runId: string,
+  ) => Promise<{ url?: string; branch: string; verified: boolean }>;
   conversations: {
     listThreads: (scope: ConversationScope) => Promise<ConversationThread[]>;
     getThread: (threadId: string) => Promise<ConversationThread>;

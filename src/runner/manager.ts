@@ -1,3 +1,4 @@
+import { assertSupportedNodeRepository } from "./repository-support.ts";
 import {
   runBatches,
   snapshotStage,
@@ -50,11 +51,12 @@ const runnerIgnoredPaths =
   "node_modules/\n.roopre-artifacts/\ntest-results/\nplaywright-report/\n.gradle/\nbuild/\n";
 
 export const isRootRunnerConfig = (path: string) =>
-  /^(package\.json$|pnpm-lock\.yaml$|package-lock\.json$|build\.gradle(?:\.kts)?$|settings\.gradle(?:\.kts)?$|gradle\.properties$|\.gitignore$|\.npmrc$|\.pnpmfile\.[cm]?js$|\.yarnrc|\.eslintrc|\.babelrc|tsconfig|eslint|vitest|playwright|(?:babel|jest|vite|webpack|rollup|next|svelte|postcss|tailwind)\.config\.)/.test(
+  /^(package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|yarn\.lock$|bun\.lockb?$|package-lock\.json$|build\.gradle(?:\.kts)?$|settings\.gradle(?:\.kts)?$|gradle\.properties$|\.gitignore$|\.npmrc$|\.pnpmfile\.[cm]?js$|\.yarnrc|\.eslintrc|\.babelrc|tsconfig|eslint|vitest|playwright|(?:babel|jest|vite|webpack|rollup|next|svelte|postcss|tailwind)\.config\.)/.test(
     path,
   );
 
 export const isProtectedRunnerPath = (path: string) =>
+  isRootRunnerConfig(path.split("/").at(-1)!) ||
   /(^|\/)(tests?|__tests__|scripts|config|\.github|gradle)\/|\.(test|spec)\.[a-z]+$|(^|\/)(package\.json|pnpm-lock\.yaml|package-lock\.json|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|gradle\.properties|tsconfig|eslint|vitest|playwright)/.test(
     path,
   );
@@ -73,7 +75,10 @@ export async function discoverRunnerConfigPaths(checkout: string) {
   const hasGradleDirectory = (path: string) =>
     path.split("/").includes("gradle");
   const scan = async (relative: string, depth: number): Promise<void> => {
-    if (depth > 8 || paths.size >= 1000) return;
+    if (depth > 32 || paths.size >= 10000)
+      throw Error(
+        "Configuration discovery exceeded its safety limit. Reduce repository depth or size before running.",
+      );
     const absolute = join(checkout, relative);
     let stat;
     try {
@@ -94,7 +99,8 @@ export async function discoverRunnerConfigPaths(checkout: string) {
       return;
     }
     for (const entry of entries) {
-      if (paths.size >= 1000) break;
+      if (paths.size >= 10000)
+        throw Error("Configuration discovery exceeded its safety limit.");
       const path = join(relative, entry.name);
       if (entry.isSymbolicLink() || entry.isFile()) {
         if (isRootRunnerConfig(entry.name) || hasGradleDirectory(path))
@@ -205,6 +211,15 @@ export class RunnerManager {
       ["network", "rm", n.network, ...networks.split(/\s+/).filter(Boolean)],
       { timeout: 10000 },
     );
+    const privateCaches = await this.docker([
+      "volume",
+      "ls",
+      "-q",
+      "--filter",
+      `label=roopre.run=${id}`,
+    ]);
+    if (privateCaches.trim())
+      await this.docker(["volume", "rm", ...privateCaches.trim().split(/\s+/)]);
     await command("docker", ["volume", "rm", n.dependencies], {
       timeout: 10000,
     });
@@ -666,11 +681,13 @@ export class RunnerManager {
       const setup = join(area, "setup");
       await mkdir(setup);
       const runtime = profile.runtime ?? "node";
+      if (runtime === "node") await assertSupportedNodeRepository(checkout);
       let hasManifest = false;
       for (const file of [
         "package.json",
         "pnpm-lock.yaml",
         "package-lock.json",
+        ".npmrc",
       ]) {
         try {
           if ((await lstat(join(checkout, file))).isSymbolicLink())
@@ -889,6 +906,57 @@ export class RunnerManager {
         // This empty ignored directory is owned by the runner, not agent output.
         await mkdir(join(target.checkout, "node_modules"), { recursive: true });
         await command("docker", ["rm", "-f", target.names.container]);
+        const privateGradleCache = `${target.names.container}-gradle-cache`;
+        if (runtime === "java-gradle") {
+          const previous = await command("docker", [
+            "volume",
+            "inspect",
+            privateGradleCache,
+          ]);
+          if (previous.code === 0)
+            await this.docker(
+              ["volume", "rm", privateGradleCache],
+              abort.signal,
+            );
+          await this.docker(
+            [
+              "volume",
+              "create",
+              "--label",
+              `roopre.run=${id}`,
+              privateGradleCache,
+            ],
+            abort.signal,
+          );
+          await this.docker(
+            [
+              "run",
+              "--rm",
+              "--label",
+              `roopre.run=${id}`,
+              "--network",
+              "none",
+              "--user",
+              "root",
+              "--cap-drop=ALL",
+              "--cap-add=CHOWN",
+              "--cap-add=DAC_OVERRIDE",
+              "--cap-add=FOWNER",
+              "--security-opt",
+              "no-new-privileges",
+              "--mount",
+              `type=volume,src=${n.gradle},dst=/seed,readonly,volume-nocopy`,
+              "--mount",
+              `type=volume,src=${privateGradleCache},dst=/private,volume-nocopy`,
+              image,
+              "sh",
+              "-c",
+              "cp -a /seed/. /private/ && chown -R pwuser:pwuser /private",
+            ],
+            abort.signal,
+            180000,
+          );
+        }
         await this.docker(
           [
             "run",
@@ -929,9 +997,9 @@ export class RunnerManager {
             ...(runtime === "java-gradle"
               ? [
                   "--mount",
-                  `type=volume,src=${n.gradle},dst=/locked-gradle,readonly,volume-nocopy`,
+                  `type=volume,src=${privateGradleCache},dst=/private-gradle,volume-nocopy`,
                   "--env",
-                  "GRADLE_USER_HOME=/tmp/roopre-gradle",
+                  "GRADLE_USER_HOME=/private-gradle",
                 ]
               : []),
             "--tmpfs",
@@ -949,7 +1017,7 @@ export class RunnerManager {
             image,
             "sh",
             "-c",
-            `${runtime === "java-gradle" ? "mkdir -p /tmp/roopre-gradle && cp -a /locked-gradle/. /tmp/roopre-gradle/ && " : ""}exec sleep infinity`,
+            "exec sleep infinity",
           ],
           abort.signal,
         );
@@ -1688,6 +1756,7 @@ export class RunnerManager {
         runtime: {
           profile: structuredClone(old.runtime.profile),
           harness: structuredClone(old.runtime.harness),
+          capacity: structuredClone(old.runtime.capacity),
           agents: [],
           binding: old.runtime.binding,
           attempt: 0,
