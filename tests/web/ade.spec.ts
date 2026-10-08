@@ -90,6 +90,56 @@ async function openPortfolio(page: Page) {
   await search.press("Enter");
 }
 
+test("incomplete remote publishing preserves inspection and read-only reconciliation after approval is blocked", async ({
+  page,
+}) => {
+  const state = adeFixture();
+  const run = state.runs.at(-1)!;
+  run.status = "blocked";
+  run.runtime!.terminationConfirmed = true;
+  run.runtime!.delivery = {
+    provider: "gitlab",
+    branch: "roopre/fixture",
+    headSha: run.runtime!.head!,
+    baseSha: run.runtime!.profile.baseCommit,
+    changeId: "7",
+    url: "https://git.example/team/app/-/merge_requests/7",
+    deliveredAt: new Date().toISOString(),
+    status: "unverified",
+    diagnostic: "Remote target changed. Inspect the preserved MR.",
+  };
+  await prepare(page, state);
+  await page.evaluate(() => {
+    (globalThis as any).__reconciled = [];
+    (globalThis as any).roopre.inspectRunDelivery = async (id: string) => {
+      (globalThis as any).__reconciled.push(id);
+      return { branch: "roopre/fixture", verified: false };
+    };
+  });
+  const reconcile = page.getByRole("button", {
+    name: "Reconcile remote evidence",
+    exact: true,
+  });
+  await reconcile.scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("link", { name: "Inspect remote PR/MR", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Remote target changed. Inspect the preserved MR.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Resume publishing", exact: true }),
+  ).toHaveCount(0);
+  await reconcile.click();
+  await expect
+    .poll(() => page.evaluate(() => (globalThis as any).__reconciled))
+    .toEqual([run.id]);
+  await axe(page);
+  await page.screenshot({ path: "artifacts/handoff-reconciliation-dark.png" });
+});
+
 function simpleApprovalState() {
   const snapshot = adeFixture();
   const feature = snapshot.features[0];
@@ -2408,6 +2458,18 @@ for (const [screen, label] of [
         ...profile,
         repositoryPath: `/workspace/${project.id}`,
         baseBranch: project.id,
+        timeoutMinutes: project.id === "platform" ? 17 : 23,
+        repairLimit: project.id === "platform" ? 0 : 1,
+        webRequired: false,
+        gitHost: {
+          remote: {
+            url: "https://git.example/team/app.git",
+            host: "git.example",
+            namespace: "team",
+            repository: "app",
+          },
+          connectionId: "00000000-0000-4000-8000-000000000099",
+        },
       };
       project.workflow = {
         revision: 1,
@@ -2487,6 +2549,21 @@ for (const [screen, label] of [
         await page
           .getByRole("button", { name: "Save execution profile", exact: true })
           .click();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => (globalThis as any).__settingsOperations.at(-1)?.profile,
+            ),
+          )
+          .toMatchObject({
+            timeoutMinutes: projectId === "platform" ? 17 : 23,
+            repairLimit: projectId === "platform" ? 0 : 1,
+            webRequired: false,
+            gitHost: {
+              connectionId: "00000000-0000-4000-8000-000000000099",
+              remote: { host: "git.example" },
+            },
+          });
       } else if (screen === "Instructions & team") {
         await expect(
           page.getByRole("textbox", {

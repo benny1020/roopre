@@ -48,8 +48,8 @@ Contextual agent consultations are read-only. Conversations preserve raw message
 
 - Independent feature worktrees and Docker isolation. Defaults: 3 workspace runs, 2 per project and 3 parallel agents per stage, configurable in Settings. Same-project tasks can run concurrently.
 - API keys and Git tokens are encrypted locally. Model credentials remain in the host broker rather than agent containers.
-- Repository profiles support Node.js web projects and Java 21 / Gradle 8 / Spring Boot checks. Web changes can require configured e2e commands.
-- GitHub, GitHub Enterprise, GitLab, self-managed GitLab and generic Git support. Draft PR/MR handoff requires verified head/base evidence; it does not merge automatically.
+- Repository profiles support standalone locked npm/pnpm projects and Java 21 / Gradle 8 / Spring Boot checks. Node workspaces/local dependencies are rejected before model execution; they need workspace-aware preparation. Web changes can require configured e2e commands.
+- GitHub, GitHub Enterprise, GitLab, self-managed GitLab and generic Git support. Draft PR/MR handoff locks the current approved contract, verifies remote branch/SHA identity and preserves uncertain outcomes for read-only reconciliation; it does not merge automatically.
 - Required implementation/review roles, fixed checks and design approval gates cannot be bypassed through project settings. Cancellation, retry and termination confirmation preserve evidence.
 - English product UI, dark/light/system appearance, keyboard commands, resizable panels, workflow graphs, diffs and execution logs. User-authored content is preserved in its original language.
 

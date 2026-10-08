@@ -13,7 +13,8 @@ export function projectHasUnterminatedRun(w: Workspace, projectId: string) {
     const feature = w.features.find((item) => item.id === run.featureId);
     return (
       feature?.projectId === projectId &&
-      (activeStatuses.includes(run.status) ||
+      (!!run.runtime?.handoff ||
+        activeStatuses.includes(run.status) ||
         run.runtime?.terminationConfirmed === false)
     );
   });

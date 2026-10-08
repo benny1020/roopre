@@ -71,6 +71,7 @@ export default function RuntimeSettings({
   const [gitToken, setGitToken] = useState("");
   const [budget, setBudget] = useState("");
   const [minutes, setMinutes] = useState(60);
+  const [repairs, setRepairs] = useState(2);
   const [checks, setChecks] = useState(JSON.stringify(defaults, null, 2));
   const [web, setWeb] = useState(true);
   const [runtime, setRuntime] = useState<ProjectRuntime>("node");
@@ -112,6 +113,7 @@ export default function RuntimeSettings({
     setConnectionId(p?.connectionId ?? "");
     setBudget(p ? String(p.budgetUsd) : "");
     setMinutes(p?.timeoutMinutes ?? 60);
+    setRepairs(p?.repairLimit ?? 2);
     setChecks(JSON.stringify(p?.checks ?? defaults, null, 2));
     setWeb(p?.webRequired ?? true);
     setRuntime(p?.runtime ?? "node");
@@ -588,6 +590,7 @@ export default function RuntimeSettings({
                 e.preventDefault();
                 void act(async () => {
                   const profile: ExecutionProfile = {
+                    ...project?.executionProfile,
                     repositoryPath: path,
                     baseBranch: branch,
                     baseCommit: "0".repeat(40),
@@ -598,18 +601,16 @@ export default function RuntimeSettings({
                     webRequired: web,
                     budgetUsd: Number(budget),
                     timeoutMinutes: minutes,
-                    repairLimit: 2,
+                    repairLimit: repairs,
                     runtime,
-                    ...(remote
+                    gitHost: remote
                       ? {
-                          gitHost: {
-                            remote,
-                            ...(gitConnectionId
-                              ? { connectionId: gitConnectionId }
-                              : {}),
-                          },
+                          remote,
+                          ...(gitConnectionId
+                            ? { connectionId: gitConnectionId }
+                            : {}),
                         }
-                      : {}),
+                      : undefined,
                   };
                   await desktop.configureProject(projectId, profile);
                   await onSaved();
@@ -750,6 +751,16 @@ export default function RuntimeSettings({
                     max="240"
                     value={minutes}
                     onChange={(e) => setMinutes(Number(e.target.value))}
+                  />
+                </label>
+                <label className="field">
+                  Automatic repair attempts
+                  <input
+                    type="number"
+                    min="0"
+                    max="3"
+                    value={repairs}
+                    onChange={(e) => setRepairs(Number(e.target.value))}
                   />
                 </label>
               </div>

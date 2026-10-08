@@ -32,11 +32,14 @@ import {
 import { approvalBinding } from "../domain/runtime.ts";
 import { ConnectionVault } from "./connections/vault.ts";
 import { GitHostVault } from "./git-hosts/vault.ts";
+import { deliverVerifiedRun, inspectRunDelivery } from "./git-hosts/handoff.ts";
+import { publishableRun } from "../domain/handoff.ts";
 import { GitHostAdapter } from "./git-hosts/adapter.ts";
 import { RunnerManager } from "../runner/manager.ts";
 import { command, git } from "../runner/process.ts";
 import { trustedRenderer } from "./security.ts";
 import { ConversationService } from "./conversations/service.ts";
+import { assertSupportedNodeRepository } from "../runner/repository-support.ts";
 import { detectRepositoryRuntime } from "./project-runtime.ts";
 import { interruptPendingConversations } from "../database/conversations.ts";
 import {
@@ -90,6 +93,19 @@ export async function installDesktop() {
     );
     try {
       await next.init();
+      // Recover process ownership under Electron's single-instance lock.
+      // A remote request may still finish; preserve write intents and never repeat an uncertain write.
+      await next.mutate((w) => {
+        for (const run of w.runs)
+          if (run.runtime?.handoff) {
+            delete run.runtime.handoff;
+            if (run.runtime.delivery) {
+              run.runtime.delivery.status = "unverified";
+              run.runtime.delivery.diagnostic =
+                "Publishing was interrupted. Reconcile the saved remote evidence before retrying.";
+            }
+          }
+      });
       await interruptPendingConversations(next.pool, next.key);
       if (closing) throw Error("App is closing.");
       await nextRunner.init();
@@ -173,6 +189,7 @@ export async function installDesktop() {
             "harnessCandidate",
             "harnessExport",
             "deliverRun",
+            "inspectRunDelivery",
           ].includes(operation) &&
           !store
         )
@@ -292,18 +309,25 @@ export async function installDesktop() {
           }
           case "migrateEnvironment": {
             const source = store!;
-            const state = await source.read("owner");
-            if (
-              state.runs.some(
-                (r) =>
-                  activeStatuses.includes(r.status) ||
-                  r.runtime?.terminationConfirmed === false,
-              )
-            )
-              throw Error("End active runs and try again.");
+            if (deliveryLocks.size)
+              throw Error(
+                "Finish remote publishing or reconciliation before migrating.",
+              );
             migrating = true;
             let pending: Store | undefined;
             try {
+              const state = await source.read("owner");
+              if (
+                state.runs.some(
+                  (r) =>
+                    !!r.runtime?.handoff ||
+                    activeStatuses.includes(r.status) ||
+                    r.runtime?.terminationConfirmed === false,
+                )
+              )
+                throw Error(
+                  "End active runs and remote publishing before migrating.",
+                );
               await conversations?.interruptAll();
               await runner!.stop();
               value = bootstrap.migrate(async (url, backup) => {
@@ -554,6 +578,8 @@ export async function installDesktop() {
             p.runtime = (
               await detectRepositoryRuntime(p.repositoryPath)
             ).runtime;
+            if (p.runtime === "node")
+              await assertSupportedNodeRepository(p.repositoryPath);
             p.baseCommit = await git(
               p.repositoryPath,
               "rev-parse",
@@ -597,6 +623,45 @@ export async function installDesktop() {
             });
             break;
           }
+          case "inspectRunDelivery": {
+            const id = z.string().min(1).parse(payload);
+            const sourceStore = store!;
+            const workspace = await sourceStore.read("owner");
+            const run = workspace.runs.find((r) => r.id === id);
+            const binding = run?.runtime?.profile.gitHost;
+            if (!binding) throw Error("No Git host binding for this run.");
+            const feature = workspace.features.find(
+              (f) => f.id === run!.featureId,
+            )!;
+            const lock = `${feature.projectId}:${binding.remote.host}:${run!.runtime!.branch}`;
+            if (deliveryLocks.has(lock))
+              throw Error(
+                "Publishing or reconciliation is already in progress.",
+              );
+            const connection = binding.connectionId
+              ? gitHostVault.get(binding.connectionId)
+              : undefined;
+            if (migrating)
+              throw Error("Wait for environment migration to finish.");
+            deliveryLocks.add(lock);
+            try {
+              value = await inspectRunDelivery(
+                {
+                  read: () => sourceStore.read("owner"),
+                  mutate: (fn) => sourceStore.mutate(fn),
+                  git,
+                  adapter: connection
+                    ? new GitHostAdapter(connection.info, connection.token)
+                    : undefined,
+                  provider: connection?.info.kind ?? "generic",
+                },
+                id,
+              );
+            } finally {
+              deliveryLocks.delete(lock);
+            }
+            break;
+          }
           case "deliverRun": {
             const input = z
               .object({
@@ -605,128 +670,45 @@ export async function installDesktop() {
                 body: z.string().max(60000),
               })
               .parse(payload);
-            const workspace = await store!.read("owner");
-            const run = workspace.runs.find((item) => item.id === input.runId);
-            if (
-              !run?.runtime ||
-              run.status !== "ready_for_merge" ||
-              !run.runtime.terminationConfirmed
-            )
-              throw Error(
-                "Only runs with completed checks and independent review can be published.",
-              );
-            const feature = workspace.features.find(
-              (item) => item.id === run.featureId,
-            )!;
-            const profile = run.runtime.profile;
-            const binding = profile.gitHost;
+            const sourceStore = store!;
+            const workspace = await sourceStore.read("owner");
+            const run = publishableRun(workspace, input.runId);
+            const binding = run.runtime.profile.gitHost;
             if (!binding)
               throw Error(
                 "Detect the Git remote in project execution settings first.",
               );
+            const feature = workspace.features.find(
+              (f) => f.id === run.featureId,
+            )!;
             const lock = `${feature.projectId}:${binding.remote.host}:${run.runtime.branch}`;
             if (deliveryLocks.has(lock))
               throw Error(
                 "A handoff is already in progress for this remote branch.",
               );
+            let adapter: GitHostAdapter | undefined;
+            let provider: "github" | "gitlab" | "generic" = "generic";
+            if (binding.connectionId) {
+              const connection = gitHostVault.get(binding.connectionId);
+              if (connection.info.testStatus !== "passed")
+                throw Error("Test the Git host connection again.");
+              adapter = new GitHostAdapter(connection.info, connection.token);
+              provider = connection.info.kind;
+            }
+            if (migrating)
+              throw Error("Wait for environment migration to finish.");
             deliveryLocks.add(lock);
             try {
-              const worktree = run.runtime.worktree;
-              const branch = run.runtime.branch;
-              const head = run.runtime.head;
-              if (!worktree || !branch || !head)
-                throw Error(
-                  "Missing worktree, branch or commit evidence for handoff.",
-                );
-              if ((await git(worktree, "rev-parse", "HEAD")) !== head)
-                throw Error(
-                  "Worktree head differs from verification evidence. Start a new run.",
-                );
-              if (
-                (await git(worktree, "rev-parse", profile.baseBranch)) !==
-                profile.baseCommit
-              )
-                throw Error(
-                  "Base branch changed. Verify again against the latest base.",
-                );
-              const remoteHead = await git(
-                worktree,
-                "ls-remote",
-                "--heads",
-                binding.remote.url,
-                `refs/heads/${branch}`,
+              value = await deliverVerifiedRun(
+                {
+                  read: () => sourceStore.read("owner"),
+                  mutate: (fn) => sourceStore.mutate(fn),
+                  git,
+                  adapter,
+                  provider,
+                },
+                input,
               );
-              const existing = remoteHead.trim().split(/\s+/)[0];
-              if (existing && existing !== head)
-                throw Error(
-                  "Remote branch points to another commit. Use a new attempt branch.",
-                );
-              if (!existing)
-                await git(
-                  worktree,
-                  "push",
-                  binding.remote.url,
-                  `${head}:refs/heads/${branch}`,
-                );
-              let delivery: NonNullable<typeof run.runtime.delivery>;
-              if (binding.connectionId) {
-                const connection = gitHostVault.get(binding.connectionId);
-                if (connection.info.testStatus !== "passed")
-                  throw Error("Test the Git host connection again.");
-                const change = await new GitHostAdapter(
-                  connection.info,
-                  connection.token,
-                ).createDraftChange({
-                  remote: binding.remote,
-                  head: branch,
-                  base: profile.baseBranch,
-                  title: input.title,
-                  body: input.body,
-                });
-                if (
-                  change.headSha !== head ||
-                  change.baseSha !== profile.baseCommit
-                )
-                  throw Error(
-                    "Draft PR/MR head or base SHA does not match verification evidence.",
-                  );
-                delivery = {
-                  provider: connection.info.kind,
-                  branch,
-                  headSha: head,
-                  baseSha: profile.baseCommit,
-                  changeId: change.id,
-                  url: change.url,
-                  deliveredAt: new Date().toISOString(),
-                };
-              } else {
-                delivery = {
-                  provider: "generic",
-                  branch,
-                  headSha: head,
-                  baseSha: profile.baseCommit,
-                  deliveredAt: new Date().toISOString(),
-                };
-              }
-              await store!.mutate((current) => {
-                const currentRun = current.runs.find(
-                  (item) => item.id === run.id,
-                );
-                if (
-                  !currentRun?.runtime ||
-                  currentRun.status !== "ready_for_merge" ||
-                  currentRun.runtime.head !== head ||
-                  currentRun.runtime.profile.baseCommit !== profile.baseCommit
-                )
-                  throw Error(
-                    "Execution contract changed. Recheck remote handoff.",
-                  );
-                currentRun.runtime.delivery = delivery;
-                currentRun.reason = delivery.url
-                  ? "Draft PR/MR created. Check the host's checks and human approval."
-                  : "Remote branch published. Create the PR/MR on this host manually.";
-              });
-              value = { url: delivery.url, branch };
             } finally {
               deliveryLocks.delete(lock);
             }

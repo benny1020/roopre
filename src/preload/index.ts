@@ -35,6 +35,7 @@ const api: DesktopAPI = {
   diagnostics: () => request("diagnostics"),
   revealArtifact: (runId, index) => request("revealArtifact", { runId, index }),
   runAction: (id, action) => request("runAction", { id, action }),
+  inspectRunDelivery: (id) => request("inspectRunDelivery", id),
   deliverRun: (input) => request("deliverRun", input),
   conversations: {
     listThreads: (scope) => request("conversations:listThreads", scope),

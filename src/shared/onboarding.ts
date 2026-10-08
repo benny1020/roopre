@@ -13,6 +13,24 @@ export const onboardingSchema = z.object({
   draft: z
     .object({
       connectionId: z.string().max(100).optional(),
+      endpoint: z
+        .string()
+        .max(2000)
+        .refine((value) => {
+          try {
+            const url = new URL(value);
+            return (
+              url.protocol === "https:" &&
+              !url.username &&
+              !url.password &&
+              !url.search &&
+              !url.hash
+            );
+          } catch {
+            return false;
+          }
+        }, "Endpoint must be HTTPS without credentials.")
+        .optional(),
       connectionName: z.string().max(80),
       model: z.string().max(120),
       auth: z.enum(["api-key", "bearer"]),

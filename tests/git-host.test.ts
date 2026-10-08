@@ -1,4 +1,5 @@
 import test from "node:test";
+import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -89,18 +90,31 @@ test("GitHub and GitLab adapters use provider paths and produce SHA snapshots", 
         html_url: "https://github.com/acme/app/pull/7",
         state: "open",
         draft: true,
-        head: { sha: "h".repeat(40) },
-        base: { sha: "b".repeat(40) },
+        head: {
+          sha: "h".repeat(40),
+          ref: "roopre/run",
+          repo: { full_name: "acme/app" },
+        },
+        base: {
+          sha: "b".repeat(40),
+          ref: "main",
+          repo: { full_name: "acme/app" },
+        },
         mergeable: true,
       });
     if (address.includes("/projects/"))
       return Response.json({
+        id: 1,
         iid: 9,
+        source_project_id: 1,
+        target_project_id: 1,
+        source_branch: "roopre/run",
+        target_branch: "main",
         web_url: "https://git.example/group/app/-/merge_requests/9",
         state: "opened",
         draft: true,
         sha: "h".repeat(40),
-        diff_refs: { base_sha: "b".repeat(40) },
+        diff_refs: { base_sha: "m".repeat(40), start_sha: "b".repeat(40) },
         merge_status: "can_be_merged",
         path_with_namespace: "group/app",
       });
@@ -154,9 +168,70 @@ test("GitHub and GitLab adapters use provider paths and produce SHA snapshots", 
     body: "Body",
   });
   assert.equal(mr.id, "9");
+  assert.equal(mr.baseSha, "b".repeat(40));
+  assert.equal(mr.state, "open");
+  const body = JSON.parse(String(calls.at(-1)!.init!.body));
+  assert.equal(body.title, "Draft: Draft");
+  assert.equal(body.draft, undefined);
   assert(
     calls.some((call) =>
       call.url.includes("/api/v4/projects/group%2Fapp/merge_requests"),
     ),
   );
+});
+
+test("GitLab honors authoritative draft=false and waits for asynchronous target refs", async () => {
+  const info: GitHostConnectionInfo = {
+    id: randomUUID(),
+    name: "Fixture",
+    kind: "gitlab",
+    host: "git.example",
+    endpoint: "https://git.example",
+    version: 1,
+    hasToken: true,
+  };
+  const remote = parseGitRemote("https://git.example/group/app.git");
+  let snapshots = 0;
+  const adapter = new GitHostAdapter(info, "fixture", async (url, init) => {
+    if (!String(url).includes("merge_requests"))
+      return Response.json({ id: 1, path_with_namespace: "group/app" });
+    const refs =
+      init?.method === "POST"
+        ? null
+        : { base_sha: "m".repeat(40), start_sha: "b".repeat(40) };
+    if (init?.method !== "POST") snapshots++;
+    return Response.json({
+      iid: 7,
+      web_url: "https://git.example/group/app/-/merge_requests/7",
+      state: "opened",
+      title: "Draft: Fixture",
+      draft: false,
+      sha: "a".repeat(40),
+      source_project_id: 1,
+      target_project_id: 1,
+      source_branch: "roopre/fixture",
+      target_branch: "main",
+      diff_refs: refs,
+    });
+  });
+  const created = await adapter.createDraftChange({
+    remote,
+    head: "roopre/fixture",
+    base: "main",
+    title: "Fixture",
+    body: "",
+  });
+  assert.equal(
+    created.draft,
+    false,
+    "title must not override the server's explicit false",
+  );
+  assert.equal(created.baseSha, "");
+  assert.equal(created.id, "7");
+  const settled = await adapter.waitForRefs(remote, created);
+  assert.equal(snapshots, 1);
+  assert.equal(settled.baseSha, "b".repeat(40));
+  assert.equal(settled.draft, false);
+  assert.equal(settled.baseRef, "main");
+  assert.equal(settled.sameRepository, true);
 });
