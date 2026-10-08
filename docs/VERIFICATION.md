@@ -9,6 +9,8 @@
 - `pnpm test:resilience`: **1 passed**, including cancellation, connection loss, process exit/restart and isolated scheduling.
 - `pnpm check:mac`: temporary app packaging, resources, security fuses and code-signing integrity passed. No ZIP was generated; Developer ID signing/notarization are not established by this check.
 
+The first Linux CI attempt exposed a Gradle source-copy failure with non-root-owned archive entries that Docker Desktop's UID mapping had hidden. A minimal Linux-container reproduction confirmed GNU tar could not restore file modes with only `CHOWN`. The networkless preparation helper now also has `FOWNER`, and `bash -o pipefail` rejects a failed source archive. Agent containers retain `cap-drop=ALL`. Local passes do not substitute for the corrected commit's Linux CI; all current-head checks must pass before merge.
+
 No real paid-model run or disposable enterprise GitLab end-to-end run was performed. Provider quality, corporate network/SSO/CA, private Maven credentials, Testcontainers and clean-Mac distribution still need deployment acceptance. Tests are regression evidence, not a guarantee of identical output quality across developers or unrestricted release readiness.
 
 ---

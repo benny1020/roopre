@@ -732,6 +732,9 @@ export class RunnerManager {
             "root",
             "--cap-drop=ALL",
             "--cap-add=CHOWN",
+            // GNU tar restores permissions after ownership; Linux source
+            // files may belong to a different UID than this trusted helper.
+            "--cap-add=FOWNER",
             "--security-opt",
             "no-new-privileges",
             "--mount",
@@ -741,7 +744,9 @@ export class RunnerManager {
             "--mount",
             `type=bind,src=${checkout},dst=/source,readonly`,
             image,
-            "sh",
+            "bash",
+            "-o",
+            "pipefail",
             "-c",
             "tar -C /source --exclude=.git --exclude=./.git -cf - . | tar -C /prep-workspace -xf - && chown -R pwuser:pwuser /gradle-cache /prep-workspace",
           ],
